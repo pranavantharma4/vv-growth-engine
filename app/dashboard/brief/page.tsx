@@ -1,8 +1,9 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill } from '@/app/dashboard/page'
+import { Pill, PlatPill } from '@/app/dashboard/components'
 import { fmtMoney, roasColor } from '@/lib/types'
 import type { CampaignSnapshot, BiggestLeak } from '@/lib/types'
 
@@ -14,7 +15,7 @@ function getWeekRef() {
 }
 
 export default function BriefPage() {
-  const { client, showToast } = useApp()
+  const { client, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
   const [camps, setCamps] = useState<CampaignSnapshot[]>([])
   const [leak, setLeak] = useState<BiggestLeak | null>(null)

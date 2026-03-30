@@ -1,11 +1,12 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
 import { fmtMoney } from '@/lib/types'
 
 export default function ReportsPage() {
-  const { client, showToast } = useApp()
+  const { client, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
   const [briefs, setBriefs] = useState<any[]>([])
   const [blueprints, setBlueprints] = useState<any[]>([])

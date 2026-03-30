@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
@@ -15,19 +16,26 @@ const NAV = [
   { id: 'admin',     label: 'Client Health',    icon: '▲', section: 'Admin',         admin: true  },
   { id: 'connect',   label: 'Connections',      icon: '◎', section: null,            admin: false },
   { id: 'settings',  label: 'Settings',         icon: '◌', section: null,            admin: false },
+  { id: 'invite',    label: 'Invite Client',    icon: '+', section: 'Admin',         admin: true  },
+  { id: 'data-tool', label: 'Campaign Data',    icon: '✎', section: 'Admin',         admin: true  },
 ]
 
 const TITLES: Record<string, [string, string]> = {
-  dashboard: ['Overview',          ''],
-  campaigns: ['Campaigns',         'All active campaigns across platforms'],
-  analysis:  ['AI Analysis',       'Claude-powered campaign diagnostics'],
-  optimize:  ['Ads Optimization',  'Build and refine campaigns from AI insights'],
-  brief:     ['Weekly Brief',      'Automated intelligence summary'],
-  reports:   ['Reports',           'Monthly audits and optimization blueprints'],
-  admin:     ['Client Health',     'All accounts at a glance'],
-  connect:   ['Connections',       'Manage ad account integrations'],
-  settings:  ['Settings',          'Account preferences and notifications'],
+  dashboard:   ['Overview',          ''],
+  campaigns:   ['Campaigns',         'All active campaigns across platforms'],
+  analysis:    ['AI Analysis',       'Claude-powered campaign diagnostics'],
+  optimize:    ['Ads Optimization',  'Build and refine campaigns from AI insights'],
+  brief:       ['Weekly Brief',      'Automated intelligence summary'],
+  reports:     ['Reports',           'Monthly audits and optimization blueprints'],
+  admin:       ['Client Health',     'All accounts at a glance'],
+  connect:     ['Connections',       'Manage ad account integrations'],
+  settings:    ['Settings',          'Account preferences and notifications'],
+  invite:      ['Invite Client',     'Create and onboard a new client account'],
+  'data-tool': ['Campaign Data',     'Update client campaign metrics'],
 }
+
+const SUPABASE_URL = 'https://ofqnhlkjazlsfctldbng.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mcW5obGtqYXpsc2ZjdGxkYm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MDU0OTYsImV4cCI6MjA4OTA4MTQ5Nn0.abff7Fdqidvcg8hs0c5Gz7fO0cGmgVPxbrrRlpZ-sws'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClientComponentClient()
@@ -40,6 +48,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dark, setDarkState] = useState(false)
   const [dropdown, setDropdown] = useState(false)
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
+  const [syncing, setSyncing] = useState(false)
 
   function toast(title: string, body: string) {
     setToastData({ show: true, title, body })
@@ -57,6 +66,57 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setDarkState(v)
     document.body.classList.toggle('dark', v)
     localStorage.setItem('vv_dark', v ? '1' : '0')
+  }
+
+  async function handleSync() {
+    if (!client) { toast('No client', 'Select a client first.'); return }
+    if (syncing) return
+
+    // Check if client has an active Meta connection
+    const { data: conn } = await supabase
+      .from('ad_connections')
+      .select('id, platform, is_active, expires_at')
+      .eq('client_id', client.id)
+      .eq('platform', 'meta')
+      .eq('is_active', true)
+      .single()
+
+    if (!conn) {
+      toast('No connection', 'Connect a Meta Ads account first under Connections.')
+      return
+    }
+
+    // Check token expiry
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
+      toast('Token expired', 'Meta connection expired. Please reconnect under Connections.')
+      return
+    }
+
+    setSyncing(true)
+    toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-meta-campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ client_id: client.id }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        toast('Sync failed', data.error || 'Something went wrong. Check your connection.')
+      } else {
+        toast('Sync complete', `${data.campaigns_synced} campaigns updated from Meta Ads.`)
+      }
+    } catch (err) {
+      toast('Sync failed', 'Network error. Please try again.')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   useEffect(() => {
@@ -150,31 +210,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         {/* ── MAIN ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-            <div>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, letterSpacing: 0.8 }}>{title}</div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 3 }}>{subtitle}</div>
-            </div>
-            <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-              <button onClick={() => { toast('Syncing', 'Pulling latest from all platforms...'); setTimeout(() => toast('Sync complete', 'All platforms updated.'), 2500) }}
-                style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--green)', padding: '5px 10px', border: '1px solid var(--greenborder)', borderRadius: 4, background: 'var(--greenpaper)', cursor: 'pointer', letterSpacing: 1 }}>
-                ↻ Sync Now
-              </button>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>Mar 2026</div>
-            </div>
-          </header>
-          <main style={{ flex: 1, overflowY: 'auto', padding: '24px 26px' }}>{children}</main>
-        </div>
-      </div>
-
-      {/* Toast */}
-      <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, transition: 'all 0.3s' }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
-      </div>
-
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-    </AppCtx.Provider>
-  )
-}
+        <div style={{ flex: 1, display: 'flex', fl

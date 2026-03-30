@@ -1,9 +1,10 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill } from '@/app/dashboard/page'
+import { Pill, PlatPill } from '@/app/dashboard/components'
 import { fmtMoney, roasColor } from '@/lib/types'
 import type { CampaignSnapshot } from '@/lib/types'
 

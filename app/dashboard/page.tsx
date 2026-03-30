@@ -1,45 +1,12 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from './context'
+import { useApp } from '@/app/dashboard/context'
+import { Pill, PlatPill, StatCard } from '@/app/dashboard/components'
 import type { CampaignSnapshot, BiggestLeak, AdConnection } from '@/lib/types'
 import { fmtMoney, roasColor } from '@/lib/types'
 
-/* ── Shared UI components exported for use in other pages ── */
-export function Pill({ health, label }: { health: string; label?: string }) {
-  const map: Record<string, [string, string, string]> = {
-    strong:   ['var(--greenpaper)', 'var(--green)',  'var(--greenborder)'],
-    weak:     ['var(--goldpaper)',  'var(--gold)',   'var(--goldborder)'],
-    bleeding: ['var(--amberpaper)', 'var(--amber)',  'var(--amberborder)'],
-    dead:     ['var(--redpaper)',   'var(--red)',    'var(--redborder)'],
-  }
-  const [bg, color, border] = map[health] || map.weak
-  const text = label || { strong:'Strong', weak:'Watch', bleeding:'Bleeding', dead:'Dead' }[health] || health
-  return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:3, fontFamily:"'DM Mono',monospace", fontSize:7, fontWeight:500, letterSpacing:'1.5px', textTransform:'uppercase', background:bg, color, border:`1px solid ${border}` }}>{text}</span>
-}
-
-export function PlatPill({ platform }: { platform: string }) {
-  const map: Record<string, [string, string]> = {
-    meta:   ['#e8f0fe','#1a56cc'],
-    google: ['#e8f4e8','#1a6e1a'],
-    tiktok: ['#fee8ee','#cc1a3a'],
-  }
-  const [bg, color] = map[platform] || ['var(--card2)','var(--ink3)']
-  return <span style={{ display:'inline-flex', padding:'2px 8px', borderRadius:3, fontFamily:"'DM Mono',monospace", fontSize:7, fontWeight:500, letterSpacing:1, textTransform:'uppercase', background:bg, color }}>{platform}</span>
-}
-
-export function StatCard({ label, value, hint, type }: { label:string; value:string; hint:string; type?:string }) {
-  const color = type==='warn'?'var(--red)':type==='gold'?'var(--gold)':type==='good'?'var(--green)':'var(--ink)'
-  return (
-    <div style={{ background:'var(--card2)', border:'1px solid var(--rule)', borderRadius:8, padding:'14px 16px' }}>
-      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--ink3)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:7 }}>{label}</div>
-      <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:28, fontWeight:400, lineHeight:1, letterSpacing:-0.5, color }}>{value}</div>
-      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:4 }}>{hint}</div>
-    </div>
-  )
-}
-
-/* ── Dashboard page ── */
 export default function DashboardPage() {
   const { client } = useApp()
   const supabase = createClientComponentClient()
@@ -83,7 +50,6 @@ export default function DashboardPage() {
 
   return (
     <div>
-      {/* Biggest Leak Banner */}
       {leak && (
         <div style={{ background:'var(--redpaper)', border:'1px solid var(--redborder)', borderLeft:'3px solid var(--red)', borderRadius:8, padding:'18px 22px', marginBottom:20 }}>
           <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--red)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:8 }}>Biggest Leak Identified</div>
@@ -96,7 +62,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stat row */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:11, marginBottom:20 }}>
         <StatCard label="Total Spend"   value={fmtMoney(totalSpend)} hint={`${conns.filter(c=>c.is_active).length} platforms active`} />
         <StatCard label="Conversions"   value={String(totalConv)}    hint="Last 30 days" />
@@ -105,7 +70,6 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-        {/* Platform cards */}
         <div>
           <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, marginBottom:12 }}>Platform Performance</div>
           {Object.entries(byPlat).map(([plat, s]) => (
@@ -132,7 +96,6 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Campaign health list */}
         <div>
           <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, marginBottom:12 }}>Campaign Health</div>
           <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:8, overflow:'hidden' }}>

@@ -1,11 +1,12 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
 import { fmtMoney } from '@/lib/types'
 
 export default function AdminPage() {
-  const { isAdmin, clients, setClient, showToast } = useApp()
+  const { isAdmin, clients, setClient, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
   const [summary, setSummary] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,7 +93,7 @@ export default function AdminPage() {
         <div style={{ background:'var(--goldpaper)', border:'1px solid var(--goldborder)', borderLeft:'2px solid var(--gold)', borderRadius:6, padding:'12px 15px', marginTop:14 }}>
           <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--goldlt)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:5 }}>Action Required This Week</div>
           <div style={{ fontSize:12, color:'var(--ink2)', lineHeight:1.65 }}>
-            {summary.filter(s => Number(s.dead_count) > 0).length} account{summary.filter(s => Number(s.dead_count) > 0).length > 1 ? 's have' : ' has'} campaigns flagged as Dead. Click each account to run AI analysis and generate implementation blueprints. Prioritize by wasted spend.
+            {summary.filter(s => Number(s.dead_count) > 0).length} account{summary.filter(s => Number(s.dead_count) > 0).length > 1 ? 's have' : ' has'} campaigns flagged as Dead. Click each account to run AI analysis and generate implementation blueprints.
           </div>
         </div>
       )}

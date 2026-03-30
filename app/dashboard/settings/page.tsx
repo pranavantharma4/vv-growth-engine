@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
@@ -12,7 +13,7 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { client, dark, setDark, showToast } = useApp()
+  const { client, dark, setDark, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
   const [email, setEmail] = useState('')
   const [notifs, setNotifs] = useState({ weekly:true, leaks:true, reports:true, sync:false })

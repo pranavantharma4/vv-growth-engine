@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
@@ -10,8 +11,24 @@ const PLATFORMS = [
   { id:'linkedin', label:'LinkedIn',   icon:'in', bg:'#e8f4fb', color:'#0a66c2', scope:'r_ads' },
 ]
 
+const META_APP_ID = '4462090677412633'
+const SUPABASE_URL = 'https://ofqnhlkjazlsfctldbng.supabase.co'
+
+function getMetaOAuthURL(clientId: string): string {
+  const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
+  const state = btoa(clientId)
+  const params = new URLSearchParams({
+    client_id: META_APP_ID,
+    redirect_uri: redirectUri,
+    scope: 'ads_read,ads_management,business_management',
+    response_type: 'code',
+    state,
+  })
+  return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`
+}
+
 export default function ConnectionsPage() {
-  const { client, showToast } = useApp()
+  const { client, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
   const [connections, setConnections] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,6 +39,31 @@ export default function ConnectionsPage() {
       .then(({ data }) => { setConnections(data || []); setLoading(false) })
   }, [client])
 
+  // Handle success/error redirected back from Meta OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const success = params.get('success')
+    const error = params.get('error')
+    if (success === 'meta_connected') {
+      showToast('Meta Ads connected', 'Your Meta Ads account is now syncing data.')
+      window.history.replaceState({}, '', window.location.pathname)
+      // Refresh connections
+      if (client) {
+        supabase.from('ad_connections').select('*').eq('client_id', client.id)
+          .then(({ data }) => setConnections(data || []))
+      }
+    } else if (error) {
+      const messages: Record<string, string> = {
+        meta_denied: 'Meta connection was cancelled.',
+        meta_token_failed: 'Meta token exchange failed. Please try again.',
+        meta_longtoken_failed: 'Meta token upgrade failed. Please try again.',
+        meta_db_failed: 'Failed to save Meta connection. Please try again.',
+      }
+      showToast('Connection failed', messages[error] || 'Something went wrong.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [client])
+
   function getConn(platform: string) { return connections.find(c => c.platform === platform) }
 
   async function disconnect(platform: string) {
@@ -30,6 +72,18 @@ export default function ConnectionsPage() {
     await supabase.from('ad_connections').update({ is_active: false, access_token: null }).eq('id', conn.id)
     setConnections(prev => prev.map(c => c.platform === platform ? { ...c, is_active: false } : c))
     showToast('Disconnected', PLATFORMS.find(p=>p.id===platform)?.label + ' has been disconnected.')
+  }
+
+  function handleConnect(platformId: string) {
+    if (platformId === 'meta') {
+      if (!client?.id) {
+        showToast('Error', 'No client session found. Please refresh.')
+        return
+      }
+      window.location.href = getMetaOAuthURL(client.id)
+    } else {
+      showToast('OAuth coming soon', 'Platform connections will be live in the next build session.')
+    }
   }
 
   return (
@@ -60,7 +114,9 @@ export default function ConnectionsPage() {
               {active ? (
                 <button onClick={() => disconnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'1px solid var(--redborder)', background:'transparent', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--red)', letterSpacing:1 }}>Disconnect</button>
               ) : (
-                <button onClick={() => showToast('OAuth coming soon', 'Platform connections will be live in the next build session.')} style={{ padding:'4px 12px', borderRadius:5, border:'none', background:'var(--gold)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'#faf8f5', letterSpacing:1 }}>Connect →</button>
+                <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 12px', borderRadius:5, border:'none', background: plat.id === 'meta' ? 'var(--gold)' : 'var(--card3)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color: plat.id === 'meta' ? '#faf8f5' : 'var(--ink3)', letterSpacing:1 }}>
+                  {plat.id === 'meta' ? 'Connect →' : 'Soon'}
+                </button>
               )}
             </div>
           </div>
