@@ -71,8 +71,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   async function handleSync() {
     if (!client) { toast('No client', 'Select a client first.'); return }
     if (syncing) return
-
-    // Check if client has an active Meta connection
     const { data: conn } = await supabase
       .from('ad_connections')
       .select('id, platform, is_active, expires_at')
@@ -80,21 +78,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .eq('platform', 'meta')
       .eq('is_active', true)
       .single()
-
     if (!conn) {
       toast('No connection', 'Connect a Meta Ads account first under Connections.')
       return
     }
-
-    // Check token expiry
     if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
       toast('Token expired', 'Meta connection expired. Please reconnect under Connections.')
       return
     }
-
     setSyncing(true)
     toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
-
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-meta-campaigns`, {
         method: 'POST',
@@ -104,15 +97,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         },
         body: JSON.stringify({ client_id: client.id }),
       })
-
       const data = await res.json()
-
       if (!res.ok || data.error) {
         toast('Sync failed', data.error || 'Something went wrong. Check your connection.')
       } else {
         toast('Sync complete', `${data.campaigns_synced} campaigns updated from Meta Ads.`)
       }
-    } catch (err) {
+    } catch {
       toast('Sync failed', 'Network error. Please try again.')
     } finally {
       setSyncing(false)
@@ -143,10 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-        {/* ── SIDEBAR ── */}
         <aside style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-
-          {/* Logo */}
           <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
@@ -157,7 +145,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {/* Client switcher */}
           <div onClick={() => setDropdown(d => !d)} style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -179,7 +166,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
 
-          {/* Nav */}
           <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
               const active = page === item.id
@@ -196,7 +182,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             })}
           </nav>
 
-          {/* Footer */}
           <div style={{ padding: '11px 15px', borderTop: '1px solid var(--sb-rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4c8b4c', animation: 'pulse 2.5s ease infinite' }} />
@@ -209,5 +194,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </aside>
 
-        {/* ── MAIN ── */}
-        <div style={{ flex: 1, display: 'flex', fl
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+            <div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, letterSpacing: 0.8 }}>{title}</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 3 }}>{subtitle}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, transition: 'all 0.2s' }}>
+                {syncing ? '↻ Syncing...' : '↻ Sync Now'}
+              </button>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>Mar 2026</div>
+            </div>
+          </header>
+          <main style={{ flex: 1, overflowY: 'auto', padding: '24px 26px' }}>{children}</main>
+        </div>
+
+      </div>
+
+      <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, transition: 'all 0.3s' }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
+      </div>
+
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    </AppCtx.Provider>
+  )
+}
