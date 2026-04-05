@@ -1,9 +1,11 @@
-import { redirect } from 'next/navigation'
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import LandingClient from './LandingClient'
 
 export default async function Root() {
   const supabase = createServerComponentClient({ cookies })
   const { data: { session } } = await supabase.auth.getSession()
-  redirect(session ? '/dashboard' : '/login')
+  if (session) redirect('/dashboard')
+  return <LandingClient />
 }
