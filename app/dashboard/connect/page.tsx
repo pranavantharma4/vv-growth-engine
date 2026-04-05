@@ -27,6 +27,22 @@ function getMetaOAuthURL(clientId: string): string {
   return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`
 }
 
+function getTokenStatus(conn: any): 'expired' | 'expiring' | 'healthy' {
+  if (!conn?.expires_at) return 'healthy'
+  const expiresAt = new Date(conn.expires_at)
+  const now = new Date()
+  const daysLeft = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysLeft < 0) return 'expired'
+  if (daysLeft <= 7) return 'expiring'
+  return 'healthy'
+}
+
+function daysUntilExpiry(conn: any): number {
+  if (!conn?.expires_at) return 999
+  const expiresAt = new Date(conn.expires_at)
+  return Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
 export default function ConnectionsPage() {
   const { client, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
@@ -39,7 +55,6 @@ export default function ConnectionsPage() {
       .then(({ data }) => { setConnections(data || []); setLoading(false) })
   }, [client])
 
-  // Handle success/error redirected back from Meta OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const success = params.get('success')
@@ -47,7 +62,6 @@ export default function ConnectionsPage() {
     if (success === 'meta_connected') {
       showToast('Meta Ads connected', 'Your Meta Ads account is now syncing data.')
       window.history.replaceState({}, '', window.location.pathname)
-      // Refresh connections
       if (client) {
         supabase.from('ad_connections').select('*').eq('client_id', client.id)
           .then(({ data }) => setConnections(data || []))
@@ -71,18 +85,15 @@ export default function ConnectionsPage() {
     if (!conn) return
     await supabase.from('ad_connections').update({ is_active: false, access_token: null }).eq('id', conn.id)
     setConnections(prev => prev.map(c => c.platform === platform ? { ...c, is_active: false } : c))
-    showToast('Disconnected', PLATFORMS.find(p=>p.id===platform)?.label + ' has been disconnected.')
+    showToast('Disconnected', PLATFORMS.find(p => p.id === platform)?.label + ' has been disconnected.')
   }
 
   function handleConnect(platformId: string) {
     if (platformId === 'meta') {
-      if (!client?.id) {
-        showToast('Error', 'No client session found. Please refresh.')
-        return
-      }
+      if (!client?.id) { showToast('Error', 'No client session found. Please refresh.'); return }
       window.location.href = getMetaOAuthURL(client.id)
     } else {
-      showToast('OAuth coming soon', 'Platform connections will be live in the next build session.')
+      showToast('Coming soon', 'Platform connections will be live in the next build session.')
     }
   }
 
@@ -95,29 +106,75 @@ export default function ConnectionsPage() {
       {PLATFORMS.map(plat => {
         const conn = getConn(plat.id)
         const active = conn?.is_active === true
+        const tokenStatus = plat.id === 'meta' && active ? getTokenStatus(conn) : 'healthy'
+        const days = plat.id === 'meta' && active ? daysUntilExpiry(conn) : 999
+
         return (
-          <div key={plat.id} style={{ background:'var(--card2)', border:'1px solid var(--rule)', borderRadius:8, padding:'15px 19px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:9 }}>
-            <div style={{ display:'flex', alignItems:'center' }}>
-              <div style={{ width:36, height:36, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, marginRight:12, background:plat.bg, color:plat.color, fontFamily:"'DM Mono',monospace", fontWeight:700, flexShrink:0 }}>{plat.icon}</div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:500 }}>{plat.label}</div>
-                {active && conn ? (
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--green)', marginTop:3 }}>
-                    ● Connected · {conn.account_name || conn.account_id} · Last synced: {conn.last_synced_at ? new Date(conn.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'never'}
+          <div key={plat.id}>
+            {/* Expiry warning banner — shown above the card */}
+            {active && tokenStatus !== 'healthy' && (
+              <div style={{
+                background: tokenStatus === 'expired' ? 'var(--redpaper)' : 'var(--amberpaper)',
+                border: `1px solid ${tokenStatus === 'expired' ? 'var(--redborder)' : 'var(--amberborder)'}`,
+                borderRadius: 6,
+                padding: '10px 14px',
+                marginBottom: 6,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <div>
+                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, fontWeight:500, color: tokenStatus === 'expired' ? 'var(--red)' : 'var(--amber)', letterSpacing:1, textTransform:'uppercase', marginBottom:2 }}>
+                    {tokenStatus === 'expired' ? '⚠ Meta token expired' : `⚠ Token expiring in ${days} day${days === 1 ? '' : 's'}`}
                   </div>
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:'var(--ink2)' }}>
+                    {tokenStatus === 'expired'
+                      ? 'Reconnect your Meta account to resume data sync.'
+                      : 'Reconnect now to avoid losing sync continuity.'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleConnect(plat.id)}
+                  style={{ padding:'5px 12px', borderRadius:5, border:'none', background: tokenStatus === 'expired' ? 'var(--red)' : 'var(--amber)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'#faf8f5', letterSpacing:1, flexShrink:0, marginLeft:12 }}>
+                  Reconnect →
+                </button>
+              </div>
+            )}
+
+            {/* Platform card */}
+            <div style={{ background:'var(--card2)', border:`1px solid ${tokenStatus !== 'healthy' && active ? (tokenStatus === 'expired' ? 'var(--redborder)' : 'var(--amberborder)') : 'var(--rule)'}`, borderRadius:8, padding:'15px 19px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:9 }}>
+              <div style={{ display:'flex', alignItems:'center' }}>
+                <div style={{ width:36, height:36, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, marginRight:12, background:plat.bg, color:plat.color, fontFamily:"'DM Mono',monospace", fontWeight:700, flexShrink:0 }}>{plat.icon}</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:500 }}>{plat.label}</div>
+                  {active && conn ? (
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color: tokenStatus === 'expired' ? 'var(--red)' : tokenStatus === 'expiring' ? 'var(--amber)' : 'var(--green)', marginTop:3 }}>
+                      {tokenStatus === 'expired'
+                        ? '✕ Token expired · reconnect required'
+                        : tokenStatus === 'expiring'
+                          ? `● Connected · expires in ${days}d · Last synced: ${conn.last_synced_at ? new Date(conn.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'never'}`
+                          : `● Connected · ${conn.account_name || conn.account_id || 'account linked'} · Last synced: ${conn.last_synced_at ? new Date(conn.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'never'}`
+                      }
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:3 }}>○ Not connected · Requires {plat.scope}</div>
+                  )}
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:7 }}>
+                {active ? (
+                  <>
+                    {tokenStatus === 'expired' && (
+                      <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'none', background:'var(--gold)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'#faf8f5', letterSpacing:1 }}>Reconnect →</button>
+                    )}
+                    <button onClick={() => disconnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'1px solid var(--redborder)', background:'transparent', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--red)', letterSpacing:1 }}>Disconnect</button>
+                  </>
                 ) : (
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:3 }}>○ Not connected · Requires {plat.scope}</div>
+                  <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 12px', borderRadius:5, border:'none', background: plat.id === 'meta' ? 'var(--gold)' : 'var(--card3)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color: plat.id === 'meta' ? '#faf8f5' : 'var(--ink3)', letterSpacing:1 }}>
+                    {plat.id === 'meta' ? 'Connect →' : 'Soon'}
+                  </button>
                 )}
               </div>
-            </div>
-            <div style={{ display:'flex', gap:7 }}>
-              {active ? (
-                <button onClick={() => disconnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'1px solid var(--redborder)', background:'transparent', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--red)', letterSpacing:1 }}>Disconnect</button>
-              ) : (
-                <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 12px', borderRadius:5, border:'none', background: plat.id === 'meta' ? 'var(--gold)' : 'var(--card3)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color: plat.id === 'meta' ? '#faf8f5' : 'var(--ink3)', letterSpacing:1 }}>
-                  {plat.id === 'meta' ? 'Connect →' : 'Soon'}
-                </button>
-              )}
             </div>
           </div>
         )
