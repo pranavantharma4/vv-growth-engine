@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: 'VV – Growth Ad Engine',
   description: 'Vanguard Visuals Growth Intelligence Platform',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/icon.png',
   },
 }
 
@@ -18,7 +18,10 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Sans:wght@300;400;500" rel="stylesheet" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Sans:wght@300;400;500"
+          rel="stylesheet"
+        />
       </head>
       <body>{children}</body>
     </html>
