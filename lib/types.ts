@@ -9,6 +9,12 @@ export type Client = {
   contact_name: string | null
   created_at: string
   updated_at: string
+  notification_preferences?: {
+    weekly: boolean
+    leaks: boolean
+    reports: boolean
+    sync: boolean
+  }
 }
 
 export type CampaignSnapshot = {

@@ -128,7 +128,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
-  const subtitle = page === 'dashboard' ? (client?.name || '') + ' · March 2026' : sub
+  const now = new Date()
+  const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const subtitle = page === 'dashboard' ? (client?.name || '') + ' · ' + monthYear : sub
 
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
@@ -207,7 +209,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, transition: 'all 0.2s' }}>
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>Mar 2026</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
+                {now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+              </div>
             </div>
           </header>
           <main style={{ flex: 1, overflowY: 'auto', padding: '24px 26px' }}>{children}</main>

@@ -121,7 +121,14 @@ export default function ReportsPage() {
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: 'var(--gold)', marginBottom: 6 }}>Request a Custom Audit</div>
           <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.75, marginBottom: 14 }}>Full AI-powered analysis across all campaigns, with prioritized optimization blueprint and 30-day implementation roadmap delivered as a branded PDF.</div>
           <button
-            onClick={() => showToast('Audit requested', 'Your VV manager will follow up within 24 hours.')}
+           onClick={async () => {
+  await fetch('/api/audit-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: client?.id, clientName: client?.name, email: client?.contact_email }),
+  })
+  showToast('Audit requested', 'Your VV manager will follow up within 24 hours.')
+}}
             style={{ padding: '8px 18px', border: 'none', borderRadius: 5, background: 'var(--gold)', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#faf8f5', letterSpacing: 1 }}
           >
             Request Audit →
