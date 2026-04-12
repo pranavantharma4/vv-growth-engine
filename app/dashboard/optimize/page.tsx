@@ -1,17 +1,16 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
 import { Pill, PlatPill } from '@/app/dashboard/components'
 import { fmtMoney, roasColor } from '@/lib/types'
 import type { CampaignSnapshot, BiggestLeak } from '@/lib/types'
+import { exportBlueprintPDF } from '@/lib/exportPDF'
 
-// ── Unique ID generator ──────────────────────────────────────────
 function uid() { return 'VV-' + Date.now().toString(36).toUpperCase().slice(-6) }
 
-// ── Platform-specific implementation steps ───────────────────────
 function buildSteps(platform: string, mode: string, form: Record<string, string>, creativeType: string): string[] {
   const isEdit = mode === 'edit'
   const camp = form.name || 'New Campaign'
@@ -58,45 +57,30 @@ function buildSteps(platform: string, mode: string, form: Record<string, string>
   return map[platform] || meta
 }
 
-// ── Stepper component ────────────────────────────────────────────
 function Stepper({ step, total, labels }: { step: number; total: number; labels: string[] }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
       {labels.map((label, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < total - 1 ? 1 : 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{
-              width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 500, flexShrink: 0,
-              background: i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--card2)',
-              border: '1.5px solid ' + (i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--rule2)'),
-              color: i <= step ? '#fff' : 'var(--ink3)',
-              transition: 'all .2s',
-            }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 500, flexShrink: 0, background: i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--card2)', border: '1.5px solid ' + (i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--rule2)'), color: i <= step ? '#fff' : 'var(--ink3)', transition: 'all .2s' }}>
               {i < step ? '✓' : i + 1}
             </div>
-            <div style={{
-              fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: 1, textTransform: 'uppercase',
-              color: i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--ink3)',
-              transition: 'color .2s',
-            }}>{label}</div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: 1, textTransform: 'uppercase', color: i < step ? 'var(--green)' : i === step ? 'var(--gold)' : 'var(--ink3)', transition: 'color .2s' }}>{label}</div>
           </div>
-          {i < total - 1 && (
-            <div style={{ flex: 1, height: 1, background: i < step ? 'var(--green)' : 'var(--rule2)', margin: '0 8px', maxWidth: 40, transition: 'background .2s' }} />
-          )}
+          {i < total - 1 && <div style={{ flex: 1, height: 1, background: i < step ? 'var(--green)' : 'var(--rule2)', margin: '0 8px', maxWidth: 40, transition: 'background .2s' }} />}
         </div>
       ))}
     </div>
   )
 }
 
-// ── Form components ──────────────────────────────────────────────
 function FieldLabel({ children }: { children: string }) {
   return <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>{children}</div>
 }
 
 function Input({ id, placeholder, value, type = 'text' }: { id: string; placeholder?: string; value?: string; type?: string }) {
-  return <input id={id} type={type} defaultValue={value} placeholder={placeholder} style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none' }} />
+  return <input id={id} type={type} defaultValue={value} placeholder={placeholder} style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
 }
 
 function Select({ id, options, defaultValue }: { id: string; options: string[]; defaultValue?: string }) {
@@ -107,12 +91,12 @@ function Select({ id, options, defaultValue }: { id: string; options: string[]; 
   )
 }
 
-// ── Main optimize page ───────────────────────────────────────────
 function OptimizeContent() {
   const { client } = useApp()
   const supabase = createClientComponentClient()
   const params = useSearchParams()
   const preId = params.get('id')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [step, setStep] = useState(0)
   const [mode, setMode] = useState<'edit' | 'new'>('edit')
@@ -121,11 +105,13 @@ function OptimizeContent() {
   const [selected, setSelected] = useState<CampaignSnapshot | null>(null)
   const [form, setForm] = useState<Record<string, string>>({})
   const [creativeType, setCreativeType] = useState<'external' | 'ai' | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [selCreatives, setSelCreatives] = useState<number[]>([])
   const [aiStep, setAiStep] = useState('')
   const [showCreatives, setShowCreatives] = useState(false)
-  const [blueprint, setBlueprint] = useState<{ refId: string; steps: string[] } | null>(null)
+  const [blueprint, setBlueprint] = useState<{ refId: string; steps: string[]; form: Record<string, string>; mode: string; creativeType: string | null; creativeCount: number } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   useEffect(() => {
     if (!client) return
@@ -142,16 +128,21 @@ function OptimizeContent() {
 
   function saveFormValues() {
     const get = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement)?.value || ''
-    setForm({
-      name:   get('f-name'),
-      plat:   get('f-plat'),
-      budget: get('f-budget'),
-      obj:    get('f-obj'),
-      aud:    get('f-aud'),
-      bid:    get('f-bid'),
-      start:  get('f-start'),
-      notes:  get('f-notes'),
+    setForm({ name: get('f-name'), plat: get('f-plat'), budget: get('f-budget'), obj: get('f-obj'), aud: get('f-aud'), bid: get('f-bid'), start: get('f-start'), notes: get('f-notes') })
+  }
+
+  function handleFiles(files: FileList | null) {
+    if (!files) return
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+    const valid = Array.from(files).filter(f => allowed.includes(f.type) && f.size <= 50 * 1024 * 1024)
+    setUploadedFiles(prev => {
+      const combined = [...prev, ...valid]
+      return combined.slice(0, 10)
     })
+  }
+
+  function removeFile(i: number) {
+    setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))
   }
 
   function toggleCreative(i: number) {
@@ -174,9 +165,10 @@ function OptimizeContent() {
     const refId = uid()
     const platKey = form.plat?.toLowerCase().includes('meta') ? 'meta' : form.plat?.toLowerCase().includes('google') ? 'google' : 'tiktok'
     const steps = buildSteps(platKey, mode, form, creativeType || 'external')
-    setBlueprint({ refId, steps })
+    const creativeCount = creativeType === 'external' ? uploadedFiles.length : selCreatives.length
 
-    // Save to Supabase
+    setBlueprint({ refId, steps, form, mode, creativeType, creativeCount })
+
     await supabase.from('optimization_blueprints').insert({
       client_id: client!.id,
       ref_id: refId,
@@ -189,7 +181,7 @@ function OptimizeContent() {
       bid_strategy: form.bid || null,
       start_date: form.start || null,
       creative_type: creativeType,
-      creative_count: selCreatives.length,
+      creative_count: creativeCount,
       form_data: form,
       implementation_steps: steps,
     })
@@ -197,7 +189,6 @@ function OptimizeContent() {
     setStep(4)
   }
 
-  // ── Leak sidebar ──
   const LeakSidebar = () => (
     <div style={{ background: 'var(--redpaper)', border: '1px solid var(--redborder)', borderLeft: '3px solid var(--red)', borderRadius: 8, padding: 15, position: 'sticky', top: 0 }}>
       <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--red)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 9 }}>AI Recommendations</div>
@@ -211,20 +202,17 @@ function OptimizeContent() {
           </div>
         </div>
       ))}
-      {leaks.length === 0 && (
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>No critical leaks detected.</div>
-      )}
+      {leaks.length === 0 && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>No critical leaks detected.</div>}
     </div>
   )
 
-  // ── Step 0: Mode ──
   const StepMode = () => (
     <div>
       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, marginBottom: 16 }}>What would you like to do?</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
         {[
           { id: 'edit', icon: '◫', title: 'Edit Existing Campaign', desc: 'Adjust settings, replace creatives, or update targeting on a live campaign.' },
-          { id: 'new',  icon: '◈', title: 'Build New Campaign',    desc: 'Start from scratch with full control over every parameter and creative.' },
+          { id: 'new',  icon: '◈', title: 'Build New Campaign', desc: 'Start from scratch with full control over every parameter and creative.' },
         ].map(opt => (
           <div key={opt.id} onClick={() => { setMode(opt.id as 'edit' | 'new'); if (opt.id === 'new') setSelected(null) }}
             style={{ padding: 20, cursor: 'pointer', background: 'var(--card)', border: '2px solid ' + (mode === opt.id ? 'var(--gold)' : 'var(--rule2)'), borderRadius: 8, transition: 'border-color .15s' }}>
@@ -239,42 +227,46 @@ function OptimizeContent() {
         <>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, marginBottom: 12 }}>Select Campaign to Edit</div>
           <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>{['Campaign','Platform','Spend','ROAS','Health',''].map(h => (
-                  <th key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: 2, textTransform: 'uppercase', padding: '9px 12px', borderBottom: '1px solid var(--rule2)', textAlign: 'left', fontWeight: 400 }}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {camps.map((c, i) => (
-                  <tr key={c.id} onClick={() => setSelected(c)} style={{ borderBottom: i < camps.length - 1 ? '1px solid var(--rule)' : 'none', background: selected?.id === c.id ? 'var(--goldpaper)' : 'transparent', cursor: 'pointer' }}>
-                    <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 500 }}>{c.campaign_name}</td>
-                    <td style={{ padding: '11px 12px' }}><PlatPill platform={c.platform} /></td>
-                    <td style={{ padding: '11px 12px', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--ink2)' }}>{fmtMoney(Number(c.spend))}</td>
-                    <td style={{ padding: '11px 12px', fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: roasColor(Number(c.roas)) }}>{Number(c.roas).toFixed(1)}x</td>
-                    <td style={{ padding: '11px 12px' }}><Pill health={c.health} /></td>
-                    <td style={{ padding: '11px 12px' }}>
-                      <button onClick={e => { e.stopPropagation(); setSelected(c) }} style={{ padding: '3px 9px', borderRadius: 3, fontFamily: "'DM Mono',monospace", fontSize: 8, color: selected?.id === c.id ? '#faf8f5' : 'var(--gold)', border: '1px solid var(--goldborder)', background: selected?.id === c.id ? 'var(--gold)' : 'var(--goldpaper)', cursor: 'pointer' }}>
-                        {selected?.id === c.id ? 'Selected ✓' : 'Select'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {camps.length === 0 ? (
+              <div style={{ padding: '20px 16px', fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>No campaigns found. Sync your ad account first.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>{['Campaign','Platform','Spend','ROAS','Health',''].map(h => (
+                    <th key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: 2, textTransform: 'uppercase', padding: '9px 12px', borderBottom: '1px solid var(--rule2)', textAlign: 'left', fontWeight: 400 }}>{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {camps.map((c, i) => (
+                    <tr key={c.id} onClick={() => setSelected(c)} style={{ borderBottom: i < camps.length - 1 ? '1px solid var(--rule)' : 'none', background: selected?.id === c.id ? 'var(--goldpaper)' : 'transparent', cursor: 'pointer' }}>
+                      <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 500 }}>{c.campaign_name}</td>
+                      <td style={{ padding: '11px 12px' }}><PlatPill platform={c.platform} /></td>
+                      <td style={{ padding: '11px 12px', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--ink2)' }}>{fmtMoney(Number(c.spend))}</td>
+                      <td style={{ padding: '11px 12px', fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: roasColor(Number(c.roas)) }}>{Number(c.roas).toFixed(1)}x</td>
+                      <td style={{ padding: '11px 12px' }}><Pill health={c.health} /></td>
+                      <td style={{ padding: '11px 12px' }}>
+                        <button onClick={e => { e.stopPropagation(); setSelected(c) }} style={{ padding: '3px 9px', borderRadius: 3, fontFamily: "'DM Mono',monospace", fontSize: 8, color: selected?.id === c.id ? '#faf8f5' : 'var(--gold)', border: '1px solid var(--goldborder)', background: selected?.id === c.id ? 'var(--gold)' : 'var(--goldpaper)', cursor: 'pointer' }}>
+                          {selected?.id === c.id ? 'Selected ✓' : 'Select'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </>
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setStep(1)} disabled={mode === 'edit' && !selected} style={{ padding: '8px 18px', border: 'none', borderRadius: 5, background: (mode === 'edit' && !selected) ? 'var(--bg3)' : 'var(--gold)', color: '#faf8f5', cursor: (mode === 'edit' && !selected) ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: 1 }}>
+        <button onClick={() => setStep(1)} disabled={mode === 'edit' && !selected}
+          style={{ padding: '8px 18px', border: 'none', borderRadius: 5, background: (mode === 'edit' && !selected) ? 'var(--bg3)' : 'var(--gold)', color: '#faf8f5', cursor: (mode === 'edit' && !selected) ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: 1 }}>
           Continue →
         </button>
       </div>
     </div>
   )
 
-  // ── Step 1: Settings ──
   const StepSettings = () => {
     const c = selected
     const platOptions = ['Meta (Facebook/Instagram)', 'Google Ads', 'TikTok Ads']
@@ -308,7 +300,7 @@ function OptimizeContent() {
             <div><FieldLabel>Start Date</FieldLabel><Input id="f-start" type="date" value={new Date().toISOString().split('T')[0]} /></div>
             <div><FieldLabel>End Date (optional)</FieldLabel><Input id="f-end" type="date" /></div>
           </div>
-          <div><FieldLabel>Notes / Context</FieldLabel><textarea id="f-notes" rows={3} placeholder="Any specific instructions or context for this campaign..." style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none', resize: 'vertical' }} /></div>
+          <div><FieldLabel>Notes / Context</FieldLabel><textarea id="f-notes" rows={3} placeholder="Any specific instructions or context for this campaign..." style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} /></div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button onClick={() => setStep(0)} style={{ padding: '8px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: 1 }}>← Back</button>
@@ -318,13 +310,13 @@ function OptimizeContent() {
     )
   }
 
-  // ── Step 2: Creatives ──
   const StepCreatives = () => (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16 }}>Creatives</div>
         <button onClick={() => setStep(1)} style={{ padding: '5px 12px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1 }}>← Back</button>
       </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
         {[
           { id: 'external', icon: '↑', title: 'Upload External Creatives', desc: 'Upload your own images or video files. JPG, PNG, MP4. Up to 10 files per campaign.' },
@@ -339,22 +331,49 @@ function OptimizeContent() {
         ))}
       </div>
 
-      {/* External upload */}
+      {/* Real file upload */}
       {creativeType === 'external' && (
         <div>
-          <div style={{ border: '1.5px dashed var(--rule2)', borderRadius: 8, padding: '28px 20px', textAlign: 'center', background: 'var(--card2)', marginBottom: 12 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/gif,video/mp4,video/quicktime"
+            style={{ display: 'none' }}
+            onChange={e => handleFiles(e.target.files)}
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
+            style={{ border: `1.5px dashed ${dragOver ? 'var(--gold)' : 'var(--rule2)'}`, borderRadius: 8, padding: '28px 20px', textAlign: 'center', background: dragOver ? 'var(--goldpaper)' : 'var(--card2)', marginBottom: 12, cursor: 'pointer', transition: 'all .15s' }}>
             <div style={{ fontSize: 26, color: 'var(--ink3)', marginBottom: 9 }}>↑</div>
             <div style={{ fontSize: 12, color: 'var(--ink2)', marginBottom: 3 }}>Drop files here or click to browse</div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>JPG, PNG, MP4 · Up to 10 files · 50MB max each</div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>JPG, PNG, GIF, MP4 · Up to 10 files · 50MB max each</div>
           </div>
-          <div style={{ padding: '11px 13px', background: 'var(--card2)', borderRadius: 6, border: '1px solid var(--rule)' }}>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 7 }}>Uploaded Files</div>
-            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-              {['1:1 Square.jpg','9:16 Story.jpg','16:9 Banner.jpg'].map(f => (
-                <div key={f} style={{ padding: '5px 10px', background: 'var(--greenpaper)', border: '1px solid var(--greenborder)', borderRadius: 4, fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--green)' }}>✓ {f}</div>
-              ))}
+
+          {uploadedFiles.length > 0 && (
+            <div style={{ padding: '11px 13px', background: 'var(--card2)', borderRadius: 6, border: '1px solid var(--rule)' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 7 }}>
+                Uploaded Files ({uploadedFiles.length}/10)
+              </div>
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                {uploadedFiles.map((f, i) => (
+                  <div key={i} style={{ padding: '5px 10px', background: 'var(--greenpaper)', border: '1px solid var(--greenborder)', borderRadius: 4, fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ✓ {f.name.length > 20 ? f.name.slice(0, 20) + '...' : f.name}
+                    <span onClick={() => removeFile(i)} style={{ cursor: 'pointer', color: 'var(--ink3)', marginLeft: 2 }}>×</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {uploadedFiles.length === 0 && (
+            <div style={{ padding: '11px 13px', background: 'var(--card2)', borderRadius: 6, border: '1px solid var(--rule)' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>No files uploaded yet. Click the area above to add your creative assets.</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -364,7 +383,7 @@ function OptimizeContent() {
           <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '17px 19px', marginBottom: 11 }}>
             <div style={{ marginBottom: 12 }}>
               <FieldLabel>Creative Brief</FieldLabel>
-              <textarea id="ai-brief" rows={3} placeholder="Describe your ad creative in plain English. e.g. Woman in athletic wear, morning yoga, natural light, minimal text: Summer Sale 20% Off" style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none', resize: 'vertical' }} />
+              <textarea id="ai-brief" rows={3} placeholder="Describe your ad creative in plain English. e.g. Woman in athletic wear, morning yoga, natural light, minimal text: Summer Sale 20% Off" style={{ width: '100%', padding: '8px 11px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'var(--card2)', color: 'var(--ink)', fontFamily: "'DM Sans',sans-serif", fontSize: 12, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div><FieldLabel>Visual Style</FieldLabel><Select id="ai-style" options={['Clean and Minimal', 'Bold and High Contrast', 'Lifestyle / UGC Feel', 'Product Focus']} /></div>
@@ -389,9 +408,17 @@ function OptimizeContent() {
             <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '15px' }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Select Creatives to Use</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 10 }}>
-                {[{name:'Variant A — Square',dim:'1080 × 1080',bg:'#f0f7f0',em:'🧘'},{name:'Variant B — Story',dim:'1080 × 1920',bg:'#fdf6e3',em:'⚡'},{name:'Variant C — Banner',dim:'1200 × 628',bg:'#fdf0f0',em:'🏃'}].map((c, i) => (
-                  <div key={i} onClick={() => toggleCreative(i)} style={{ border: '2px solid ' + (selCreatives.includes(i) ? 'var(--gold)' : 'var(--rule)'), borderRadius: 8, overflow: 'hidden', cursor: 'pointer', boxShadow: selCreatives.includes(i) ? '0 0 0 1px var(--gold)' : 'none', transition: 'all .15s' }}>
-                    <div style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: c.bg, fontSize: 32 }}>{c.em}</div>
+                {[
+                  { name: 'Variant A — Square', dim: '1080 × 1080', colors: ['#e8f0fe', '#1a56cc', '#c9a84c'] },
+                  { name: 'Variant B — Story',  dim: '1080 × 1920', colors: ['#e8f4e8', '#1a6e1a', '#faf8f5'] },
+                  { name: 'Variant C — Banner', dim: '1200 × 628',  colors: ['#fee8ee', '#cc1a3a', '#1a1816'] },
+                ].map((c, i) => (
+                  <div key={i} onClick={() => toggleCreative(i)} style={{ border: '2px solid ' + (selCreatives.includes(i) ? 'var(--gold)' : 'var(--rule)'), borderRadius: 8, overflow: 'hidden', cursor: 'pointer', transition: 'all .15s' }}>
+                    <div style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: c.colors[0], gap: 6 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 6, background: c.colors[1] }} />
+                      <div style={{ width: 48, height: 6, borderRadius: 3, background: c.colors[2], opacity: 0.6 }} />
+                      <div style={{ width: 36, height: 4, borderRadius: 3, background: c.colors[1], opacity: 0.4 }} />
+                    </div>
                     <div style={{ padding: '7px 9px', borderTop: '1px solid var(--rule)' }}>
                       <div style={{ fontSize: 10, fontWeight: 500 }}>{c.name}</div>
                       <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>{c.dim}</div>
@@ -414,9 +441,14 @@ function OptimizeContent() {
     </div>
   )
 
-  // ── Step 3: Review ──
   const StepReview = () => {
     const platLabel = form.plat?.includes('Google') ? 'Google Ads' : form.plat?.includes('TikTok') ? 'TikTok Ads' : 'Meta Ads'
+    const creativesSummary = creativeType === 'ai'
+      ? selCreatives.length + ' AI-generated variant' + (selCreatives.length !== 1 ? 's' : '') + ' selected'
+      : creativeType === 'external'
+        ? uploadedFiles.length > 0 ? uploadedFiles.length + ' file' + (uploadedFiles.length !== 1 ? 's' : '') + ' uploaded' : 'No files uploaded'
+        : 'None selected'
+
     const rows = [
       ['Action', mode === 'edit' ? 'Editing existing campaign' : 'Building new campaign'],
       ['Campaign', form.name || 'New Campaign'],
@@ -426,7 +458,7 @@ function OptimizeContent() {
       ['Audience', form.aud || 'Lookalike — 1% Past Purchasers'],
       ['Bid Strategy', form.bid || 'Lowest Cost'],
       ['Start Date', form.start || 'Today'],
-      ['Creatives', creativeType === 'ai' ? selCreatives.length + ' AI-generated variant' + (selCreatives.length !== 1 ? 's' : '') + ' selected' : creativeType === 'external' ? 'External assets uploaded' : 'None selected'],
+      ['Creatives', creativesSummary],
     ]
     return (
       <div>
@@ -457,21 +489,20 @@ function OptimizeContent() {
     )
   }
 
-  // ── Step 4: Blueprint PDF ──
   const StepBlueprint = () => {
     if (!blueprint) return null
     const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    const platLabel = form.plat?.includes('Google') ? 'Google Ads' : form.plat?.includes('TikTok') ? 'TikTok Ads' : 'Meta Ads'
-    const paramRows = [
-      ['Campaign', form.name || 'New Campaign'],
+    const platLabel = blueprint.form.plat?.includes('Google') ? 'Google Ads' : blueprint.form.plat?.includes('TikTok') ? 'TikTok Ads' : 'Meta Ads'
+    const paramRows: [string, string][] = [
+      ['Campaign', blueprint.form.name || 'New Campaign'],
       ['Platform', platLabel],
-      ['Action', mode === 'edit' ? 'Edit existing campaign' : 'Create new campaign'],
-      ['Daily Budget', form.budget ? '$' + form.budget + '/day' : 'Not specified'],
-      ['Objective', form.obj || 'Conversions'],
-      ['Audience', form.aud || 'Lookalike — 1% Past Purchasers'],
-      ['Bid Strategy', form.bid || 'Lowest Cost (Automatic)'],
-      ['Start Date', form.start || 'Today'],
-      ['Creatives', creativeType === 'ai' ? selCreatives.length + ' AI-generated variants' : 'External assets provided'],
+      ['Action', blueprint.mode === 'edit' ? 'Edit existing campaign' : 'Create new campaign'],
+      ['Daily Budget', blueprint.form.budget ? '$' + blueprint.form.budget + '/day' : 'Not specified'],
+      ['Objective', blueprint.form.obj || 'Conversions'],
+      ['Audience', blueprint.form.aud || 'Lookalike — 1% Past Purchasers'],
+      ['Bid Strategy', blueprint.form.bid || 'Lowest Cost (Automatic)'],
+      ['Start Date', blueprint.form.start || 'Today'],
+      ['Creatives', blueprint.creativeType === 'ai' ? blueprint.creativeCount + ' AI-generated variants' : blueprint.creativeCount + ' file' + (blueprint.creativeCount !== 1 ? 's' : '') + ' uploaded'],
     ]
     return (
       <div>
@@ -480,9 +511,7 @@ function OptimizeContent() {
           <div style={{ fontSize: 12, color: 'var(--ink2)' }}>Your implementation blueprint is ready. Follow the steps below on your ad platform to execute all changes.</div>
         </div>
 
-        {/* PDF Document */}
         <div id="pdf-blueprint" style={{ background: '#fff', color: '#1a1714', border: '1px solid #ddd', borderRadius: 8, padding: '34px 38px', maxWidth: 680, margin: '0 auto', boxShadow: '0 6px 24px rgba(0,0,0,.1)' }}>
-          {/* Header */}
           <div style={{ borderBottom: '2px solid #1a1714', paddingBottom: 14, marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#1a1714', letterSpacing: 2 }}>VV</div>
@@ -497,38 +526,40 @@ function OptimizeContent() {
             </div>
           </div>
 
-          {/* Parameters */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#8b6914', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 9, paddingBottom: 5, borderBottom: '1px solid #e8e3da' }}>Campaign Parameters</div>
             {paramRows.map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f2efe9', fontSize: 12 }}>
+              <div key={k} data-param={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f2efe9', fontSize: 12 }}>
                 <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#9a9390' }}>{k}</span>
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 500, color: '#1a1714' }}>{v}</span>
               </div>
             ))}
           </div>
 
-          {/* Steps */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#8b6914', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 9, paddingBottom: 5, borderBottom: '1px solid #e8e3da' }}>Step-by-Step Implementation</div>
             {blueprint.steps.map((s, i) => (
-              <div key={i} style={{ background: '#fdf6e3', borderLeft: '3px solid #8b6914', padding: '10px 13px', marginBottom: 7, borderRadius: '0 5px 5px 0' }}>
+              <div key={i} data-step={i} style={{ background: '#fdf6e3', borderLeft: '3px solid #8b6914', padding: '10px 13px', marginBottom: 7, borderRadius: '0 5px 5px 0' }}>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#8b6914', letterSpacing: 1, marginBottom: 3 }}>STEP {i + 1} OF {blueprint.steps.length}</div>
                 <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: '#4a4540', lineHeight: 1.65 }}>{s}</div>
               </div>
             ))}
           </div>
 
-          {/* Footer */}
           <div style={{ borderTop: '1px solid #e8e3da', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#9a9390', letterSpacing: 1 }}>Vanguard Visuals · Growth Ad Engine · Confidential Client Blueprint</div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#8b6914', background: '#fdf6e3', padding: '3px 8px', borderRadius: 3 }}>REF: {blueprint.refId}</div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }} className="no-print">
-          <button onClick={() => window.print()} style={{ padding: '8px 16px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink2)', letterSpacing: 1 }}>↓ Print PDF</button>
-          <button onClick={() => { setStep(0); setSelected(null); setForm({}); setCreativeType(null); setSelCreatives([]); setBlueprint(null); setShowCreatives(false); setAiStep('') }}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button
+            onClick={() => exportBlueprintPDF(blueprint.refId, client?.name || 'Client')}
+            style={{ padding: '8px 16px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink2)', letterSpacing: 1 }}>
+            ↓ Export PDF
+          </button>
+          <button
+            onClick={() => { setStep(0); setSelected(null); setForm({}); setCreativeType(null); setSelCreatives([]); setBlueprint(null); setShowCreatives(false); setAiStep(''); setUploadedFiles([]) }}
             style={{ padding: '8px 16px', border: 'none', borderRadius: 5, background: 'var(--gold)', color: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: 1 }}>
             New Optimization →
           </button>
