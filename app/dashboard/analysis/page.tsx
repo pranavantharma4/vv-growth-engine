@@ -7,6 +7,7 @@ import { useApp } from '@/app/dashboard/context'
 import { Pill, PlatPill } from '@/app/dashboard/components'
 import { fmtMoney, roasColor } from '@/lib/types'
 import type { CampaignSnapshot } from '@/lib/types'
+import { exportAnalysisPDF } from '@/lib/exportPDF'
 
 const FALLBACK: Record<string, string> = {
   dead: 'This campaign is spending at a loss on every dollar — ROAS below break-even indicates a fundamental mismatch between audience, creative, and objective. The longer this runs the more budget is destroyed. Pause immediately and redirect the full spend to your strongest performing campaign while you diagnose the root cause.',
@@ -24,7 +25,7 @@ const ACTIONS: Record<string, string> = {
 
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ background: 'var(--card2)', borderRadius: 5, padding: '8px 6px', textAlign: 'center' }}>
+    <div data-metric={label} style={{ background: 'var(--card2)', borderRadius: 5, padding: '8px 6px', textAlign: 'center' }}>
       <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: color || 'var(--ink)' }}>{value}</div>
     </div>
@@ -120,6 +121,8 @@ function AnalysisContent() {
         <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
           {loading ? (
             <div style={{ padding: 20, fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>Loading campaigns...</div>
+          ) : camps.length === 0 ? (
+            <div style={{ padding: 20, fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>No campaigns found. Sync your ad account first.</div>
           ) : camps.map((c, i) => (
             <div
               key={c.id}
@@ -151,7 +154,6 @@ function AnalysisContent() {
           ))}
         </div>
 
-        {/* Legend */}
         <div style={{ padding: '10px 12px', background: 'var(--card2)', border: '1px solid var(--rule)', borderRadius: 6 }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 8 }}>Health Classification</div>
           {[['strong','ROAS >= 3.0x'],['weak','ROAS >= 1.5x'],['bleeding','ROAS >= 0.8x'],['dead','ROAS < 0.8x']].map(([h, desc]) => (
@@ -174,7 +176,7 @@ function AnalysisContent() {
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px' }}>Click any campaign on the left to generate a Claude AI diagnosis</div>
           </div>
         ) : (
-          <>
+          <div id="analysis-export">
             {/* Metrics */}
             <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '16px 18px', marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -185,11 +187,11 @@ function AnalysisContent() {
                 <Pill health={selected.health} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
-                <MetricCard label="Spend" value={fmtMoney(Number(selected.spend))} />
-                <MetricCard label="Impr." value={(Number(selected.impressions)/1000).toFixed(0)+'k'} />
-                <MetricCard label="CTR" value={Number(selected.ctr||0).toFixed(2)+'%'} />
-                <MetricCard label="Conv." value={String(selected.conversions)} />
-                <MetricCard label="ROAS" value={Number(selected.roas).toFixed(1)+'x'} color={roasColor(Number(selected.roas))} />
+                <MetricCard label="Spend"  value={fmtMoney(Number(selected.spend))} />
+                <MetricCard label="Impr."  value={(Number(selected.impressions)/1000).toFixed(0)+'k'} />
+                <MetricCard label="CTR"    value={Number(selected.ctr||0).toFixed(2)+'%'} />
+                <MetricCard label="Conv."  value={String(selected.conversions)} />
+                <MetricCard label="ROAS"   value={Number(selected.roas).toFixed(1)+'x'} color={roasColor(Number(selected.roas))} />
               </div>
             </div>
 
@@ -210,7 +212,7 @@ function AnalysisContent() {
                   <style>{`@keyframes sh{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
                 </div>
               ) : (
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.9 }}>{analysis}</div>
+                <div data-analysis style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.9 }}>{analysis}</div>
               )}
             </div>
 
@@ -218,7 +220,7 @@ function AnalysisContent() {
             {action && !analyzing && (
               <div style={{ background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderLeft: '3px solid var(--gold)', borderRadius: 8, padding: '14px 18px', marginBottom: 12 }}>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--goldlt)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 8 }}>Recommended Action</div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.75 }}>{action}</div>
+                <div data-action style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.75 }}>{action}</div>
               </div>
             )}
 
@@ -230,19 +232,17 @@ function AnalysisContent() {
                     await supabase.from('ai_analyses').delete().eq('client_id', client!.id).eq('campaign_id', selected.campaign_id)
                     pick(selected, true)
                   }}
-                  style={{ padding: '6px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1 }}
-                >
+                  style={{ padding: '6px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1 }}>
                   Re-analyze
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  style={{ padding: '6px 14px', border: 'none', borderRadius: 5, background: 'var(--gold)', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#faf8f5', letterSpacing: 1 }}
-                >
+                  onClick={() => exportAnalysisPDF(selected.campaign_name, selected.platform)}
+                  style={{ padding: '6px 14px', border: 'none', borderRadius: 5, background: 'var(--gold)', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#faf8f5', letterSpacing: 1 }}>
                   Export PDF
                 </button>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

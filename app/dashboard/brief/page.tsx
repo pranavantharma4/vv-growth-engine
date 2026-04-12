@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill } from '@/app/dashboard/components'
-import { fmtMoney, roasColor } from '@/lib/types'
+import { Pill } from '@/app/dashboard/components'
+import { fmtMoney } from '@/lib/types'
 import type { CampaignSnapshot, BiggestLeak } from '@/lib/types'
+import { exportBriefPDF } from '@/lib/exportPDF'
 
 function getWeekRef() {
   const now = new Date()
@@ -51,11 +52,10 @@ export default function BriefPage() {
       if (res.ok) {
         setSent(true)
         showToast('Brief sent', 'Weekly intelligence brief delivered to ' + (client?.contact_email || 'client'))
-        // Refresh past briefs
         const { data } = await supabase.from('weekly_briefs').select('*').eq('client_id', client!.id).order('created_at', { ascending: false }).limit(6)
         setPastBriefs(data || [])
       } else {
-        showToast('Send failed', 'Could not send brief. Check your Resend API key in .env.local.')
+        showToast('Send failed', 'Could not send brief. Check your Resend API key.')
       }
     } catch {
       showToast('Send failed', 'Network error. Please try again.')
@@ -77,21 +77,21 @@ export default function BriefPage() {
 
   return (
     <div>
-      {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }} className="no-print">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, fontWeight: 400 }}>Weekly Intelligence Brief</div>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>Auto-generated · {weekRef} · {dateStr}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => window.print()} style={{ padding: '7px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink2)', letterSpacing: 1 }}>
+          <button
+            onClick={() => exportBriefPDF(client?.name || 'Client', weekRef)}
+            style={{ padding: '7px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink2)', letterSpacing: 1 }}>
             ↓ Export PDF
           </button>
           <button
             onClick={sendBrief}
             disabled={sending}
-            style={{ padding: '7px 16px', border: 'none', borderRadius: 5, background: sending ? 'var(--bg3)' : sent ? 'var(--green)' : 'var(--gold)', color: '#faf8f5', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: 1 }}
-          >
+            style={{ padding: '7px 16px', border: 'none', borderRadius: 5, background: sending ? 'var(--bg3)' : sent ? 'var(--green)' : 'var(--gold)', color: '#faf8f5', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: 1 }}>
             {sending ? 'Sending...' : sent ? '✓ Brief Sent' : '✉ Send to Client'}
           </button>
         </div>
@@ -99,7 +99,6 @@ export default function BriefPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, alignItems: 'start' }}>
 
-        {/* ── Brief Document ── */}
         <div id="brief-doc" style={{ background: '#fff', color: '#1a1714', border: '1px solid #ddd', borderRadius: 8, padding: '34px 38px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
 
           {/* Header */}
@@ -118,7 +117,7 @@ export default function BriefPage() {
 
           {/* Biggest Leak */}
           {leak && (
-            <div style={{ background: '#fdf0f0', borderLeft: '3px solid #8b1a1a', padding: '14px 16px', marginBottom: 20, borderRadius: '0 6px 6px 0' }}>
+            <div data-section="leak" style={{ background: '#fdf0f0', borderLeft: '3px solid #8b1a1a', padding: '14px 16px', marginBottom: 20, borderRadius: '0 6px 6px 0' }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#8b1a1a', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>Biggest Leak This Week</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1714', marginBottom: 4 }}>{leak.campaign_name} — {fmtMoney(Number(leak.spend))}/mo at {Number(leak.roas).toFixed(1)}x ROAS</div>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#8b1a1a' }}>{fmtMoney(Number(leak.spend))} recoverable this month · Action required this week</div>
@@ -132,7 +131,7 @@ export default function BriefPage() {
               ['Blended ROAS', blendedROAS.toFixed(1) + 'x', blendedROAS >= 3 ? '#1a5c1a' : blendedROAS >= 1.5 ? '#8b6914' : '#8b1a1a'],
               ['Recoverable', fmtMoney(totalWasted), '#8b1a1a'],
             ].map(([label, value, color]) => (
-              <div key={label} style={{ background: '#f2efe9', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>
+              <div key={label} data-stat={label} style={{ background: '#f2efe9', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: '#9a9390', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 5 }}>{label}</div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: (color as string) || '#1a1714' }}>{value}</div>
               </div>
@@ -145,20 +144,20 @@ export default function BriefPage() {
             {loading ? (
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#9a9390' }}>Loading...</div>
             ) : camps.slice(0, 8).map((c, i) => (
-              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f2efe9' }}>
-                <div>
+              <tr key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f2efe9' }}>
+                <td style={{ listStyle: 'none' }}>
                   <div style={{ fontSize: 12, color: '#1a1714', fontWeight: 500 }}>{c.campaign_name}</div>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: '#9a9390', marginTop: 1 }}>
                     {{ meta: 'Meta', google: 'Google', tiktok: 'TikTok' }[c.platform] || c.platform} · {fmtMoney(Number(c.spend))}/mo
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                </td>
+                <td style={{ display: 'flex', alignItems: 'center', gap: 10, listStyle: 'none' }}>
                   <Pill health={c.health} />
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: Number(c.roas) >= 3 ? '#1a5c1a' : Number(c.roas) >= 1.5 ? '#8b6914' : '#8b1a1a' }}>
                     {Number(c.roas).toFixed(1)}x
                   </div>
-                </div>
-              </div>
+                </td>
+              </tr>
             ))}
           </div>
 
@@ -169,7 +168,7 @@ export default function BriefPage() {
               {recommendations.map((rec, i) => (
                 <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#8b6914', flexShrink: 0, marginTop: 1 }}>{i + 1}.</div>
-                  <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: '#4a4540', lineHeight: 1.7 }}>{rec}</div>
+                  <div data-rec style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: '#4a4540', lineHeight: 1.7 }}>{rec}</div>
                 </div>
               ))}
             </div>
@@ -202,9 +201,8 @@ export default function BriefPage() {
           </div>
         </div>
 
-        {/* ── Right sidebar ── */}
-        <div className="no-print">
-          {/* Send status */}
+        {/* Right sidebar */}
+        <div>
           <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '15px 16px', marginBottom: 11 }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Delivery</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--rule)', fontSize: 11 }}>
@@ -221,7 +219,6 @@ export default function BriefPage() {
             </div>
           </div>
 
-          {/* Past briefs */}
           <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '15px 16px' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Past Briefs</div>
             {pastBriefs.length === 0 ? (
