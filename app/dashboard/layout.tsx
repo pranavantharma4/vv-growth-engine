@@ -1,6 +1,6 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { AppCtx } from './context'
@@ -49,18 +49,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dropdown, setDropdown] = useState(false)
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
   const [syncing, setSyncing] = useState(false)
-  const [pageKey, setPageKey] = useState(pathname)
   const [navigating, setNavigating] = useState(false)
   const [navTarget, setNavTarget] = useState('')
-  const [leaving, setLeaving] = useState(false)
+  const [contentVisible, setContentVisible] = useState(true)
+  const [contentKey, setContentKey] = useState(pathname)
 
+  // On route change: wait for leave anim, then swap content and animate in
+  const prevPath = useRef(pathname)
   useEffect(() => {
-    setLeaving(false)
-    setTimeout(() => {
-      setPageKey(pathname)
+    if (prevPath.current === pathname) return
+    prevPath.current = pathname
+    setContentVisible(false)
+    const t = setTimeout(() => {
+      setContentKey(pathname)
+      setContentVisible(true)
       setNavigating(false)
       setNavTarget('')
-    }, 10)
+    }, 110) // matches leave duration
+    return () => clearTimeout(t)
   }, [pathname])
 
   useEffect(() => {
@@ -77,8 +83,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname === path) return
     setNavTarget(path)
     setNavigating(true)
-    setLeaving(true)
-    setTimeout(() => router.push(path), 120)
+    setContentVisible(false)
+    setTimeout(() => router.push(path), 110)
   }
 
   function setClient(c: Client) {
@@ -105,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .eq('is_active', true)
       .single()
     if (!conn) { toast('No connection', 'Connect a Meta Ads account first under Connections.'); return }
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) { toast('Token expired', 'Meta connection expired. Please reconnect under Connections.'); return }
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) { toast('Token expired', 'Meta connection expired. Please reconnect.'); return }
     setSyncing(true)
     toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
     try {
@@ -140,7 +146,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
   const now = new Date()
-  const subtitle = page === 'dashboard' ? (client?.name || '') + ' · ' + now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : sub
+  const subtitle = page === 'dashboard'
+    ? (client?.name || '') + ' · ' + now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : sub
 
   const isNavActive = (id: string) => {
     const target = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
@@ -156,16 +164,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         * { box-sizing: border-box; }
         body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
-        @keyframes pageEnter {
-          from { opacity: 0; transform: translateY(5px); }
-          to   { opacity: 1; transform: translateY(0); }
+        /* Content transition — clean fade + subtle lift */
+        @keyframes contentIn {
+          0%   { opacity: 0; transform: translateY(8px); }
+          100% { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pageLeave {
-          from { opacity: 1; transform: translateY(0); }
-          to   { opacity: 0; transform: translateY(-4px); }
+        @keyframes contentOut {
+          0%   { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-5px); }
         }
-        .page-enter { animation: pageEnter 0.18s cubic-bezier(0.16,1,0.3,1) both; }
-        .page-leave { animation: pageLeave 0.1s ease both; pointer-events: none; }
+        .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; }
+        .content-out { animation: contentOut 0.1s ease both; pointer-events: none; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
@@ -178,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           position: fixed; top: 0; left: 0; height: 2px;
           background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.4));
           z-index: 99999; pointer-events: none;
-          animation: loadBar 0.55s cubic-bezier(0.16,1,0.3,1) both;
+          animation: loadBar 0.5s cubic-bezier(0.16,1,0.3,1) both;
         }
 
         .nav-btn {
@@ -192,9 +201,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
         .client-switcher { transition: background 0.12s ease; }
         .client-switcher:hover { background: rgba(255,255,255,0.06) !important; }
-        .client-dropdown { animation: pageEnter 0.12s ease both; }
 
-        button { transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease; transform: translateZ(0); }
+        @keyframes dropIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+        .client-dropdown { animation: dropIn 0.12s ease both; }
+
+        button {
+          transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
+          transform: translateZ(0);
+        }
         button:active { transform: scale(0.97) translateZ(0) !important; }
 
         ::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -210,7 +224,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
+        {/* SIDEBAR */}
         <aside className="sidebar" style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
+
           <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
@@ -275,6 +291,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </aside>
 
+        {/* MAIN */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <div>
@@ -293,13 +310,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </header>
 
           <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
-            <div key={pageKey} className={leaving ? 'page-leave' : 'page-enter'}>
+            <div
+              key={contentKey}
+              className={contentVisible ? 'content-in' : 'content-out'}
+            >
               {children}
             </div>
           </main>
         </div>
       </div>
 
+      {/* Toast */}
       <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
