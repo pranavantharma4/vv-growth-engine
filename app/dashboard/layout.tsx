@@ -49,6 +49,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dropdown, setDropdown] = useState(false)
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
   const [syncing, setSyncing] = useState(false)
+  const [pageKey, setPageKey] = useState(pathname)
+
+  // Trigger page transition animation on route change
+  useEffect(() => {
+    setPageKey(pathname)
+  }, [pathname])
 
   function toast(title: string, body: string) {
     setToastData({ show: true, title, body })
@@ -66,6 +72,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setDarkState(v)
     document.body.classList.toggle('dark', v)
     localStorage.setItem('vv_dark', v ? '1' : '0')
+  }
+
+  function navigate(path: string) {
+    router.push(path)
   }
 
   async function handleSync() {
@@ -134,9 +144,100 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
+
+      <style>{`
+        * { box-sizing: border-box; }
+
+        /* Font smoothing */
+        body {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+
+        /* Page transition */
+        @keyframes pageIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .page-content {
+          animation: pageIn 0.18s cubic-bezier(0.16,1,0.3,1) both;
+        }
+
+        /* Pulse for live indicator */
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        /* Nav button transitions */
+        .nav-btn {
+          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          will-change: background;
+          transform: translateZ(0);
+          backface-visibility: hidden;
+        }
+        .nav-btn:hover {
+          background: rgba(255,255,255,0.06) !important;
+        }
+        .nav-btn:active {
+          transform: scale(0.98) translateZ(0);
+        }
+
+        /* Dropdown items */
+        .dropdown-item {
+          transition: background 0.12s ease;
+        }
+        .dropdown-item:hover {
+          background: rgba(255,255,255,0.06) !important;
+        }
+
+        /* All buttons */
+        button {
+          transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+          transform: translateZ(0);
+        }
+        button:active {
+          transform: scale(0.97) translateZ(0);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 3px; height: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* Main scroll area smooth */
+        .main-scroll {
+          scroll-behavior: smooth;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+        }
+
+        /* Sidebar */
+        .sidebar {
+          will-change: auto;
+          transform: translateZ(0);
+        }
+
+        /* Toast */
+        .toast-wrap {
+          transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.25s ease;
+          will-change: transform, opacity;
+        }
+
+        /* Remove tap highlight */
+        * { -webkit-tap-highlight-color: transparent; }
+
+        /* Smooth client dropdown */
+        .client-dropdown {
+          animation: pageIn 0.15s ease both;
+        }
+      `}</style>
+
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-        <aside style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        {/* SIDEBAR */}
+        <aside className="sidebar" style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
+
+          {/* Logo */}
           <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
@@ -147,19 +248,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          <div onClick={() => setDropdown(d => !d)} style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}>
+          {/* Client switcher */}
+          <div onClick={() => setDropdown(d => !d)} style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative', transition: 'background 0.15s ease' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client?.name || 'Loading...'}</div>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
               </div>
-              <span style={{ color: 'rgba(250,248,245,0.3)', fontSize: 10 }}>▾</span>
+              <span style={{ color: 'rgba(250,248,245,0.3)', fontSize: 10, transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
             </div>
             {dropdown && clients.length > 1 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100 }}>
+              <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                 {clients.map((c: Client) => (
-                  <div key={c.id} onClick={e => { e.stopPropagation(); setClient(c) }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
+                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }}
+                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
                     <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
                   </div>
@@ -168,35 +271,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
 
+          {/* Nav */}
           <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
               const active = page === item.id
               return (
                 <div key={item.id}>
-                  {item.section && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>{item.section}</div>}
-                  <button onClick={() => router.push('/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id))}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 5, border: 'none', borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, background: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)' }}>{item.icon}</span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                  {item.section && (
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>
+                      {item.section}
+                    </div>
+                  )}
+                  <button
+                    className="nav-btn"
+                    onClick={() => navigate('/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id))}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px',
+                      borderRadius: 5, border: 'none',
+                      borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`,
+                      background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
+                      cursor: 'pointer', width: '100%', textAlign: 'left',
+                    }}>
+                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.15s ease' }}>{item.icon}</span>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.15s ease' }}>{item.label}</span>
                   </button>
                 </div>
               )
             })}
           </nav>
 
+          {/* Footer */}
           <div style={{ padding: '11px 15px', borderTop: '1px solid var(--sb-rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4c8b4c', animation: 'pulse 2.5s ease infinite' }} />
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <button onClick={() => setDark(!dark)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}>{dark ? 'Dark' : 'Light'}</button>
-              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}>✕</button>
+              <button onClick={() => setDark(!dark)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}>
+                {dark ? 'Dark' : 'Light'}
+              </button>
+              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}>✕</button>
             </div>
           </div>
         </aside>
 
+        {/* MAIN */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Header */}
           <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, letterSpacing: 0.8 }}>{title}</div>
@@ -206,7 +330,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, transition: 'all 0.2s' }}>
+                style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 8,
+                  color: syncing ? 'var(--ink3)' : 'var(--green)',
+                  padding: '5px 10px',
+                  border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`,
+                  borderRadius: 4,
+                  background: syncing ? 'transparent' : 'var(--greenpaper)',
+                  cursor: syncing ? 'not-allowed' : 'pointer',
+                  letterSpacing: 1, opacity: syncing ? 0.6 : 1,
+                }}>
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
@@ -214,17 +347,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </div>
           </header>
-          <main style={{ flex: 1, overflowY: 'auto', padding: '24px 26px' }}>{children}</main>
-        </div>
 
+          {/* Page content with transition */}
+          <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
+            <div key={pageKey} className="page-content">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
 
-      <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, transition: 'all 0.3s' }}>
+      {/* Toast */}
+      <div className="toast-wrap" style={{
+        position: 'fixed', bottom: 24, right: 24,
+        background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300,
+        transform: toastData.show ? 'translateY(0)' : 'translateY(80px)',
+        opacity: toastData.show ? 1 : 0,
+        pointerEvents: toastData.show ? 'all' : 'none',
+      }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
       </div>
 
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
     </AppCtx.Provider>
   )
 }
