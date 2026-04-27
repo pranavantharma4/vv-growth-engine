@@ -50,15 +50,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
   const [syncing, setSyncing] = useState(false)
   const [pageKey, setPageKey] = useState(pathname)
+  const [navigating, setNavigating] = useState(false)
+  const [navTarget, setNavTarget] = useState('')
 
-  // Trigger page transition animation on route change
   useEffect(() => {
     setPageKey(pathname)
+    setNavigating(false)
+    setNavTarget('')
   }, [pathname])
+
+  // Prefetch all routes on mount so chunks are ready instantly
+  useEffect(() => {
+    const routes = NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
+    routes.forEach(r => router.prefetch(r))
+  }, [])
 
   function toast(title: string, body: string) {
     setToastData({ show: true, title, body })
     setTimeout(() => setToastData(t => ({ ...t, show: false })), 3500)
+  }
+
+  function navigate(path: string) {
+    if (pathname === path) return
+    setNavTarget(path)
+    setNavigating(true)
+    router.push(path)
   }
 
   function setClient(c: Client) {
@@ -72,10 +88,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setDarkState(v)
     document.body.classList.toggle('dark', v)
     localStorage.setItem('vv_dark', v ? '1' : '0')
-  }
-
-  function navigate(path: string) {
-    router.push(path)
   }
 
   async function handleSync() {
@@ -121,7 +133,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   useEffect(() => {
-    if (localStorage.getItem('vv_dark') === '1') { setDarkState(true); document.body.classList.add('dark') }
+    if (localStorage.getItem('vv_dark') === '1') {
+      setDarkState(true)
+      document.body.classList.add('dark')
+    }
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
@@ -142,94 +157,95 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const subtitle = page === 'dashboard' ? (client?.name || '') + ' · ' + monthYear : sub
 
+  const isNavActive = (id: string) => {
+    const target = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
+    return page === id || navTarget === target
+  }
+
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
+
+      {/* Gold loading bar — appears instantly on click */}
+      {navigating && <div className="load-bar" />}
 
       <style>{`
         * { box-sizing: border-box; }
 
-        /* Font smoothing */
         body {
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
           text-rendering: optimizeLegibility;
         }
 
-        /* Page transition */
         @keyframes pageIn {
-          from { opacity: 0; transform: translateY(6px); }
+          from { opacity: 0; transform: translateY(4px); }
           to   { opacity: 1; transform: translateY(0); }
         }
         .page-content {
-          animation: pageIn 0.18s cubic-bezier(0.16,1,0.3,1) both;
+          animation: pageIn 0.14s cubic-bezier(0.16,1,0.3,1) both;
         }
 
-        /* Pulse for live indicator */
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        /* Nav button transitions */
+        @keyframes loadBar {
+          0%   { width: 0%;   opacity: 1; }
+          65%  { width: 88%;  opacity: 1; }
+          100% { width: 100%; opacity: 0; }
+        }
+        .load-bar {
+          position: fixed;
+          top: 0; left: 0; height: 2px;
+          background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.5));
+          z-index: 99999;
+          animation: loadBar 0.55s cubic-bezier(0.16,1,0.3,1) both;
+          pointer-events: none;
+        }
+
         .nav-btn {
-          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          transition: background 0.1s ease, border-color 0.1s ease, opacity 0.1s ease;
           will-change: background;
           transform: translateZ(0);
           backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
         }
-        .nav-btn:hover {
-          background: rgba(255,255,255,0.06) !important;
-        }
-        .nav-btn:active {
-          transform: scale(0.98) translateZ(0);
-        }
+        .nav-btn:hover { background: rgba(255,255,255,0.055) !important; }
+        .nav-btn:active { transform: scale(0.975) translateZ(0) !important; }
 
-        /* Dropdown items */
-        .dropdown-item {
-          transition: background 0.12s ease;
-        }
-        .dropdown-item:hover {
-          background: rgba(255,255,255,0.06) !important;
-        }
+        .dropdown-item { transition: background 0.1s ease; }
+        .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
 
-        /* All buttons */
+        .client-switcher { transition: background 0.12s ease; }
+        .client-switcher:hover { background: rgba(255,255,255,0.06) !important; }
+
+        .client-dropdown { animation: pageIn 0.12s ease both; }
+
         button {
-          transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+          transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
           transform: translateZ(0);
         }
-        button:active {
-          transform: scale(0.97) translateZ(0);
-        }
+        button:active { transform: scale(0.97) translateZ(0) !important; }
 
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 3px; height: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-        /* Main scroll area smooth */
         .main-scroll {
-          scroll-behavior: smooth;
           overflow-y: auto;
           overscroll-behavior: contain;
         }
 
-        /* Sidebar */
         .sidebar {
           will-change: auto;
           transform: translateZ(0);
         }
 
-        /* Toast */
         .toast-wrap {
-          transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.25s ease;
+          transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease;
           will-change: transform, opacity;
         }
 
-        /* Remove tap highlight */
         * { -webkit-tap-highlight-color: transparent; }
-
-        /* Smooth client dropdown */
-        .client-dropdown {
-          animation: pageIn 0.15s ease both;
-        }
       `}</style>
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -249,20 +265,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           {/* Client switcher */}
-          <div onClick={() => setDropdown(d => !d)} style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative', transition: 'background 0.15s ease' }}>
+          <div
+            className="client-switcher"
+            onClick={() => setDropdown(d => !d)}
+            style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}
+          >
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client?.name || 'Loading...'}</div>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
               </div>
-              <span style={{ color: 'rgba(250,248,245,0.3)', fontSize: 10, transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
+              <span style={{
+                color: 'rgba(250,248,245,0.3)', fontSize: 10,
+                display: 'inline-block',
+                transition: 'transform 0.2s ease',
+                transform: dropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}>▾</span>
             </div>
             {dropdown && clients.length > 1 && (
               <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                 {clients.map((c: Client) => (
-                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }}
-                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
+                  <div
+                    key={c.id}
+                    className="dropdown-item"
+                    onClick={e => { e.stopPropagation(); setClient(c) }}
+                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}
+                  >
                     <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
                   </div>
@@ -274,7 +303,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Nav */}
           <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
-              const active = page === item.id
+              const active = isNavActive(item.id)
+              const target = '/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id)
               return (
                 <div key={item.id}>
                   {item.section && (
@@ -284,16 +314,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   )}
                   <button
                     className="nav-btn"
-                    onClick={() => navigate('/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id))}
+                    onClick={() => navigate(target)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px',
-                      borderRadius: 5, border: 'none',
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '8px 11px', borderRadius: 5, border: 'none',
                       borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`,
                       background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
                       cursor: 'pointer', width: '100%', textAlign: 'left',
-                    }}>
-                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.15s ease' }}>{item.icon}</span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.15s ease' }}>{item.label}</span>
+                      opacity: navigating && !active ? 0.5 : 1,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.1s ease' }}>
+                      {item.icon}
+                    </span>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.1s ease' }}>
+                      {item.label}
+                    </span>
                   </button>
                 </div>
               )
@@ -307,17 +343,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <button onClick={() => setDark(!dark)}
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}>
+              <button
+                onClick={() => setDark(!dark)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}
+              >
                 {dark ? 'Dark' : 'Light'}
               </button>
-              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}>✕</button>
+              <button
+                onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}
+              >✕</button>
             </div>
           </div>
         </aside>
 
-        {/* MAIN */}
+        {/* MAIN CONTENT */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Header */}
@@ -338,8 +378,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   borderRadius: 4,
                   background: syncing ? 'transparent' : 'var(--greenpaper)',
                   cursor: syncing ? 'not-allowed' : 'pointer',
-                  letterSpacing: 1, opacity: syncing ? 0.6 : 1,
-                }}>
+                  letterSpacing: 1,
+                  opacity: syncing ? 0.6 : 1,
+                }}
+              >
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
@@ -348,12 +390,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </header>
 
-          {/* Page content with transition */}
+          {/* Page content */}
           <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
             <div key={pageKey} className="page-content">
               {children}
             </div>
           </main>
+
         </div>
       </div>
 
