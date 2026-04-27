@@ -73,24 +73,33 @@ export default function LandingClient() {
   const [navStuck, setNavStuck] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [introPhase, setIntroPhase] = useState(0)
-  // 0 = black screen
-  // 1 = VV appears
-  // 2 = tagline appears
-  // 3 = expand to full site
-  // 4 = intro done, show full page
+  const [introDone, setIntroDone] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // Cinematic intro sequence
-    const t1 = setTimeout(() => setIntroPhase(1), 400)   // VV mark appears
-    const t2 = setTimeout(() => setIntroPhase(2), 1400)  // tagline appears
-    const t3 = setTimeout(() => setIntroPhase(3), 2800)  // start expand
-    const t4 = setTimeout(() => setIntroPhase(4), 3600)  // intro done
+    const timers: ReturnType<typeof setTimeout>[] = []
+
+    const seen = sessionStorage.getItem('vv_intro_seen')
+    if (seen) {
+      setIntroPhase(7)
+      setIntroDone(true)
+    } else {
+      sessionStorage.setItem('vv_intro_seen', '1')
+      timers.push(setTimeout(() => setIntroPhase(1), 300))
+      timers.push(setTimeout(() => setIntroPhase(2), 1100))
+      timers.push(setTimeout(() => setIntroPhase(3), 2100))
+      timers.push(setTimeout(() => setIntroPhase(4), 3000))
+      timers.push(setTimeout(() => setIntroPhase(5), 4400))
+      timers.push(setTimeout(() => setIntroPhase(6), 5200))
+      timers.push(setTimeout(() => { setIntroPhase(7); setIntroDone(true) }, 6400))
+    }
+
     const iv1 = setInterval(() => setSymptomIdx(i => (i + 1) % SYMPTOMS.length), 3200)
     const onScroll = () => setNavStuck(window.scrollY > 30)
     window.addEventListener('scroll', onScroll, { passive: true })
+
     return () => {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
+      timers.forEach(clearTimeout)
       clearInterval(iv1)
       window.removeEventListener('scroll', onScroll)
     }
@@ -148,40 +157,20 @@ export default function LandingClient() {
         @keyframes marqueeL{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
         @keyframes scanMove{0%{top:0}100%{top:100vh}}
         @keyframes noiseShift{0%{background-position:0 0}100%{background-position:200px 200px}}
-        @keyframes introVV{
-          0%{opacity:0;letter-spacing:12px;transform:scale(0.94);}
-          100%{opacity:1;letter-spacing:2px;transform:scale(1);}
-        }
-        @keyframes introTag{
-          0%{opacity:0;transform:translateY(6px);}
-          100%{opacity:1;transform:translateY(0);}
-        }
-        @keyframes introCurtain{
-          0%{transform:scaleY(1);transform-origin:top;}
-          100%{transform:scaleY(0);transform-origin:top;}
-        }
-        @keyframes heroLineIn{
-          0%{transform:translateY(100%);opacity:0;}
-          100%{transform:translateY(0);opacity:1;}
-        }
-        @keyframes heroFadeUp{
-          0%{opacity:0;transform:translateY(18px);}
-          100%{opacity:1;transform:translateY(0);}
-        }
-        @keyframes symFade{
-          0%{opacity:0;transform:translateY(4px);}
-          100%{opacity:1;transform:translateY(0);}
-        }
+        @keyframes heroLineIn{0%{transform:translateY(110%);opacity:0}100%{transform:translateY(0);opacity:1}}
+        @keyframes heroFadeUp{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes symFade{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes slideUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes lineReveal{
-          0%{width:0;}
-          100%{width:100%;}
+        @keyframes glitch{
+          0%,92%,100%{transform:none;clip-path:none;opacity:1;}
+          93%{transform:translateX(-4px);clip-path:inset(15% 0 65% 0);opacity:0.85;}
+          94%{transform:translateX(4px);clip-path:inset(60% 0 10% 0);opacity:0.9;}
+          95%{transform:none;clip-path:none;opacity:1;}
+          96%{transform:translateX(-2px);clip-path:inset(35% 0 40% 0);opacity:0.75;}
+          97%{transform:translateX(2px);clip-path:inset(75% 0 5% 0);opacity:0.9;}
+          98%{transform:none;clip-path:none;opacity:1;}
         }
-
-        .intro-vv{animation:introVV 1.2s cubic-bezier(0.16,1,0.3,1) both;}
-        .intro-tag{animation:introTag 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s both;}
-        .intro-curtain{animation:introCurtain 0.9s cubic-bezier(0.87,0,0.13,1) both;}
 
         .h-line-1{overflow:hidden;display:block;}
         .h-line-2{overflow:hidden;display:block;}
@@ -193,7 +182,6 @@ export default function LandingClient() {
         .hero-ctas{animation:heroFadeUp 0.9s ease 0.9s both;}
         .hero-scroll{animation:heroFadeUp 0.9s ease 1.2s both;}
         .hero-badge{animation:heroFadeUp 0.8s ease 0.05s both;}
-
         .sym-in{animation:symFade 0.4s ease both;}
 
         .noise{position:fixed;inset:0;opacity:0.025;pointer-events:none;z-index:0;
@@ -223,80 +211,142 @@ export default function LandingClient() {
           .g2{grid-template-columns:1fr!important;}
           .panel{padding:64px 24px!important;}
           .vision-grid{grid-template-columns:1fr!important;}
-          .dash-grid{grid-template-columns:1fr!important;}
-          .dash-grid > div:first-child{display:none;}
         }
       `}</style>
 
-      {/* ─── CINEMATIC INTRO OVERLAY ─────────────────────── */}
-      {introPhase < 4 && (
+      {/* ─── CINEMATIC INTRO ─── */}
+      {!introDone && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: '#050509',
+          background: '#020203',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: introPhase >= 3 ? 'none' : 'all',
-          opacity: introPhase >= 3 ? 0 : 1,
-          transition: introPhase >= 3 ? 'opacity 0.8s cubic-bezier(0.87,0,0.13,1)' : 'none',
+          pointerEvents: introPhase >= 6 ? 'none' : 'all',
+          opacity: introPhase >= 6 ? 0 : 1,
+          transition: introPhase >= 6 ? 'opacity 1.2s cubic-bezier(0.87,0,0.13,1)' : 'none',
+          overflow: 'hidden',
         }}>
-          {/* Horizontal line that sweeps in */}
-          {introPhase >= 1 && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              height: '1px',
-              background: `linear-gradient(to right, transparent, ${G}, transparent)`,
-              width: introPhase >= 1 ? '240px' : '0',
-              transition: 'width 0.8s cubic-bezier(0.16,1,0.3,1)',
-              marginTop: '-52px',
-              opacity: 0.4,
-            }} />
-          )}
+          {/* Grain */}
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.04, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")", backgroundSize: '200px', pointerEvents: 'none' }} />
 
-          {introPhase >= 1 && (
-            <div className="intro-vv" style={{
+          {/* Ambient glow */}
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            width: '60vw', height: '40vh',
+            background: 'radial-gradient(ellipse,rgba(201,168,76,0.04) 0%,transparent 72%)',
+            opacity: introPhase >= 2 ? 1 : 0,
+            transition: 'opacity 2.5s ease',
+            pointerEvents: 'none',
+          }} />
+
+          {/* Top rule */}
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%) translateY(-80px)',
+            height: '1px',
+            width: introPhase >= 1 ? '280px' : '0',
+            background: `linear-gradient(to right,transparent,${G},transparent)`,
+            transition: 'width 1.6s cubic-bezier(0.16,1,0.3,1)',
+            opacity: 0.3,
+          }} />
+
+          {/* Bottom rule */}
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%) translateY(84px)',
+            height: '1px',
+            width: introPhase >= 1 ? '280px' : '0',
+            background: `linear-gradient(to right,transparent,${G},transparent)`,
+            transition: 'width 1.6s cubic-bezier(0.16,1,0.3,1) 0.2s',
+            opacity: 0.3,
+          }} />
+
+          {/* VV lettermark */}
+          {introPhase >= 2 && (
+            <div style={{
               fontFamily: SERIF,
-              fontSize: 'clamp(72px,14vw,140px)',
+              fontSize: 'clamp(100px,22vw,220px)',
               fontWeight: 300,
               fontStyle: 'italic',
               color: INK,
-              letterSpacing: '2px',
               lineHeight: 1,
               textAlign: 'center',
+              letterSpacing: introPhase >= 2 ? '2px' : '30px',
+              opacity: introPhase >= 2 ? 1 : 0,
+              filter: introPhase >= 2 ? 'blur(0px)' : 'blur(20px)',
+              transition: 'letter-spacing 1.8s cubic-bezier(0.16,1,0.3,1), opacity 1.4s ease, filter 1.6s ease',
+              animation: introPhase >= 5 ? 'glitch 4s ease infinite' : 'none',
+              userSelect: 'none',
+              position: 'relative', zIndex: 1,
             }}>VV</div>
           )}
 
-          {introPhase >= 2 && (
-            <div className="intro-tag" style={{
+          {/* Company name */}
+          {introPhase >= 3 && (
+            <div style={{
               fontFamily: MONO,
-              fontSize: 10,
+              fontSize: 11,
               color: I3,
-              letterSpacing: '4px',
+              letterSpacing: introPhase >= 3 ? '5px' : '12px',
               textTransform: 'uppercase',
-              marginTop: 18,
+              marginTop: 24,
               textAlign: 'center',
-            }}>
-              Vanguard Visuals &nbsp;·&nbsp; Growth Ad Engine
-            </div>
+              opacity: introPhase >= 3 ? 1 : 0,
+              transition: 'opacity 1.2s ease, letter-spacing 1.6s cubic-bezier(0.16,1,0.3,1)',
+              position: 'relative', zIndex: 1,
+            }}>Vanguard Visuals</div>
           )}
 
-          {/* Bottom line */}
-          {introPhase >= 2 && (
+          {/* Platform name */}
+          {introPhase >= 3 && (
             <div style={{
-              position: 'absolute',
-              bottom: '14%',
-              left: '50%',
-              transform: 'translateX(-50%)',
               fontFamily: MONO,
               fontSize: 8,
               color: I4,
               letterSpacing: '3px',
               textTransform: 'uppercase',
-              animation: 'introTag 0.9s ease 0.6s both',
+              marginTop: 8,
+              textAlign: 'center',
+              opacity: introPhase >= 3 ? 0.65 : 0,
+              transition: 'opacity 1.2s ease 0.4s',
+              position: 'relative', zIndex: 1,
+            }}>Growth Ad Engine</div>
+          )}
+
+          {/* Tagline */}
+          {introPhase >= 4 && (
+            <div style={{
+              position: 'absolute',
+              bottom: '14%', left: 0, right: 0,
+              textAlign: 'center',
+              fontFamily: SERIF,
+              fontSize: 'clamp(16px,2.5vw,26px)',
+              fontWeight: 300,
+              fontStyle: 'italic',
+              color: INK,
+              letterSpacing: introPhase >= 5 ? '0.5px' : '8px',
+              opacity: introPhase >= 4 ? (introPhase >= 5 ? 0.5 : 0.2) : 0,
+              transition: 'opacity 2s ease, letter-spacing 2s cubic-bezier(0.16,1,0.3,1)',
             }}>
-              intelligence@vngrdvisuals.com
+              Your ad spend is bleeding. We find the leak.
             </div>
+          )}
+
+          {/* HUD corners */}
+          <div style={{ position: 'absolute', top: 28, left: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: introPhase >= 3 ? 0.6 : 0, transition: 'opacity 1s ease 0.4s' }}>vngrdvisuals.com</div>
+          <div style={{ position: 'absolute', top: 28, right: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: introPhase >= 3 ? 0.6 : 0, transition: 'opacity 1s ease 0.6s' }}>Est. 2026</div>
+          <div style={{ position: 'absolute', bottom: 28, left: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: introPhase >= 4 ? 0.5 : 0, transition: 'opacity 1s ease 0.3s' }}>intelligence@vngrdvisuals.com</div>
+          <div style={{ position: 'absolute', bottom: 28, right: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: introPhase >= 4 ? 0.5 : 0, transition: 'opacity 1s ease 0.5s' }}>Ad Intelligence Platform</div>
+
+          {/* Skip */}
+          {introPhase >= 2 && (
+            <button onClick={() => { setIntroPhase(7); setIntroDone(true) }} style={{
+              position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase',
+              opacity: introPhase >= 3 ? 0.45 : 0, transition: 'opacity 0.8s ease',
+              padding: '8px 16px',
+            }}>Skip →</button>
           )}
         </div>
       )}
@@ -394,7 +444,7 @@ export default function LandingClient() {
           </div>
         </div>
 
-        {/* ─── WHAT WE DO ─── */}
+        {/* ─── THE PROBLEM ─── */}
         <div id="results" className="panel" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
           <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
             <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>The Problem</div></Reveal>
@@ -418,11 +468,9 @@ export default function LandingClient() {
                 ))}
               </div>
             </Reveal>
-
-            {/* CTA in problem section */}
             <Reveal delay={0.22}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '32px 0', borderTop: `1px solid ${RULE}` }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '32px 0', borderTop: `1px solid ${RULE}`, flexWrap: 'wrap', gap: 20 }}>
+                <div style={{ flex: 1, minWidth: 260 }}>
                   <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2px', marginBottom: 8 }}>THE SOLUTION</div>
                   <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, lineHeight: 1.3 }}>Weekly AI intelligence that tells you exactly which campaign to cut, and why — before you waste another dollar.</div>
                 </div>
@@ -453,8 +501,6 @@ export default function LandingClient() {
                 ))}
               </div>
             </Reveal>
-
-            {/* Health classification */}
             <Reveal delay={0.22}>
               <div style={{ border: `1px solid ${RULE}`, borderRadius: 4, padding: '32px 36px', background: BG2 }}>
                 <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 20 }}>Campaign Classification System</div>
@@ -485,7 +531,7 @@ export default function LandingClient() {
         </div>
 
         {/* ─── TEAM ─── */}
-        <div id="team" className="panel" style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
+        <div id="team" className="panel" style={{ padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
           <div style={{ maxWidth: 1000, margin: '0 auto', width: '100%' }}>
             <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>Who You're Dealing With</div></Reveal>
             <Reveal delay={0.08}>
@@ -531,17 +577,19 @@ export default function LandingClient() {
               </h2>
             </Reveal>
             <Reveal delay={0.14}>
-              {FAQS.map((f, i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${RULE}` }}>
-                  <button onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', padding: '22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, textAlign: 'left' }}>
-                    <span style={{ fontFamily: SERIF, fontSize: 19, color: INK, fontWeight: 400, lineHeight: 1.3 }}>{f.q}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 18, color: G, flexShrink: 0, transition: 'transform 0.35s cubic-bezier(0.16,1,0.3,1)', display: 'inline-block', transform: openFaq === i ? 'rotate(45deg)' : 'none' }}>+</span>
-                  </button>
-                  <div style={{ maxHeight: openFaq === i ? '300px' : '0', opacity: openFaq === i ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.4s cubic-bezier(0.16,1,0.3,1),opacity 0.35s ease', paddingBottom: openFaq === i ? 20 : 0 }}>
-                    <div style={{ fontSize: 13, color: I2, lineHeight: 1.85 }}>{f.a}</div>
+              <div>
+                {FAQS.map((f, i) => (
+                  <div key={i} style={{ borderBottom: `1px solid ${RULE}` }}>
+                    <button onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', padding: '22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, textAlign: 'left' }}>
+                      <span style={{ fontFamily: SERIF, fontSize: 19, color: INK, fontWeight: 400, lineHeight: 1.3 }}>{f.q}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 18, color: G, flexShrink: 0, transition: 'transform 0.35s cubic-bezier(0.16,1,0.3,1)', display: 'inline-block', transform: openFaq === i ? 'rotate(45deg)' : 'none' }}>+</span>
+                    </button>
+                    <div style={{ maxHeight: openFaq === i ? '300px' : '0', opacity: openFaq === i ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.4s cubic-bezier(0.16,1,0.3,1),opacity 0.35s ease', paddingBottom: openFaq === i ? 20 : 0 }}>
+                      <div style={{ fontSize: 13, color: I2, lineHeight: 1.85 }}>{f.a}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </Reveal>
           </div>
         </div>
@@ -630,7 +678,7 @@ export default function LandingClient() {
 
       </div>
 
-      {/* MODAL */}
+      {/* ─── MODAL ─── */}
       {showBook && (
         <div className="modal-open" onClick={e => { if (e.target === e.currentTarget) setShowBook(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(14px)' }}>
