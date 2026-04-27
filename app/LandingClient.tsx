@@ -75,23 +75,29 @@ export default function LandingClient() {
   const [introPhase, setIntroPhase] = useState(0)
   const [introDone, setIntroDone] = useState(false)
 
+  // Intro timeline:
+  // 0ms   → black
+  // 80ms  → three symbols appear (↑ · ↓ · ✦) — fade in 200ms each, staggered 60ms
+  // 500ms → symbols fade out 150ms, VV fades in simultaneously
+  // 900ms → VV at full opacity, brief hold
+  // 1100ms → entire overlay fades out over 400ms
+  // 1500ms → done, homepage fully visible
+
   useEffect(() => {
     setMounted(true)
     const timers: ReturnType<typeof setTimeout>[] = []
 
-    const seen = sessionStorage.getItem('vv_intro_seen')
+    const seen = sessionStorage.getItem('vv_intro_v2')
     if (seen) {
-      setIntroPhase(7)
+      setIntroPhase(5)
       setIntroDone(true)
     } else {
-      sessionStorage.setItem('vv_intro_seen', '1')
-      timers.push(setTimeout(() => setIntroPhase(1), 300))
-      timers.push(setTimeout(() => setIntroPhase(2), 1100))
-      timers.push(setTimeout(() => setIntroPhase(3), 2100))
-      timers.push(setTimeout(() => setIntroPhase(4), 3000))
-      timers.push(setTimeout(() => setIntroPhase(5), 4400))
-      timers.push(setTimeout(() => setIntroPhase(6), 5200))
-      timers.push(setTimeout(() => { setIntroPhase(7); setIntroDone(true) }, 6400))
+      sessionStorage.setItem('vv_intro_v2', '1')
+      timers.push(setTimeout(() => setIntroPhase(1), 80))    // symbols in
+      timers.push(setTimeout(() => setIntroPhase(2), 500))   // symbols out, VV in
+      timers.push(setTimeout(() => setIntroPhase(3), 900))   // VV hold
+      timers.push(setTimeout(() => setIntroPhase(4), 1100))  // fade out begins
+      timers.push(setTimeout(() => { setIntroPhase(5); setIntroDone(true) }, 1500)) // done
     }
 
     const iv1 = setInterval(() => setSymptomIdx(i => (i + 1) % SYMPTOMS.length), 3200)
@@ -144,6 +150,11 @@ export default function LandingClient() {
     return map[h] || map.s
   }
 
+  // Intro element states
+  const symVisible = introPhase === 1
+  const vvVisible = introPhase >= 2 && introPhase <= 4
+  const overlayVisible = introPhase < 4
+
   return (
     <div style={{ background: '#050509', color: INK, fontFamily: SANS, overflowX: 'hidden', minHeight: '100vh' }}>
       <style>{`
@@ -162,15 +173,6 @@ export default function LandingClient() {
         @keyframes symFade{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes slideUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes glitch{
-          0%,92%,100%{transform:none;clip-path:none;opacity:1;}
-          93%{transform:translateX(-4px);clip-path:inset(15% 0 65% 0);opacity:0.85;}
-          94%{transform:translateX(4px);clip-path:inset(60% 0 10% 0);opacity:0.9;}
-          95%{transform:none;clip-path:none;opacity:1;}
-          96%{transform:translateX(-2px);clip-path:inset(35% 0 40% 0);opacity:0.75;}
-          97%{transform:translateX(2px);clip-path:inset(75% 0 5% 0);opacity:0.9;}
-          98%{transform:none;clip-path:none;opacity:1;}
-        }
 
         .h-line-1{overflow:hidden;display:block;}
         .h-line-2{overflow:hidden;display:block;}
@@ -179,8 +181,7 @@ export default function LandingClient() {
         .h-word-2{display:inline-block;animation:heroLineIn 1.1s cubic-bezier(0.16,1,0.3,1) 0.28s both;}
         .h-word-3{display:inline-block;animation:heroLineIn 1.1s cubic-bezier(0.16,1,0.3,1) 0.46s both;}
         .hero-sub{animation:heroFadeUp 0.9s ease 0.7s both;}
-        .hero-ctas{animation:heroFadeUp 0.9s ease 0.9s both;}
-        .hero-scroll{animation:heroFadeUp 0.9s ease 1.2s both;}
+        .hero-scroll{animation:heroFadeUp 0.9s ease 1.1s both;}
         .hero-badge{animation:heroFadeUp 0.8s ease 0.05s both;}
         .sym-in{animation:symFade 0.4s ease both;}
 
@@ -214,140 +215,68 @@ export default function LandingClient() {
         }
       `}</style>
 
-      {/* ─── CINEMATIC INTRO ─── */}
+      {/* ─── INTRO OVERLAY ─── */}
+      {/* Timeline:
+          0–80ms   : black
+          80–500ms : three symbols ↑ · ↓ · ✦ fade in staggered
+          500–900ms: symbols fade out, VV fades in simultaneously
+          900–1100ms: VV holds
+          1100–1500ms: whole overlay fades to transparent
+          1500ms+  : done — homepage visible underneath the whole time */}
       {!introDone && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: '#020203',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: introPhase >= 6 ? 'none' : 'all',
-          opacity: introPhase >= 6 ? 0 : 1,
-          transition: introPhase >= 6 ? 'opacity 1.2s cubic-bezier(0.87,0,0.13,1)' : 'none',
-          overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: overlayVisible ? 1 : 0,
+          transition: introPhase >= 4 ? 'opacity 0.4s cubic-bezier(0.4,0,1,1)' : 'none',
+          pointerEvents: introPhase >= 4 ? 'none' : 'all',
         }}>
-          {/* Grain */}
-          <div style={{ position: 'absolute', inset: 0, opacity: 0.04, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")", backgroundSize: '200px', pointerEvents: 'none' }} />
 
-          {/* Ambient glow */}
+          {/* Symbol row — ↑ · ↓ · ✦ */}
+          {/* Appears at phase 1, disappears at phase 2 */}
           <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            width: '60vw', height: '40vh',
-            background: 'radial-gradient(ellipse,rgba(201,168,76,0.04) 0%,transparent 72%)',
-            opacity: introPhase >= 2 ? 1 : 0,
-            transition: 'opacity 2.5s ease',
-            pointerEvents: 'none',
-          }} />
+            position: 'absolute',
+            display: 'flex', alignItems: 'center', gap: 28,
+            opacity: symVisible ? 1 : 0,
+            transition: symVisible
+              ? 'opacity 0.2s ease'
+              : 'opacity 0.15s ease',
+          }}>
+            {[
+              { symbol: '↑', color: 'rgba(74,222,128,0.7)', delay: '0ms' },
+              { symbol: '·', color: 'rgba(245,243,239,0.15)', delay: '60ms' },
+              { symbol: '↓', color: 'rgba(248,113,113,0.7)', delay: '120ms' },
+            ].map((s, i) => (
+              <span key={i} style={{
+                fontFamily: MONO,
+                fontSize: 13,
+                color: s.color,
+                letterSpacing: 0,
+                opacity: symVisible ? 1 : 0,
+                transform: symVisible ? 'none' : 'translateY(3px)',
+                transition: `opacity 0.2s ease ${s.delay}, transform 0.2s ease ${s.delay}`,
+              }}>{s.symbol}</span>
+            ))}
+          </div>
 
-          {/* Top rule */}
+          {/* VV mark — appears as symbols leave */}
           <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%) translateY(-80px)',
-            height: '1px',
-            width: introPhase >= 1 ? '280px' : '0',
-            background: `linear-gradient(to right,transparent,${G},transparent)`,
-            transition: 'width 1.6s cubic-bezier(0.16,1,0.3,1)',
-            opacity: 0.3,
-          }} />
-
-          {/* Bottom rule */}
-          <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%) translateY(84px)',
-            height: '1px',
-            width: introPhase >= 1 ? '280px' : '0',
-            background: `linear-gradient(to right,transparent,${G},transparent)`,
-            transition: 'width 1.6s cubic-bezier(0.16,1,0.3,1) 0.2s',
-            opacity: 0.3,
-          }} />
-
-          {/* VV lettermark */}
-          {introPhase >= 2 && (
-            <div style={{
-              fontFamily: SERIF,
-              fontSize: 'clamp(100px,22vw,220px)',
-              fontWeight: 300,
-              fontStyle: 'italic',
-              color: INK,
-              lineHeight: 1,
-              textAlign: 'center',
-              letterSpacing: introPhase >= 2 ? '2px' : '30px',
-              opacity: introPhase >= 2 ? 1 : 0,
-              filter: introPhase >= 2 ? 'blur(0px)' : 'blur(20px)',
-              transition: 'letter-spacing 1.8s cubic-bezier(0.16,1,0.3,1), opacity 1.4s ease, filter 1.6s ease',
-              animation: introPhase >= 5 ? 'glitch 4s ease infinite' : 'none',
-              userSelect: 'none',
-              position: 'relative', zIndex: 1,
-            }}>VV</div>
-          )}
-
-          {/* Company name */}
-          {introPhase >= 3 && (
-            <div style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              color: I3,
-              letterSpacing: introPhase >= 3 ? '5px' : '12px',
-              textTransform: 'uppercase',
-              marginTop: 24,
-              textAlign: 'center',
-              opacity: introPhase >= 3 ? 1 : 0,
-              transition: 'opacity 1.2s ease, letter-spacing 1.6s cubic-bezier(0.16,1,0.3,1)',
-              position: 'relative', zIndex: 1,
-            }}>Vanguard Visuals</div>
-          )}
-
-          {/* Platform name */}
-          {introPhase >= 3 && (
-            <div style={{
-              fontFamily: MONO,
-              fontSize: 8,
-              color: I4,
-              letterSpacing: '3px',
-              textTransform: 'uppercase',
-              marginTop: 8,
-              textAlign: 'center',
-              opacity: introPhase >= 3 ? 0.65 : 0,
-              transition: 'opacity 1.2s ease 0.4s',
-              position: 'relative', zIndex: 1,
-            }}>Growth Ad Engine</div>
-          )}
-
-          {/* Tagline */}
-          {introPhase >= 4 && (
-            <div style={{
-              position: 'absolute',
-              bottom: '14%', left: 0, right: 0,
-              textAlign: 'center',
-              fontFamily: SERIF,
-              fontSize: 'clamp(16px,2.5vw,26px)',
-              fontWeight: 300,
-              fontStyle: 'italic',
-              color: INK,
-              letterSpacing: introPhase >= 5 ? '0.5px' : '8px',
-              opacity: introPhase >= 4 ? (introPhase >= 5 ? 0.5 : 0.2) : 0,
-              transition: 'opacity 2s ease, letter-spacing 2s cubic-bezier(0.16,1,0.3,1)',
-            }}>
-              Your ad spend is bleeding. We find the leak.
-            </div>
-          )}
-
-          {/* HUD corners */}
-          <div style={{ position: 'absolute', top: 28, left: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: introPhase >= 3 ? 0.6 : 0, transition: 'opacity 1s ease 0.4s' }}>vngrdvisuals.com</div>
-          <div style={{ position: 'absolute', top: 28, right: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: introPhase >= 3 ? 0.6 : 0, transition: 'opacity 1s ease 0.6s' }}>Est. 2026</div>
-          <div style={{ position: 'absolute', bottom: 28, left: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: introPhase >= 4 ? 0.5 : 0, transition: 'opacity 1s ease 0.3s' }}>intelligence@vngrdvisuals.com</div>
-          <div style={{ position: 'absolute', bottom: 28, right: 36, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: introPhase >= 4 ? 0.5 : 0, transition: 'opacity 1s ease 0.5s' }}>Ad Intelligence Platform</div>
-
-          {/* Skip */}
-          {introPhase >= 2 && (
-            <button onClick={() => { setIntroPhase(7); setIntroDone(true) }} style={{
-              position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)',
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase',
-              opacity: introPhase >= 3 ? 0.45 : 0, transition: 'opacity 0.8s ease',
-              padding: '8px 16px',
-            }}>Skip →</button>
-          )}
+            position: 'absolute',
+            fontFamily: SERIF,
+            fontSize: 'clamp(72px,16vw,160px)',
+            fontWeight: 300,
+            fontStyle: 'italic',
+            color: INK,
+            letterSpacing: '1px',
+            lineHeight: 1,
+            userSelect: 'none',
+            opacity: vvVisible ? 1 : 0,
+            transform: vvVisible ? 'none' : 'scale(0.98)',
+            transition: vvVisible
+              ? 'opacity 0.35s cubic-bezier(0.16,1,0.3,1), transform 0.4s cubic-bezier(0.16,1,0.3,1)'
+              : 'opacity 0.2s ease, transform 0.2s ease',
+          }}>VV</div>
         </div>
       )}
 
@@ -404,7 +333,7 @@ export default function LandingClient() {
                   <span style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,76,76,0.45)', letterSpacing: '2px' }}>SOUND FAMILIAR?</span>
                   <span key={symptomIdx} className="sym-in" style={{ fontFamily: MONO, fontSize: 9, color: I2 }}>{SYMPTOMS[symptomIdx]}</span>
                 </div>
-                <div className="hero-ctas" style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setShowBook(true)} className="btn-gold" style={{ padding: '13px 28px', borderRadius: 2, fontSize: 10 }}>Apply for Access →</button>
                   <div style={{ display: 'flex', borderRadius: 2, overflow: 'hidden', border: `1px solid rgba(255,255,255,0.09)` }}>
                     <input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleWaitlist()} disabled={status === 'success'}
