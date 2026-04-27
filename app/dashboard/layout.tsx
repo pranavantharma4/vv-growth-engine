@@ -52,14 +52,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pageKey, setPageKey] = useState(pathname)
   const [navigating, setNavigating] = useState(false)
   const [navTarget, setNavTarget] = useState('')
+  const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
-    setPageKey(pathname)
-    setNavigating(false)
-    setNavTarget('')
+    setLeaving(false)
+    setTimeout(() => {
+      setPageKey(pathname)
+      setNavigating(false)
+      setNavTarget('')
+    }, 10)
   }, [pathname])
 
-  // Prefetch all routes on mount so chunks are ready instantly
   useEffect(() => {
     const routes = NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
     routes.forEach(r => router.prefetch(r))
@@ -74,7 +77,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname === path) return
     setNavTarget(path)
     setNavigating(true)
-    router.push(path)
+    setLeaving(true)
+    setTimeout(() => router.push(path), 120)
   }
 
   function setClient(c: Client) {
@@ -100,43 +104,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .eq('platform', 'meta')
       .eq('is_active', true)
       .single()
-    if (!conn) {
-      toast('No connection', 'Connect a Meta Ads account first under Connections.')
-      return
-    }
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
-      toast('Token expired', 'Meta connection expired. Please reconnect under Connections.')
-      return
-    }
+    if (!conn) { toast('No connection', 'Connect a Meta Ads account first under Connections.'); return }
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) { toast('Token expired', 'Meta connection expired. Please reconnect under Connections.'); return }
     setSyncing(true)
     toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-meta-campaigns`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
         body: JSON.stringify({ client_id: client.id }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) {
-        toast('Sync failed', data.error || 'Something went wrong. Check your connection.')
-      } else {
-        toast('Sync complete', `${data.campaigns_synced} campaigns updated from Meta Ads.`)
-      }
-    } catch {
-      toast('Sync failed', 'Network error. Please try again.')
-    } finally {
-      setSyncing(false)
-    }
+      if (!res.ok || data.error) toast('Sync failed', data.error || 'Something went wrong.')
+      else toast('Sync complete', `${data.campaigns_synced} campaigns updated from Meta Ads.`)
+    } catch { toast('Sync failed', 'Network error. Please try again.') }
+    finally { setSyncing(false) }
   }
 
   useEffect(() => {
-    if (localStorage.getItem('vv_dark') === '1') {
-      setDarkState(true)
-      document.body.classList.add('dark')
-    }
+    if (localStorage.getItem('vv_dark') === '1') { setDarkState(true); document.body.classList.add('dark') }
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
@@ -154,8 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
   const now = new Date()
-  const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const subtitle = page === 'dashboard' ? (client?.name || '') + ' · ' + monthYear : sub
+  const subtitle = page === 'dashboard' ? (client?.name || '') + ' · ' + now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : sub
 
   const isNavActive = (id: string) => {
     const target = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
@@ -165,25 +150,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
 
-      {/* Gold loading bar — appears instantly on click */}
       {navigating && <div className="load-bar" />}
 
       <style>{`
         * { box-sizing: border-box; }
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
-        body {
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-          text-rendering: optimizeLegibility;
-        }
-
-        @keyframes pageIn {
-          from { opacity: 0; transform: translateY(4px); }
+        @keyframes pageEnter {
+          from { opacity: 0; transform: translateY(5px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        .page-content {
-          animation: pageIn 0.14s cubic-bezier(0.16,1,0.3,1) both;
+        @keyframes pageLeave {
+          from { opacity: 1; transform: translateY(0); }
+          to   { opacity: 0; transform: translateY(-4px); }
         }
+        .page-enter { animation: pageEnter 0.18s cubic-bezier(0.16,1,0.3,1) both; }
+        .page-leave { animation: pageLeave 0.1s ease both; pointer-events: none; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
@@ -193,36 +175,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           100% { width: 100%; opacity: 0; }
         }
         .load-bar {
-          position: fixed;
-          top: 0; left: 0; height: 2px;
-          background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.5));
-          z-index: 99999;
+          position: fixed; top: 0; left: 0; height: 2px;
+          background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.4));
+          z-index: 99999; pointer-events: none;
           animation: loadBar 0.55s cubic-bezier(0.16,1,0.3,1) both;
-          pointer-events: none;
         }
 
         .nav-btn {
           transition: background 0.1s ease, border-color 0.1s ease, opacity 0.1s ease;
-          will-change: background;
-          transform: translateZ(0);
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
+          transform: translateZ(0); backface-visibility: hidden;
         }
         .nav-btn:hover { background: rgba(255,255,255,0.055) !important; }
         .nav-btn:active { transform: scale(0.975) translateZ(0) !important; }
 
         .dropdown-item { transition: background 0.1s ease; }
         .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
-
         .client-switcher { transition: background 0.12s ease; }
         .client-switcher:hover { background: rgba(255,255,255,0.06) !important; }
+        .client-dropdown { animation: pageEnter 0.12s ease both; }
 
-        .client-dropdown { animation: pageIn 0.12s ease both; }
-
-        button {
-          transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
-          transform: translateZ(0);
-        }
+        button { transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease; transform: translateZ(0); }
         button:active { transform: scale(0.97) translateZ(0) !important; }
 
         ::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -230,30 +202,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-        .main-scroll {
-          overflow-y: auto;
-          overscroll-behavior: contain;
-        }
-
-        .sidebar {
-          will-change: auto;
-          transform: translateZ(0);
-        }
-
-        .toast-wrap {
-          transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease;
-          will-change: transform, opacity;
-        }
-
+        .main-scroll { overflow-y: auto; overscroll-behavior: contain; }
+        .sidebar { will-change: auto; transform: translateZ(0); }
+        .toast-wrap { transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease; will-change: transform, opacity; }
         * { -webkit-tap-highlight-color: transparent; }
       `}</style>
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-        {/* SIDEBAR */}
         <aside className="sidebar" style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
-
-          {/* Logo */}
           <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
@@ -264,34 +221,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {/* Client switcher */}
-          <div
-            className="client-switcher"
-            onClick={() => setDropdown(d => !d)}
-            style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}
-          >
+          <div className="client-switcher" onClick={() => setDropdown(d => !d)}
+            style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client?.name || 'Loading...'}</div>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
               </div>
-              <span style={{
-                color: 'rgba(250,248,245,0.3)', fontSize: 10,
-                display: 'inline-block',
-                transition: 'transform 0.2s ease',
-                transform: dropdown ? 'rotate(180deg)' : 'rotate(0deg)',
-              }}>▾</span>
+              <span style={{ color: 'rgba(250,248,245,0.3)', fontSize: 10, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
             </div>
             {dropdown && clients.length > 1 && (
               <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                 {clients.map((c: Client) => (
-                  <div
-                    key={c.id}
-                    className="dropdown-item"
-                    onClick={e => { e.stopPropagation(); setClient(c) }}
-                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}
-                  >
+                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }}
+                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
                     <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
                   </div>
@@ -300,7 +244,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
 
-          {/* Nav */}
           <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
               const active = isNavActive(item.id)
@@ -308,80 +251,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               return (
                 <div key={item.id}>
                   {item.section && (
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>
-                      {item.section}
-                    </div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>{item.section}</div>
                   )}
-                  <button
-                    className="nav-btn"
-                    onClick={() => navigate(target)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 9,
-                      padding: '8px 11px', borderRadius: 5, border: 'none',
-                      borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`,
-                      background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
-                      cursor: 'pointer', width: '100%', textAlign: 'left',
-                      opacity: navigating && !active ? 0.5 : 1,
-                    }}
-                  >
-                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.1s ease' }}>
-                      {item.icon}
-                    </span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.1s ease' }}>
-                      {item.label}
-                    </span>
+                  <button className="nav-btn" onClick={() => navigate(target)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 5, border: 'none', borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, background: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left', opacity: navigating && !active ? 0.45 : 1 }}>
+                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.1s ease' }}>{item.icon}</span>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.1s ease' }}>{item.label}</span>
                   </button>
                 </div>
               )
             })}
           </nav>
 
-          {/* Footer */}
           <div style={{ padding: '11px 15px', borderTop: '1px solid var(--sb-rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4c8b4c', animation: 'pulse 2.5s ease infinite' }} />
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <button
-                onClick={() => setDark(!dark)}
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}
-              >
-                {dark ? 'Dark' : 'Light'}
-              </button>
-              <button
-                onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}
-              >✕</button>
+              <button onClick={() => setDark(!dark)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px 9px', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.45)' }}>{dark ? 'Dark' : 'Light'}</button>
+              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}>✕</button>
             </div>
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Header */}
           <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, letterSpacing: 0.8 }}>{title}</div>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 3 }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                style={{
-                  fontFamily: "'DM Mono',monospace", fontSize: 8,
-                  color: syncing ? 'var(--ink3)' : 'var(--green)',
-                  padding: '5px 10px',
-                  border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`,
-                  borderRadius: 4,
-                  background: syncing ? 'transparent' : 'var(--greenpaper)',
-                  cursor: syncing ? 'not-allowed' : 'pointer',
-                  letterSpacing: 1,
-                  opacity: syncing ? 0.6 : 1,
-                }}
-              >
+              <button onClick={handleSync} disabled={syncing}
+                style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1 }}>
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
@@ -390,25 +292,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </header>
 
-          {/* Page content */}
           <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
-            <div key={pageKey} className="page-content">
+            <div key={pageKey} className={leaving ? 'page-leave' : 'page-enter'}>
               {children}
             </div>
           </main>
-
         </div>
       </div>
 
-      {/* Toast */}
-      <div className="toast-wrap" style={{
-        position: 'fixed', bottom: 24, right: 24,
-        background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300,
-        transform: toastData.show ? 'translateY(0)' : 'translateY(80px)',
-        opacity: toastData.show ? 1 : 0,
-        pointerEvents: toastData.show ? 'all' : 'none',
-      }}>
+      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
       </div>
