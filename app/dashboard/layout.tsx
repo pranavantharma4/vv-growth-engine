@@ -49,50 +49,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dropdown, setDropdown] = useState(false)
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
   const [syncing, setSyncing] = useState(false)
-  const [navigating, setNavigating] = useState(false)
   const [navTarget, setNavTarget] = useState('')
-  const [contentVisible, setContentVisible] = useState(true)
-  const [contentKey, setContentKey] = useState(pathname)
 
-  // Portal intro — plays once after login
+  // Entrance intro — plays once after login
   const [portalPhase, setPortalPhase] = useState(0)
-  const [portalDone, setPortalDone] = useState(true) // default true — only false if just logged in
+  const [portalDone, setPortalDone] = useState(true)
 
-  // Intro timeline (plays over the dashboard after login):
-  // 0ms   → black overlay, symbols appear
-  // 400ms → symbols fade, VV appears
-  // 800ms → version tag appears
-  // 1000ms → fade out begins
-  // 1400ms → done, dashboard visible
+  // Content key — only changes when route settles, prevents mid-animation re-render
+  const [contentKey, setContentKey] = useState(pathname)
+  const routeSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    // Portal intro — triggered by login flag
     const justLoggedIn = sessionStorage.getItem('vv_just_logged_in')
     if (justLoggedIn) {
       sessionStorage.removeItem('vv_just_logged_in')
       setPortalDone(false)
-      setPortalPhase(0)
-      const timers: ReturnType<typeof setTimeout>[] = []
-      timers.push(setTimeout(() => setPortalPhase(1), 80))
-      timers.push(setTimeout(() => setPortalPhase(2), 480))
-      timers.push(setTimeout(() => setPortalPhase(3), 880))
-      timers.push(setTimeout(() => setPortalPhase(4), 1080))
-      timers.push(setTimeout(() => { setPortalPhase(5); setPortalDone(true) }, 1480))
-      return () => timers.forEach(clearTimeout)
+      const t: ReturnType<typeof setTimeout>[] = []
+      t.push(setTimeout(() => setPortalPhase(1), 60))
+      t.push(setTimeout(() => setPortalPhase(2), 440))
+      t.push(setTimeout(() => setPortalPhase(3), 820))
+      t.push(setTimeout(() => setPortalPhase(4), 1020))
+      t.push(setTimeout(() => { setPortalDone(true) }, 1420))
+      return () => t.forEach(clearTimeout)
     }
   }, [])
 
-  const prevPath = useRef(pathname)
+  // Route change — wait for CSS leave anim then swap key
+  const prevPathRef = useRef(pathname)
   useEffect(() => {
-    if (prevPath.current === pathname) return
-    prevPath.current = pathname
-    setContentVisible(false)
-    const t = setTimeout(() => {
+    if (prevPathRef.current === pathname) return
+    prevPathRef.current = pathname
+    if (routeSettleTimer.current) clearTimeout(routeSettleTimer.current)
+    routeSettleTimer.current = setTimeout(() => {
       setContentKey(pathname)
-      setContentVisible(true)
-      setNavigating(false)
       setNavTarget('')
-    }, 110)
-    return () => clearTimeout(t)
+    }, 90) // matches leave anim duration
+    return () => { if (routeSettleTimer.current) clearTimeout(routeSettleTimer.current) }
   }, [pathname])
 
   useEffect(() => {
@@ -108,9 +101,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function navigate(path: string) {
     if (pathname === path) return
     setNavTarget(path)
-    setNavigating(true)
-    setContentVisible(false)
-    setTimeout(() => router.push(path), 110)
+    // Small delay lets CSS leave class apply before route change
+    setTimeout(() => router.push(path), 90)
   }
 
   function setClient(c: Client) {
@@ -176,9 +168,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ? (client?.name || '') + ' · ' + now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : sub
 
-  const isNavActive = (id: string) => {
-    const target = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
-    return page === id || navTarget === target
+  // Nav active — considers navTarget so highlight is instant on click
+  const isActive = (id: string) => {
+    const t = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
+    if (navTarget) return navTarget === t
+    return page === id
   }
 
   const G = '#c9a84c'
@@ -188,60 +182,72 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const MONO = "'DM Mono',monospace"
   const SERIF = "'Cormorant Garamond',serif"
 
-  const symVisible  = portalPhase === 1
-  const vvVisible   = portalPhase >= 2 && portalPhase <= 4
-  const tagVisible  = portalPhase >= 3
-  const overlayOn   = portalPhase < 4
+  const symVisible = portalPhase === 1
+  const vvVisible  = portalPhase >= 2 && portalPhase <= 4
+  const tagVisible = portalPhase >= 3
+  const overlayOn  = portalPhase < 4
 
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
 
-      {/* ─── PORTAL INTRO — plays over dashboard after login ─── */}
+      {/* ─── PORTAL ENTRANCE — plays once after login ─── */}
       {!portalDone && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: '#020203',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           opacity: overlayOn ? 1 : 0,
-          transition: portalPhase >= 4 ? 'opacity 0.4s cubic-bezier(0.4,0,1,1)' : 'none',
+          transition: portalPhase >= 4 ? 'opacity 0.42s cubic-bezier(0.4,0,0.6,1)' : 'none',
           pointerEvents: portalPhase >= 4 ? 'none' : 'all',
           overflow: 'hidden',
         }}>
           {/* Grain */}
-          <div style={{ position: 'absolute', inset: 0, opacity: 0.04, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")", backgroundSize: '200px', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.035,
+            backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")",
+            backgroundSize: '200px', pointerEvents: 'none' }} />
 
-          {/* Ambient glow */}
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '50vw', height: '35vh', background: 'radial-gradient(ellipse,rgba(201,168,76,0.04) 0%,transparent 72%)', opacity: vvVisible ? 1 : 0, transition: 'opacity 2s ease', pointerEvents: 'none' }} />
+          {/* Ambient radial glow — no lines, just depth */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,168,76,0.035) 0%, transparent 70%)',
+            opacity: vvVisible ? 1 : 0,
+            transition: 'opacity 1.8s ease',
+            pointerEvents: 'none',
+          }} />
 
-          {/* Top rule */}
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(-72px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1)', opacity: 0.28 }} />
-
-          {/* Bottom rule */}
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(76px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1) 0.12s', opacity: 0.28 }} />
-
-          {/* Symbols ↑ · ↓ */}
-          <div style={{ position: 'absolute', display: 'flex', alignItems: 'center', gap: 24, opacity: symVisible ? 1 : 0, transition: symVisible ? 'opacity 0.18s ease' : 'opacity 0.12s ease' }}>
+          {/* Symbols */}
+          <div style={{
+            position: 'absolute',
+            display: 'flex', alignItems: 'center', gap: 22,
+            opacity: symVisible ? 1 : 0,
+            transition: 'opacity 0.18s ease',
+          }}>
             {[
-              { s: '↑', c: 'rgba(74,222,128,0.65)', d: '0ms' },
-              { s: '·', c: 'rgba(245,243,239,0.14)', d: '50ms' },
-              { s: '↓', c: 'rgba(248,113,113,0.65)', d: '100ms' },
+              { s: '↑', c: 'rgba(74,222,128,0.6)',  d: '0ms'   },
+              { s: '·', c: 'rgba(245,243,239,0.12)', d: '50ms'  },
+              { s: '↓', c: 'rgba(248,113,113,0.6)',  d: '100ms' },
             ].map((x, i) => (
-              <span key={i} style={{ fontFamily: MONO, fontSize: 12, color: x.c, opacity: symVisible ? 1 : 0, transform: symVisible ? 'none' : 'translateY(3px)', transition: `opacity 0.18s ease ${x.d}, transform 0.18s ease ${x.d}` }}>{x.s}</span>
+              <span key={i} style={{
+                fontFamily: MONO, fontSize: 11, color: x.c,
+                opacity: symVisible ? 1 : 0,
+                transform: symVisible ? 'none' : 'translateY(4px)',
+                transition: `opacity 0.18s ease ${x.d}, transform 0.22s ease ${x.d}`,
+              }}>{x.s}</span>
             ))}
           </div>
 
-          {/* VV + version tag */}
-          <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          {/* VV + version */}
+          <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <div style={{
               fontFamily: SERIF,
-              fontSize: 'clamp(80px,17vw,148px)',
+              fontSize: 'clamp(80px,16vw,140px)',
               fontWeight: 300, fontStyle: 'italic',
               color: INK, letterSpacing: '1px', lineHeight: 1,
               userSelect: 'none',
               opacity: vvVisible ? 1 : 0,
-              transform: vvVisible ? 'none' : 'scale(0.97)',
+              transform: vvVisible ? 'translateY(0)' : 'translateY(6px)',
               transition: vvVisible
-                ? 'opacity 0.32s cubic-bezier(0.16,1,0.3,1), transform 0.38s cubic-bezier(0.16,1,0.3,1)'
+                ? 'opacity 0.38s cubic-bezier(0.16,1,0.3,1), transform 0.42s cubic-bezier(0.16,1,0.3,1)'
                 : 'opacity 0.18s ease, transform 0.18s ease',
             }}>VV</div>
 
@@ -249,81 +255,116 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
               opacity: tagVisible ? 1 : 0,
               transform: tagVisible ? 'translateY(0)' : 'translateY(5px)',
-              transition: 'opacity 0.45s ease, transform 0.45s cubic-bezier(0.16,1,0.3,1)',
+              transition: 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.16,1,0.3,1)',
             }}>
-              <div style={{ fontFamily: MONO, fontSize: 10, color: I3, letterSpacing: '4px', textTransform: 'uppercase' }}>Growth Ad Engine</div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '4px', textTransform: 'uppercase' }}>Growth Ad Engine</div>
               <div style={{ fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '3px', textTransform: 'uppercase' }}>v1.1</div>
             </div>
           </div>
 
-          {/* HUD corners */}
-          <div style={{ position: 'absolute', top: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.55 : 0, transition: 'opacity 0.8s ease 0.3s' }}>vngrdvisuals.com</div>
-          <div style={{ position: 'absolute', top: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.55 : 0, transition: 'opacity 0.8s ease 0.5s' }}>Intelligence Platform</div>
-          <div style={{ position: 'absolute', bottom: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.45 : 0, transition: 'opacity 0.8s ease 0.2s' }}>Secured access</div>
-          <div style={{ position: 'absolute', bottom: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.45 : 0, transition: 'opacity 0.8s ease 0.4s' }}>Est. 2026</div>
+          {/* Corner HUD */}
+          <div style={{ position: 'absolute', top: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.5 : 0, transition: 'opacity 0.8s ease 0.3s' }}>vngrdvisuals.com</div>
+          <div style={{ position: 'absolute', top: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.5 : 0, transition: 'opacity 0.8s ease 0.5s' }}>Intelligence Platform</div>
+          <div style={{ position: 'absolute', bottom: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.4 : 0, transition: 'opacity 0.8s ease 0.2s' }}>Secured access</div>
+          <div style={{ position: 'absolute', bottom: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.4 : 0, transition: 'opacity 0.8s ease 0.4s' }}>Est. 2026</div>
         </div>
       )}
 
-      {navigating && <div className="load-bar" />}
-
       <style>{`
         * { box-sizing: border-box; }
-        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
-        @keyframes contentIn {
-          0%   { opacity: 0; transform: translateY(8px); }
-          100% { opacity: 1; transform: translateY(0); }
+        body {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
         }
-        @keyframes contentOut {
-          0%   { opacity: 1; transform: translateY(0); }
-          100% { opacity: 0; transform: translateY(-5px); }
+
+        /*
+          Tab transition — pure CSS, zero JS state changes mid-animation.
+          Key principle: opacity + transform only, on the GPU compositor thread.
+          No layout-triggering properties (height, width, margin, padding).
+          will-change promotes the layer before animation starts.
+        */
+        @keyframes tabEnter {
+          0%   { opacity: 0; transform: translate3d(0, 7px, 0); }
+          100% { opacity: 1; transform: translate3d(0, 0, 0); }
         }
-        .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; }
-        .content-out { animation: contentOut 0.1s ease both; pointer-events: none; }
+        @keyframes tabLeave {
+          0%   { opacity: 1; transform: translate3d(0, 0, 0); }
+          100% { opacity: 0; transform: translate3d(0, -5px, 0); }
+        }
+
+        .tab-enter {
+          animation: tabEnter 0.22s cubic-bezier(0.16,1,0.3,1) both;
+          will-change: opacity, transform;
+        }
+        .tab-leave {
+          animation: tabLeave 0.09s ease both;
+          pointer-events: none;
+          will-change: opacity, transform;
+        }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        @keyframes loadBar {
-          0%   { width: 0%;   opacity: 1; }
-          65%  { width: 88%;  opacity: 1; }
-          100% { width: 100%; opacity: 0; }
-        }
-        .load-bar {
-          position: fixed; top: 0; left: 0; height: 2px;
-          background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.4));
-          z-index: 9998; pointer-events: none;
-          animation: loadBar 0.5s cubic-bezier(0.16,1,0.3,1) both;
-        }
-
+        /* Nav transitions — compositor-only */
         .nav-btn {
-          transition: background 0.1s ease, border-color 0.1s ease, opacity 0.1s ease;
-          transform: translateZ(0); backface-visibility: hidden;
+          will-change: auto;
+          transform: translateZ(0);
+          -webkit-transform: translateZ(0);
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          transition: background-color 0.12s ease, border-left-color 0.12s ease, opacity 0.12s ease;
         }
-        .nav-btn:hover { background: rgba(255,255,255,0.055) !important; }
+        .nav-btn:hover { background-color: rgba(255,255,255,0.055) !important; }
         .nav-btn:active { transform: scale(0.975) translateZ(0) !important; }
 
-        .dropdown-item { transition: background 0.1s ease; }
-        .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
-        .client-switcher { transition: background 0.12s ease; }
-        .client-switcher:hover { background: rgba(255,255,255,0.06) !important; }
+        .nav-icon { transition: color 0.12s ease; }
+        .nav-label { transition: color 0.12s ease; }
 
-        @keyframes dropIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-        .client-dropdown { animation: dropIn 0.12s ease both; }
+        /* Dropdown */
+        .dropdown-item { transition: background-color 0.1s ease; }
+        .dropdown-item:hover { background-color: rgba(255,255,255,0.06) !important; }
+        .client-switcher { transition: background-color 0.12s ease; }
+        .client-switcher:hover { background-color: rgba(255,255,255,0.05) !important; }
 
+        @keyframes dropIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .client-dropdown { animation: dropIn 0.14s cubic-bezier(0.16,1,0.3,1) both; }
+
+        /* Buttons — GPU layer */
         button {
-          transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
           transform: translateZ(0);
+          transition: opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
         }
         button:active { transform: scale(0.97) translateZ(0) !important; }
 
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 3px; height: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.09); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 
-        .main-scroll { overflow-y: auto; overscroll-behavior: contain; }
-        .sidebar { will-change: auto; transform: translateZ(0); }
-        .toast-wrap { transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease; will-change: transform, opacity; }
+        .main-scroll {
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          /* Promote to own layer to prevent repaint bleed */
+          transform: translateZ(0);
+          -webkit-transform: translateZ(0);
+        }
+
+        .sidebar {
+          transform: translateZ(0);
+          -webkit-transform: translateZ(0);
+          will-change: auto;
+        }
+
+        .toast-wrap {
+          will-change: transform, opacity;
+          transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease;
+        }
+
         * { -webkit-tap-highlight-color: transparent; }
       `}</style>
 
@@ -332,6 +373,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* SIDEBAR */}
         <aside className="sidebar" style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
 
+          {/* Logo */}
           <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
@@ -342,6 +384,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
+          {/* Client switcher */}
           <div className="client-switcher" onClick={() => setDropdown(d => !d)}
             style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
@@ -365,25 +408,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
 
+          {/* Nav */}
           <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
-              const active = isNavActive(item.id)
+              const active = isActive(item.id)
               const target = '/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id)
               return (
                 <div key={item.id}>
                   {item.section && (
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>{item.section}</div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>
+                      {item.section}
+                    </div>
                   )}
                   <button className="nav-btn" onClick={() => navigate(target)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 5, border: 'none', borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, background: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left', opacity: navigating && !active ? 0.45 : 1 }}>
-                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', transition: 'color 0.1s ease' }}>{item.icon}</span>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.1s ease' }}>{item.label}</span>
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '8px 11px', borderRadius: 5, border: 'none',
+                      borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`,
+                      backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent',
+                      cursor: 'pointer', width: '100%', textAlign: 'left',
+                    }}>
+                    <span className="nav-icon" style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)' }}>{item.icon}</span>
+                    <span className="nav-label" style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400 }}>{item.label}</span>
                   </button>
                 </div>
               )
             })}
           </nav>
 
+          {/* Footer */}
           <div style={{ padding: '11px 15px', borderTop: '1px solid var(--sb-rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4c8b4c', animation: 'pulse 2.5s ease infinite' }} />
@@ -414,8 +467,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </header>
 
+          {/*
+            Content area — key drives re-mount on route change.
+            Class switches between tab-enter and tab-leave.
+            navTarget present = leaving current page.
+            contentKey updated = new page entering.
+            No JS state changes during animation — pure CSS handles it.
+          */}
           <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
-            <div key={contentKey} className={contentVisible ? 'content-in' : 'content-out'}>
+            <div
+              key={contentKey}
+              className={navTarget ? 'tab-leave' : 'tab-enter'}
+            >
               {children}
             </div>
           </main>
@@ -423,7 +486,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Toast */}
-      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
+      <div className="toast-wrap" style={{
+        position: 'fixed', bottom: 24, right: 24,
+        background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300,
+        transform: toastData.show ? 'translateY(0)' : 'translateY(80px)',
+        opacity: toastData.show ? 1 : 0,
+        pointerEvents: toastData.show ? 'all' : 'none',
+      }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
       </div>
