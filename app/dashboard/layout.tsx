@@ -54,7 +54,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [contentVisible, setContentVisible] = useState(true)
   const [contentKey, setContentKey] = useState(pathname)
 
-  // On route change: wait for leave anim, then swap content and animate in
+  // Portal intro — plays once after login
+  const [portalPhase, setPortalPhase] = useState(0)
+  const [portalDone, setPortalDone] = useState(true) // default true — only false if just logged in
+
+  // Intro timeline (plays over the dashboard after login):
+  // 0ms   → black overlay, symbols appear
+  // 400ms → symbols fade, VV appears
+  // 800ms → version tag appears
+  // 1000ms → fade out begins
+  // 1400ms → done, dashboard visible
+
+  useEffect(() => {
+    const justLoggedIn = sessionStorage.getItem('vv_just_logged_in')
+    if (justLoggedIn) {
+      sessionStorage.removeItem('vv_just_logged_in')
+      setPortalDone(false)
+      setPortalPhase(0)
+      const timers: ReturnType<typeof setTimeout>[] = []
+      timers.push(setTimeout(() => setPortalPhase(1), 80))
+      timers.push(setTimeout(() => setPortalPhase(2), 480))
+      timers.push(setTimeout(() => setPortalPhase(3), 880))
+      timers.push(setTimeout(() => setPortalPhase(4), 1080))
+      timers.push(setTimeout(() => { setPortalPhase(5); setPortalDone(true) }, 1480))
+      return () => timers.forEach(clearTimeout)
+    }
+  }, [])
+
   const prevPath = useRef(pathname)
   useEffect(() => {
     if (prevPath.current === pathname) return
@@ -65,7 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setContentVisible(true)
       setNavigating(false)
       setNavTarget('')
-    }, 110) // matches leave duration
+    }, 110)
     return () => clearTimeout(t)
   }, [pathname])
 
@@ -155,8 +181,88 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return page === id || navTarget === target
   }
 
+  const G = '#c9a84c'
+  const INK = 'rgba(245,243,239,0.95)'
+  const I3 = 'rgba(245,243,239,0.28)'
+  const I4 = 'rgba(245,243,239,0.11)'
+  const MONO = "'DM Mono',monospace"
+  const SERIF = "'Cormorant Garamond',serif"
+
+  const symVisible  = portalPhase === 1
+  const vvVisible   = portalPhase >= 2 && portalPhase <= 4
+  const tagVisible  = portalPhase >= 3
+  const overlayOn   = portalPhase < 4
+
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
+
+      {/* ─── PORTAL INTRO — plays over dashboard after login ─── */}
+      {!portalDone && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: '#020203',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: overlayOn ? 1 : 0,
+          transition: portalPhase >= 4 ? 'opacity 0.4s cubic-bezier(0.4,0,1,1)' : 'none',
+          pointerEvents: portalPhase >= 4 ? 'none' : 'all',
+          overflow: 'hidden',
+        }}>
+          {/* Grain */}
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.04, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")", backgroundSize: '200px', pointerEvents: 'none' }} />
+
+          {/* Ambient glow */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '50vw', height: '35vh', background: 'radial-gradient(ellipse,rgba(201,168,76,0.04) 0%,transparent 72%)', opacity: vvVisible ? 1 : 0, transition: 'opacity 2s ease', pointerEvents: 'none' }} />
+
+          {/* Top rule */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(-72px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1)', opacity: 0.28 }} />
+
+          {/* Bottom rule */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(76px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1) 0.12s', opacity: 0.28 }} />
+
+          {/* Symbols ↑ · ↓ */}
+          <div style={{ position: 'absolute', display: 'flex', alignItems: 'center', gap: 24, opacity: symVisible ? 1 : 0, transition: symVisible ? 'opacity 0.18s ease' : 'opacity 0.12s ease' }}>
+            {[
+              { s: '↑', c: 'rgba(74,222,128,0.65)', d: '0ms' },
+              { s: '·', c: 'rgba(245,243,239,0.14)', d: '50ms' },
+              { s: '↓', c: 'rgba(248,113,113,0.65)', d: '100ms' },
+            ].map((x, i) => (
+              <span key={i} style={{ fontFamily: MONO, fontSize: 12, color: x.c, opacity: symVisible ? 1 : 0, transform: symVisible ? 'none' : 'translateY(3px)', transition: `opacity 0.18s ease ${x.d}, transform 0.18s ease ${x.d}` }}>{x.s}</span>
+            ))}
+          </div>
+
+          {/* VV + version tag */}
+          <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              fontFamily: SERIF,
+              fontSize: 'clamp(80px,17vw,148px)',
+              fontWeight: 300, fontStyle: 'italic',
+              color: INK, letterSpacing: '1px', lineHeight: 1,
+              userSelect: 'none',
+              opacity: vvVisible ? 1 : 0,
+              transform: vvVisible ? 'none' : 'scale(0.97)',
+              transition: vvVisible
+                ? 'opacity 0.32s cubic-bezier(0.16,1,0.3,1), transform 0.38s cubic-bezier(0.16,1,0.3,1)'
+                : 'opacity 0.18s ease, transform 0.18s ease',
+            }}>VV</div>
+
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+              opacity: tagVisible ? 1 : 0,
+              transform: tagVisible ? 'translateY(0)' : 'translateY(5px)',
+              transition: 'opacity 0.45s ease, transform 0.45s cubic-bezier(0.16,1,0.3,1)',
+            }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, color: I3, letterSpacing: '4px', textTransform: 'uppercase' }}>Growth Ad Engine</div>
+              <div style={{ fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '3px', textTransform: 'uppercase' }}>v1.1</div>
+            </div>
+          </div>
+
+          {/* HUD corners */}
+          <div style={{ position: 'absolute', top: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.55 : 0, transition: 'opacity 0.8s ease 0.3s' }}>vngrdvisuals.com</div>
+          <div style={{ position: 'absolute', top: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase', opacity: vvVisible ? 0.55 : 0, transition: 'opacity 0.8s ease 0.5s' }}>Intelligence Platform</div>
+          <div style={{ position: 'absolute', bottom: 26, left: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.45 : 0, transition: 'opacity 0.8s ease 0.2s' }}>Secured access</div>
+          <div style={{ position: 'absolute', bottom: 26, right: 32, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px', opacity: tagVisible ? 0.45 : 0, transition: 'opacity 0.8s ease 0.4s' }}>Est. 2026</div>
+        </div>
+      )}
 
       {navigating && <div className="load-bar" />}
 
@@ -164,7 +270,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         * { box-sizing: border-box; }
         body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
-        /* Content transition — clean fade + subtle lift */
         @keyframes contentIn {
           0%   { opacity: 0; transform: translateY(8px); }
           100% { opacity: 1; transform: translateY(0); }
@@ -186,7 +291,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .load-bar {
           position: fixed; top: 0; left: 0; height: 2px;
           background: linear-gradient(to right, #c9a84c, rgba(201,168,76,0.4));
-          z-index: 99999; pointer-events: none;
+          z-index: 9998; pointer-events: none;
           animation: loadBar 0.5s cubic-bezier(0.16,1,0.3,1) both;
         }
 
@@ -310,10 +415,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </header>
 
           <main className="main-scroll" style={{ flex: 1, padding: '24px 26px' }}>
-            <div
-              key={contentKey}
-              className={contentVisible ? 'content-in' : 'content-out'}
-            >
+            <div key={contentKey} className={contentVisible ? 'content-in' : 'content-out'}>
               {children}
             </div>
           </main>
@@ -321,7 +423,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Toast */}
-      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9999, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
+      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
       </div>
