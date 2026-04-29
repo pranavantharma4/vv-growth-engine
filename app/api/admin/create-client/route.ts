@@ -2,16 +2,8 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-// Service role client — can create auth users
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
@@ -19,14 +11,24 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Verify admin
-    const { data: cu } = await supabase.from('client_users').select('role').eq('user_id', user.id).single()
+    const { data: cu } = await supabase
+      .from('client_users')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
     if (cu?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { name, email, company, plan, monthly_spend, notes, invite_id } = await req.json()
     if (!name || !email) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
 
-    // Create auth user with temp password — they'll reset via invite email
+    // Lazy init — inside the handler, not at module level
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    // Create auth user
     const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       email_confirm: true,
@@ -65,22 +67,30 @@ export async function POST(req: Request) {
       client_id: clientRecord.id,
       step: 'connect',
       completed_steps: [],
-    })
+    }).catch(() => {}) // non-fatal if onboarding table structure differs
 
-    // Mark invite as accepted if came from invite
+    // Mark invite accepted
     if (invite_id) {
-      await supabaseAdmin.from('client_invites').update({ status: 'accepted', accepted_at: new Date().toISOString() }).eq('id', invite_id)
+      await supabaseAdmin
+        .from('client_invites')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', invite_id)
     }
 
-    // Generate magic link for client to set password and enter portal
+    // Generate magic link
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?onboarding=1` }
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?onboarding=1`,
+      },
     })
     if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 400 })
 
-    // Send welcome email with magic link
+    // Send welcome email via Resend — lazy init inside handler
+    const { Resend } = await import('resend')
+    const resend = new Resend(process.env.RESEND_API_KEY)
+
     await resend.emails.send({
       from: 'Vanguard Visuals <intelligence@vngrdvisuals.com>',
       to: email,
