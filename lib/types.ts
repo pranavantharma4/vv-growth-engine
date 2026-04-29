@@ -9,6 +9,9 @@ export type Client = {
   contact_name: string | null
   created_at: string
   updated_at: string
+  onboarding_complete: boolean | null
+  onboarding_step: string | null
+  invited_by: string | null
   notification_preferences?: {
     weekly: boolean
     leaks: boolean

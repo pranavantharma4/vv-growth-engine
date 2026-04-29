@@ -1,118 +1,398 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill, StatCard } from '@/app/dashboard/components'
-import type { CampaignSnapshot, BiggestLeak, AdConnection } from '@/lib/types'
-import { fmtMoney, roasColor } from '@/lib/types'
+import { useApp } from './context'
+
+type Campaign = {
+  id: string
+  campaign_name: string
+  platform: string
+  health: string
+  spend: number
+  roas: number
+  impressions: number
+  clicks: number
+  conversions: number
+  revenue: number
+  snapshot_date: string
+}
+
+type WeeklyBrief = {
+  id: string
+  biggest_leak_campaign: string
+  biggest_leak_amount: number
+  biggest_leak_platform: string
+  total_spend: number
+  total_wasted: number
+  blended_roas: number
+  created_at: string
+}
 
 export default function DashboardPage() {
-  const { client } = useApp()
   const supabase = createClientComponentClient()
-  const [camps, setCamps] = useState<CampaignSnapshot[]>([])
-  const [leak, setLeak] = useState<BiggestLeak | null>(null)
-  const [conns, setConns] = useState<AdConnection[]>([])
+  const router = useRouter()
+  const { client, isAdmin } = useApp()
+
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [brief, setBrief] = useState<WeeklyBrief | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!client) return
-    setLoading(true)
-    const today = new Date().toISOString().split('T')[0];
-    (async () => {
-      const [{ data: c }, { data: l }, { data: cn }] = await Promise.all([
-        supabase.from('campaign_snapshots').select('*').eq('client_id', client.id).eq('snapshot_date', today).order('spend', { ascending: false }),
-        supabase.from('biggest_leaks').select('*').eq('client_id', client.id),
-        supabase.from('ad_connections').select('*').eq('client_id', client.id),
-      ])
-      setCamps(c || []); setLeak(l?.[0] || null); setConns(cn || [])
-      setLoading(false)
-    })()
+    if (client.onboarding_complete === false) {
+      router.push('/dashboard/onboarding')
+      return
+    }
+    load()
   }, [client])
 
-  if (loading) return <p style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--ink3)' }}>Loading dashboard...</p>
+  async function load() {
+    if (!client) return
+    setLoading(true)
+    const today = new Date().toISOString().split('T')[0]
+    const [{ data: camps }, { data: briefData }] = await Promise.all([
+      supabase
+        .from('campaign_snapshots')
+        .select('*')
+        .eq('client_id', client.id)
+        .eq('snapshot_date', today)
+        .order('spend', { ascending: false }),
+      supabase
+        .from('weekly_briefs')
+        .select('*')
+        .eq('client_id', client.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    setCampaigns(camps || [])
+    setBrief(briefData || null)
+    setLoading(false)
+  }
 
-  const totalSpend = camps.reduce((s, c) => s + Number(c.spend), 0)
-  const totalConv  = camps.reduce((s, c) => s + c.conversions, 0)
-  const wasted     = camps.filter(c => c.health==='dead'||c.health==='bleeding').reduce((s, c) => s + Number(c.spend), 0)
-  const blended    = totalSpend > 0 ? camps.reduce((s, c) => s + Number(c.roas) * Number(c.spend), 0) / totalSpend : 0
+  const totalSpend       = campaigns.reduce((s, c) => s + Number(c.spend), 0)
+  const totalRevenue     = campaigns.reduce((s, c) => s + Number(c.revenue), 0)
+  const totalConversions = campaigns.reduce((s, c) => s + Number(c.conversions), 0)
+  const blendedRoas      = totalSpend > 0 ? totalRevenue / totalSpend : 0
+  const wastedSpend      = campaigns
+    .filter(c => c.health === 'dead' || c.health === 'bleeding')
+    .reduce((s, c) => s + Number(c.spend), 0)
 
-  const byPlat: Record<string,{spend:number;roas:number;n:number}> = {}
-  camps.forEach(c => {
-    if (!byPlat[c.platform]) byPlat[c.platform] = { spend:0, roas:0, n:0 }
-    byPlat[c.platform].spend += Number(c.spend)
-    byPlat[c.platform].roas  += Number(c.roas)
-    byPlat[c.platform].n++
-  })
-  Object.keys(byPlat).forEach(p => { byPlat[p].roas /= byPlat[p].n })
-  const platColor: Record<string,string> = { meta:'#1a56cc', google:'#1a6e1a', tiktok:'#cc1a3a' }
-  const platLabel: Record<string,string> = { meta:'Meta', google:'Google', tiktok:'TikTok' }
+  const biggestLeak = [...campaigns]
+    .filter(c => c.health === 'bleeding' || c.health === 'dead')
+    .sort((a, b) => Number(b.spend) - Number(a.spend))[0] || null
+
+  const platforms = ['meta', 'google', 'tiktok']
+  const platStats = platforms.map(p => {
+    const cs      = campaigns.filter(c => c.platform === p)
+    const spend   = cs.reduce((s, c) => s + Number(c.spend), 0)
+    const revenue = cs.reduce((s, c) => s + Number(c.revenue), 0)
+    const roas    = spend > 0 ? revenue / spend : 0
+    const hasProblems = cs.some(c => c.health === 'dead' || c.health === 'bleeding')
+    return { platform: p, spend, roas, hasProblems, count: cs.length }
+  }).filter(p => p.count > 0)
+
+  const ink   = 'rgba(250,248,245,0.92)'
+  const ink2  = 'rgba(250,248,245,0.58)'
+  const ink3  = 'rgba(250,248,245,0.28)'
+  const rule  = 'rgba(250,248,245,0.07)'
+  const gold  = '#c9a84c'
+  const mono  = "'DM Mono',monospace"
+  const serif = "'Cormorant Garamond',serif"
+  const sans  = "'DM Sans',sans-serif"
+
+  const healthColor  = (h: string) => ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' }[h] || ink3)
+  const healthBg     = (h: string) => ({ strong: 'rgba(74,222,128,0.08)', weak: 'rgba(251,191,36,0.08)', bleeding: 'rgba(251,146,60,0.08)', dead: 'rgba(248,113,113,0.08)' }[h] || 'transparent')
+  const healthBorder = (h: string) => ({ strong: 'rgba(74,222,128,0.2)', weak: 'rgba(251,191,36,0.2)', bleeding: 'rgba(251,146,60,0.2)', dead: 'rgba(248,113,113,0.2)' }[h] || rule)
+
+  const platColor: Record<string, string> = { meta: '#1877f2', google: '#ea4335', tiktok: '#00f2ea' }
+  const platLabel: Record<string, string> = { meta: 'Meta', google: 'Google', tiktok: 'TikTok' }
+
+  const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`
+  const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+        <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '2px', textTransform: 'uppercase' }}>
+          Loading intelligence...
+        </div>
+      </div>
+    )
+  }
+
+  if (campaigns.length === 0) {
+    return (
+      <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>
+        <div style={{ fontFamily: serif, fontSize: 32, fontWeight: 300, color: ink, marginBottom: 12 }}>
+          No campaign data yet
+        </div>
+        <div style={{ fontSize: 13, color: ink2, lineHeight: 1.85, marginBottom: 28 }}>
+          Connect your ad accounts and sync to start seeing intelligence on your campaigns.
+        </div>
+        <button
+          onClick={() => router.push('/dashboard/connect')}
+          style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '12px 26px', borderRadius: 4, cursor: 'pointer' }}
+        >
+          Connect Ad Accounts →
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div>
-      {leak && (
-        <div style={{ background:'var(--redpaper)', border:'1px solid var(--redborder)', borderLeft:'3px solid var(--red)', borderRadius:8, padding:'18px 22px', marginBottom:20 }}>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--red)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:8 }}>Biggest Leak Identified</div>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontWeight:400, lineHeight:1.25, marginBottom:6 }}>
-            {leak.campaign_name} consuming {fmtMoney(Number(leak.spend))}/mo at {Number(leak.roas).toFixed(1)}x ROAS
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+
+      {/* ─── BIGGEST LEAK BANNER ─── */}
+      {biggestLeak && (
+        <div style={{
+          border: '1px solid rgba(251,146,60,0.22)',
+          borderLeft: '3px solid rgba(251,146,60,0.7)',
+          borderRadius: '0 6px 6px 0',
+          background: 'rgba(251,146,60,0.05)',
+          padding: '16px 20px',
+          marginBottom: 24,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: 7, color: 'rgba(251,146,60,0.7)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 5 }}>
+              ⚠ Biggest Leak Identified
+            </div>
+            <div style={{ fontFamily: serif, fontSize: 18, color: ink, marginBottom: 4 }}>
+              {biggestLeak.campaign_name} — {fmt(Number(biggestLeak.spend))}/mo at {fmtRoas(Number(biggestLeak.roas))} ROAS
+            </div>
+            <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(251,146,60,0.65)', letterSpacing: '0.5px' }}>
+              → Reduce budget 50% and refresh creative within 48 hours. Est. {fmt(Number(biggestLeak.spend) * 0.5)} recovered this month.
+            </div>
           </div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--red)', marginTop:9 }}>
-            → {leak.health==='dead' ? 'Pause immediately — reallocate budget to your strongest campaign.' : 'Reduce budget 50% and refresh creative within 48 hours.'}
-          </div>
+          <button
+            onClick={() => router.push('/dashboard/analysis')}
+            style={{ fontFamily: mono, fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'rgba(251,146,60,0.85)', border: 'none', padding: '8px 16px', borderRadius: 3, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            Get AI Diagnosis →
+          </button>
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:11, marginBottom:20 }}>
-        <StatCard label="Total Spend"   value={fmtMoney(totalSpend)} hint={`${conns.filter(c=>c.is_active).length} platforms active`} />
-        <StatCard label="Conversions"   value={String(totalConv)}    hint="Last 30 days" />
-        <StatCard label="Blended ROAS"  value={blended.toFixed(1)+'x'} hint="All campaigns" type="gold" />
-        <StatCard label="Wasted Spend"  value={fmtMoney(wasted)}    hint="Recoverable now" type="warn" />
+      {/* ─── STAT CARDS ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Total Spend',   value: fmt(totalSpend),                  sub: `${platStats.length} platform${platStats.length !== 1 ? 's' : ''} active`, accent: undefined },
+          { label: 'Conversions',   value: totalConversions.toLocaleString(), sub: 'Last 30 days', accent: undefined },
+          { label: 'Blended ROAS',  value: fmtRoas(blendedRoas),             sub: 'All campaigns', accent: blendedRoas >= 3 ? '#4ade80' : blendedRoas >= 1.5 ? '#fbbf24' : '#f87171' },
+          { label: 'Wasted Spend',  value: fmt(wastedSpend),                 sub: 'Recoverable now', accent: wastedSpend > 0 ? '#f87171' : '#4ade80' },
+        ].map(card => (
+          <div key={card.label} style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '20px 22px' }}>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 10 }}>
+              {card.label}
+            </div>
+            <div style={{ fontFamily: serif, fontSize: 38, fontWeight: 300, color: card.accent || ink, lineHeight: 1, marginBottom: 6 }}>
+              {card.value}
+            </div>
+            <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '1px' }}>
+              {card.sub}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-        <div>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, marginBottom:12 }}>Platform Performance</div>
-          {Object.entries(byPlat).map(([plat, s]) => (
-            <div key={plat} style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:8, padding:'13px 16px', marginBottom:9 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:9 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}><PlatPill platform={plat} /><span style={{ fontSize:13, fontWeight:500 }}>{platLabel[plat]||plat}</span></div>
-                <Pill health={s.roas>=3?'strong':s.roas>=2?'weak':'bleeding'} label={s.roas>=3?'Healthy':s.roas>=2?'Watch':'Critical'} />
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                <div>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--ink3)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:3 }}>Spend</div>
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22 }}>{fmtMoney(s.spend)}</div>
-                </div>
-                <div style={{ textAlign:'right' }}>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--ink3)', letterSpacing:'2.5px', textTransform:'uppercase', marginBottom:3 }}>ROAS</div>
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, color:roasColor(s.roas) }}>{s.roas.toFixed(1)}x</div>
-                </div>
-              </div>
-              <div style={{ height:2, background:'var(--bg3)', borderRadius:1, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:totalSpend>0?((s.spend/totalSpend)*100)+'%':'0%', background:platColor[plat]||'#888', borderRadius:1 }} />
-              </div>
-              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:3 }}>{totalSpend>0?((s.spend/totalSpend)*100).toFixed(1):0}% of total spend</div>
+      {/* ─── PLATFORM + CAMPAIGN HEALTH ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Platform performance */}
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${rule}` }}>
+            <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2px', textTransform: 'uppercase' }}>
+              Platform Performance
             </div>
-          ))}
+          </div>
+          {platStats.length === 0 ? (
+            <div style={{ padding: '24px 18px', fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: 1 }}>
+              No platform data available
+            </div>
+          ) : platStats.map((p, i) => {
+            const pct = totalSpend > 0 ? (p.spend / totalSpend) * 100 : 0
+            return (
+              <div key={p.platform} style={{ padding: '14px 18px', borderBottom: i < platStats.length - 1 ? `1px solid rgba(250,248,245,0.04)` : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontFamily: mono, fontSize: 8, fontWeight: 700, color: '#050509', background: platColor[p.platform], padding: '2px 7px', borderRadius: 2, letterSpacing: '1px' }}>
+                    {platLabel[p.platform].toUpperCase()}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      fontFamily: mono, fontSize: 8, letterSpacing: '1.5px',
+                      color: p.hasProblems ? '#fbbf24' : '#4ade80',
+                      background: p.hasProblems ? 'rgba(251,191,36,0.08)' : 'rgba(74,222,128,0.08)',
+                      border: `1px solid ${p.hasProblems ? 'rgba(251,191,36,0.2)' : 'rgba(74,222,128,0.2)'}`,
+                      padding: '2px 7px', borderRadius: 2,
+                    }}>
+                      {p.hasProblems ? 'WATCH' : 'HEALTHY'}
+                    </span>
+                    <span style={{ fontFamily: serif, fontSize: 18, color: p.roas >= 3 ? '#4ade80' : p.roas >= 1.5 ? '#fbbf24' : '#f87171' }}>
+                      {fmtRoas(p.roas)}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontFamily: serif, fontSize: 22, color: ink }}>{fmt(p.spend)}</span>
+                  <span style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>{pct.toFixed(0)}% of total</span>
+                </div>
+                <div style={{ height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 1, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: platColor[p.platform], borderRadius: 1, transition: 'width 0.8s cubic-bezier(0.16,1,0.3,1)' }} />
+                </div>
+              </div>
+            )
+          })}
         </div>
 
-        <div>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, marginBottom:12 }}>Campaign Health</div>
-          <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:8, overflow:'hidden' }}>
-            {camps.slice(0,7).map((c,i) => (
-              <div key={c.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 14px', borderBottom:i<6?'1px solid var(--rule)':'none' }}>
-                <div>
-                  <div style={{ fontSize:12, fontWeight:500, marginBottom:2 }}>{c.campaign_name}</div>
-                  <PlatPill platform={c.platform} />
+        {/* Campaign health */}
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${rule}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2px', textTransform: 'uppercase' }}>
+              Campaign Health
+            </div>
+            <button
+              onClick={() => router.push('/dashboard/campaigns')}
+              style={{ fontFamily: mono, fontSize: 7, color: ink3, background: 'transparent', border: 'none', cursor: 'pointer', letterSpacing: '1px' }}
+            >
+              View All →
+            </button>
+          </div>
+          <div style={{ maxHeight: 310, overflowY: 'auto' }}>
+            {campaigns.slice(0, 8).map((c, i) => (
+              <div
+                key={`${c.campaign_name}-${i}`}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 18px', borderBottom: i < Math.min(campaigns.length, 8) - 1 ? `1px solid rgba(250,248,245,0.04)` : 'none' }}
+              >
+                <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                  <div style={{ fontFamily: sans, fontSize: 11, color: ink, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {c.campaign_name}
+                  </div>
+                  <span style={{ fontFamily: mono, fontSize: 7, color: '#fff', background: platColor[c.platform] || '#444', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.5px', marginTop: 3, display: 'inline-block' }}>
+                    {platLabel[c.platform] || c.platform}
+                  </span>
                 </div>
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <Pill health={c.health} />
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:17, color:roasColor(Number(c.roas)) }}>{Number(c.roas).toFixed(1)}x</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <span style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>
+                    {fmt(Number(c.spend))}
+                  </span>
+                  <span style={{ fontFamily: mono, fontSize: 7, fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthBorder(c.health)}`, padding: '2px 6px', borderRadius: 2 }}>
+                    {c.health}
+                  </span>
+                  <span style={{ fontFamily: serif, fontSize: 15, color: healthColor(c.health), minWidth: 32, textAlign: 'right' }}>
+                    {fmtRoas(Number(c.roas))}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         </div>
+      </div>
+
+      {/* ─── INTELLIGENCE STRIP ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+
+        {/* Health breakdown */}
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '18px 20px' }}>
+          <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>
+            Health Breakdown
+          </div>
+          {[
+            { label: 'STRONG',   h: 'strong' },
+            { label: 'WEAK',     h: 'weak' },
+            { label: 'BLEEDING', h: 'bleeding' },
+            { label: 'DEAD',     h: 'dead' },
+          ].map(item => {
+            const count = campaigns.filter(c => c.health === item.h).length
+            const pct   = campaigns.length > 0 ? (count / campaigns.length) * 100 : 0
+            return (
+              <div key={item.h} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: healthColor(item.h), flexShrink: 0 }} />
+                  <span style={{ fontFamily: mono, fontSize: 8, color: ink2, letterSpacing: '1px' }}>{item.label}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 60, height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 1, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: healthColor(item.h), borderRadius: 1 }} />
+                  </div>
+                  <span style={{ fontFamily: serif, fontSize: 15, color: healthColor(item.h), minWidth: 16, textAlign: 'right' }}>
+                    {count}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Latest brief */}
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '18px 20px' }}>
+          <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>
+            Latest Brief
+          </div>
+          {brief ? (
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: 'rgba(251,146,60,0.6)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>
+                Biggest Leak
+              </div>
+              <div style={{ fontFamily: serif, fontSize: 15, color: ink, marginBottom: 4, lineHeight: 1.4 }}>
+                {brief.biggest_leak_campaign}
+              </div>
+              <div style={{ fontFamily: serif, fontSize: 24, color: '#f87171', marginBottom: 12 }}>
+                {fmt(Number(brief.biggest_leak_amount))}
+                <span style={{ fontSize: 11, color: ink3, fontFamily: mono }}>/mo wasted</span>
+              </div>
+              <button
+                onClick={() => router.push('/dashboard/brief')}
+                style={{ fontFamily: mono, fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '7px 14px', borderRadius: 3, cursor: 'pointer' }}
+              >
+                Read Full Brief →
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontFamily: serif, fontSize: 15, color: ink, marginBottom: 8, lineHeight: 1.5 }}>
+                No brief generated yet
+              </div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', lineHeight: 1.7 }}>
+                Your first Monday morning brief is scheduled. We'll surface your biggest budget leak in plain English.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Quick actions */}
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '18px 20px' }}>
+          <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>
+            Quick Actions
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { label: 'AI Campaign Diagnosis', icon: '◉', path: '/dashboard/analysis', accent: gold },
+              { label: 'View All Campaigns',    icon: '◫', path: '/dashboard/campaigns', accent: ink3 },
+              { label: 'Ads Optimization',      icon: '◑', path: '/dashboard/optimize',  accent: ink3 },
+              { label: 'Weekly Brief',          icon: '◧', path: '/dashboard/brief',      accent: ink3 },
+              { label: 'Connect Ad Accounts',   icon: '◎', path: '/dashboard/connect',    accent: ink3 },
+            ].map(action => (
+              <button
+                key={action.path}
+                onClick={() => router.push(action.path)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${rule}`, borderRadius: 4, cursor: 'pointer', textAlign: 'left' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)' }}
+              >
+                <span style={{ fontFamily: mono, fontSize: 11, color: action.accent, flexShrink: 0 }}>{action.icon}</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: ink2 }}>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   )

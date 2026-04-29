@@ -1,178 +1,249 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState } from 'react'
-import { useApp } from '@/app/dashboard/context'
+import { useState, useEffect } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useApp } from '../context'
 
-const INDUSTRIES = [
-  'Health & Fitness', 'Real Estate', 'Dental & Medical', 'E-Commerce',
-  'Restaurants & Food', 'Legal Services', 'Education', 'SaaS & Tech',
-  'Home Services', 'Fashion & Beauty', 'Finance', 'Other'
-]
-
-const PLANS = [
-  { id: 'managed',  label: 'Managed',  desc: '$2,000/mo — VV manages all campaigns' },
-  { id: 'embedded', label: 'Embedded', desc: '$3,500/mo — VV embedded in their team' },
-  { id: 'enterprise',label:'Enterprise',desc: 'Custom — large accounts' },
-]
+type Invite = {
+  id: string
+  name: string
+  email: string
+  company: string
+  plan: string
+  monthly_spend: number
+  status: string
+  created_at: string
+  notes: string
+}
 
 export default function InvitePage() {
-  const { isAdmin, toast: showToast } = useApp()
-  const [step, setStep]       = useState<'form'|'sending'|'done'>('form')
-  const [name, setName]       = useState('')
-  const [email, setEmail]     = useState('')
-  const [contact, setContact] = useState('')
-  const [industry, setIndustry] = useState('')
-  const [plan, setPlan]       = useState('managed')
-  const [spend, setSpend]     = useState('')
-  const [error, setError]     = useState('')
-  const [result, setResult]   = useState<any>(null)
+  const { toast, isAdmin } = useApp()
+  const supabase = createClientComponentClient()
 
-  if (!isAdmin) return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'60vh', textAlign:'center' }}>
-      <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:42, color:'var(--bg3)', marginBottom:12 }}>▲</div>
-      <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:300 }}>Admin access required</div>
-    </div>
-  )
+  const [invites, setInvites] = useState<Invite[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState<string | null>(null) // invite id being provisioned
+  const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  async function sendInvite() {
-    if (!name || !email) { setError('Company name and email are required.'); return }
-    setError('')
-    setStep('sending')
+  const [form, setForm] = useState({
+    name: '', email: '', company: '', plan: 'managed',
+    monthly_spend: '', notes: '',
+  })
 
+  useEffect(() => { loadInvites() }, [])
+
+  async function loadInvites() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('client_invites')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setInvites(data || [])
+    setLoading(false)
+  }
+
+  async function submitInvite() {
+    if (!form.name || !form.email) { toast('Missing fields', 'Name and email are required.'); return }
+    setSubmitting(true)
     try {
-      const res = await fetch('/api/invite', {
+      const res = await fetch('/api/admin/send-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, contact, industry, plan, monthly_spend: Number(spend.replace(/[^0-9]/g,'')) || 0 })
+        body: JSON.stringify({ ...form, monthly_spend: parseFloat(form.monthly_spend) || 0 }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Invite failed')
-      setResult(data)
-      setStep('done')
-    } catch (e: any) {
-      setError(e.message)
-      setStep('form')
-    }
+      if (!res.ok) { toast('Error', data.error); return }
+      toast('Invite recorded', `${form.name} added to pipeline.`)
+      setForm({ name: '', email: '', company: '', plan: 'managed', monthly_spend: '', notes: '' })
+      setShowForm(false)
+      loadInvites()
+    } finally { setSubmitting(false) }
   }
 
-  function reset() {
-    setStep('form'); setName(''); setEmail(''); setContact('')
-    setIndustry(''); setPlan('managed'); setSpend(''); setResult(null); setError('')
+  async function provisionAccount(invite: Invite) {
+    setCreating(invite.id)
+    try {
+      const res = await fetch('/api/admin/create-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: invite.name,
+          email: invite.email,
+          company: invite.company,
+          plan: invite.plan,
+          monthly_spend: invite.monthly_spend,
+          notes: invite.notes,
+          invite_id: invite.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast('Error', data.error); return }
+      toast('Account created', `Portal access email sent to ${invite.email}.`)
+      loadInvites()
+    } finally { setCreating(null) }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width:'100%', padding:'10px 13px', background:'var(--card2)',
-    border:'1px solid var(--rule2)', borderRadius:6, color:'var(--ink)',
-    fontFamily:"'DM Sans',sans-serif", fontSize:13, outline:'none', boxSizing:'border-box'
-  }
-  const labelStyle: React.CSSProperties = {
-    fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)',
-    letterSpacing:'2px', textTransform:'uppercase', marginBottom:6, display:'block'
-  }
+  const ink = 'rgba(250,248,245,0.9)'
+  const ink2 = 'rgba(250,248,245,0.55)'
+  const ink3 = 'rgba(250,248,245,0.28)'
+  const ink4 = 'rgba(250,248,245,0.11)'
+  const rule = 'rgba(250,248,245,0.07)'
+  const gold = '#c9a84c'
+  const mono = "'DM Mono',monospace"
+  const serif = "'Cormorant Garamond',serif"
+  const sans = "'DM Sans',sans-serif"
+
+  const statusColor = (s: string) => ({
+    pending: 'rgba(250,248,245,0.3)',
+    sent: '#c9a84c',
+    accepted: '#4ade80',
+    expired: 'rgba(248,113,113,0.6)',
+  }[s] || ink3)
+
+  const statusBg = (s: string) => ({
+    pending: 'rgba(255,255,255,0.04)',
+    sent: 'rgba(201,168,76,0.08)',
+    accepted: 'rgba(74,222,128,0.08)',
+    expired: 'rgba(248,113,113,0.08)',
+  }[s] || 'transparent')
+
+  const fi = {
+    width: '100%', padding: '10px 13px',
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${rule}`,
+    borderRadius: 4, color: ink,
+    fontFamily: sans, fontSize: 13,
+    outline: 'none',
+  } as React.CSSProperties
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, marginBottom:6 }}>Invite New Client</div>
-      <p style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--ink3)', marginBottom:24, lineHeight:1.7 }}>
-        Creates the client account, sends them a password setup email, and prepares their dashboard.
-      </p>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <style>{`
+        input::placeholder,textarea::placeholder{color:rgba(250,248,245,0.18);}
+        input:focus,textarea:focus,select:focus{border-color:rgba(201,168,76,0.4)!important;outline:none;}
+        select option{background:#1a1816;color:#faf8f5;}
+      `}</style>
 
-      {step === 'form' && (
-        <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:10, padding:'28px 32px' }}>
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              <div>
-                <label style={labelStyle}>Company Name *</label>
-                <input style={inputStyle} placeholder="Meridian Fitness Co." value={name} onChange={e=>setName(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Contact Name</label>
-                <input style={inputStyle} placeholder="James Caldwell" value={contact} onChange={e=>setContact(e.target.value)} />
-              </div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Admin</div>
+          <div style={{ fontFamily: serif, fontSize: 28, fontWeight: 300, color: ink, marginBottom: 4 }}>Client Pipeline</div>
+          <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '1px' }}>Track applications, provision accounts, send portal access</div>
+        </div>
+        <button onClick={() => setShowForm(s => !s)}
+          style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '10px 20px', borderRadius: 4, cursor: 'pointer' }}>
+          {showForm ? '✕ Cancel' : '+ Add to Pipeline'}
+        </button>
+      </div>
+
+      {/* Add to pipeline form */}
+      {showForm && (
+        <div style={{ background: 'rgba(255,255,255,0.025)', border: `1px solid ${rule}`, borderRadius: 6, padding: '24px', marginBottom: 24 }}>
+          <div style={{ fontFamily: serif, fontSize: 18, color: ink, marginBottom: 18 }}>New Client Application</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Full Name *</div>
+              <input style={fi} placeholder="Jane Smith" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <label style={labelStyle}>Client Email Address *</label>
-              <input style={inputStyle} type="email" placeholder="owner@meridianfitness.com" value={email} onChange={e=>setEmail(e.target.value)} />
-              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:5 }}>They'll receive a password setup link at this address</div>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              <div>
-                <label style={labelStyle}>Industry</label>
-                <select style={inputStyle} value={industry} onChange={e=>setIndustry(e.target.value)}>
-                  <option value="">Select industry</option>
-                  {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Monthly Ad Spend</label>
-                <input style={inputStyle} placeholder="$15,000" value={spend} onChange={e=>setSpend(e.target.value)} />
-              </div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Email *</div>
+              <input style={fi} type="email" placeholder="jane@brand.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div>
-              <label style={labelStyle}>Plan</label>
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {PLANS.map(p => (
-                  <div key={p.id} onClick={()=>setPlan(p.id)}
-                    style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:6, border:`1px solid ${plan===p.id?'var(--goldborder)':'var(--rule)'}`, background:plan===p.id?'var(--goldpaper)':'var(--card2)', cursor:'pointer', transition:'all .15s' }}>
-                    <div style={{ width:14, height:14, borderRadius:'50%', border:`1px solid ${plan===p.id?'var(--gold)':'var(--rule2)'}`, background:plan===p.id?'var(--gold)':'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      {plan===p.id && <div style={{ width:6, height:6, borderRadius:'50%', background:'#fff' }} />}
-                    </div>
-                    <div>
-                      <div style={{ fontSize:12, fontWeight:500 }}>{p.label}</div>
-                      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:1 }}>{p.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Company / Brand</div>
+              <input style={fi} placeholder="Brand Co." value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} />
+            </div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Monthly Ad Spend</div>
+              <input style={fi} type="number" placeholder="10000" value={form.monthly_spend} onChange={e => setForm(f => ({ ...f, monthly_spend: e.target.value }))} />
+            </div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Plan</div>
+              <select style={{ ...fi, cursor: 'pointer' }} value={form.plan} onChange={e => setForm(f => ({ ...f, plan: e.target.value }))}>
+                <option value="starter">Starter</option>
+                <option value="managed">Managed</option>
+                <option value="embedded">Embedded</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Notes</div>
+              <input style={fi} placeholder="Chamber referral, high urgency..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
-
-          {error && <div style={{ background:'var(--redpaper)', border:'1px solid var(--redborder)', borderRadius:5, padding:'9px 12px', fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--red)', marginTop:16 }}>{error}</div>}
-
-          <button onClick={sendInvite} style={{ width:'100%', padding:'13px 0', background:'var(--gold)', border:'none', borderRadius:6, cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:10, color:'#faf8f5', letterSpacing:'2px', textTransform:'uppercase', marginTop:24 }}>
-            Send Invite →
-          </button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <button onClick={submitInvite} disabled={submitting}
+              style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '10px 22px', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1 }}>
+              {submitting ? 'Adding...' : 'Add to Pipeline →'}
+            </button>
+          </div>
         </div>
       )}
 
-      {step === 'sending' && (
-        <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:10, padding:'48px 32px', textAlign:'center' }}>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:32, color:'var(--gold)', marginBottom:16 }}>◈</div>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontWeight:300, marginBottom:8 }}>Creating account...</div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--ink3)' }}>Setting up {name}'s dashboard and sending invite</div>
+      {/* Pipeline table */}
+      <div style={{ border: `1px solid ${rule}`, borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ background: 'rgba(255,255,255,0.025)', padding: '12px 20px', borderBottom: `1px solid ${rule}`, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 12 }}>
+          {['Client', 'Plan', 'Spend', 'Status', 'Added', 'Action'].map(h => (
+            <div key={h} style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase' }}>{h}</div>
+          ))}
         </div>
-      )}
 
-      {step === 'done' && result && (
-        <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:10, padding:'28px 32px' }}>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--green)', letterSpacing:'3px', textTransform:'uppercase', marginBottom:10 }}>✓ Invite Sent</div>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:300, marginBottom:16 }}>{name} is ready.</div>
-
-          <div style={{ background:'var(--card2)', border:'1px solid var(--rule)', borderRadius:8, padding:'14px 16px', marginBottom:20 }}>
-            {[
-              ['Client account', 'Created in database'],
-              ['Auth invite', `Sent to ${email}`],
-              ['Plan', plan.charAt(0).toUpperCase()+plan.slice(1)],
-              ['Dashboard', 'Ready on login'],
-              ['Weekly brief', 'Active from next Monday'],
-            ].map(([k,v],i,arr) => (
-              <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:i<arr.length-1?'1px solid var(--rule)':'none', fontSize:12 }}>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)' }}>{k}</span>
-                <span style={{ fontWeight:500, color:'var(--green)' }}>✓ {v}</span>
-              </div>
-            ))}
+        {loading ? (
+          <div style={{ padding: '32px 20px', textAlign: 'center', fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: 1 }}>Loading pipeline...</div>
+        ) : invites.length === 0 ? (
+          <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: serif, fontSize: 20, color: ink, marginBottom: 8 }}>No applications yet</div>
+            <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: 1 }}>Add clients from the book-a-call form or manually above</div>
           </div>
-
-          <div style={{ background:'var(--goldpaper)', border:'1px solid var(--goldborder)', borderLeft:'2px solid var(--gold)', borderRadius:6, padding:'12px 15px', marginBottom:20 }}>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--goldlt)', letterSpacing:'2px', textTransform:'uppercase', marginBottom:5 }}>Next Steps</div>
-            <div style={{ fontSize:12, color:'var(--ink2)', lineHeight:1.7 }}>
-              {name} will receive an email to set their password. Once they log in, the onboarding flow guides them through entering their campaigns. After that, connect their ad accounts within 24h.
+        ) : invites.map((inv, i) => (
+          <div key={inv.id} style={{ padding: '14px 20px', borderBottom: i < invites.length - 1 ? `1px solid rgba(250,248,245,0.04)` : 'none', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 12, alignItems: 'center' }}>
+            <div>
+              <div style={{ fontFamily: sans, fontSize: 12, color: ink, fontWeight: 500 }}>{inv.name}</div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, marginTop: 2 }}>{inv.email}</div>
+              {inv.company && <div style={{ fontFamily: mono, fontSize: 8, color: ink3, marginTop: 1 }}>{inv.company}</div>}
+            </div>
+            <div style={{ fontFamily: mono, fontSize: 9, color: ink2, textTransform: 'capitalize' }}>{inv.plan}</div>
+            <div style={{ fontFamily: serif, fontSize: 15, color: ink }}>${(inv.monthly_spend || 0).toLocaleString()}</div>
+            <div>
+              <span style={{ fontFamily: mono, fontSize: 8, letterSpacing: '1.5px', textTransform: 'uppercase', color: statusColor(inv.status), background: statusBg(inv.status), padding: '3px 8px', borderRadius: 2, border: `1px solid ${statusColor(inv.status)}22` }}>
+                {inv.status}
+              </span>
+            </div>
+            <div style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>
+              {new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+            <div>
+              {inv.status === 'pending' || inv.status === 'sent' ? (
+                <button
+                  onClick={() => provisionAccount(inv)}
+                  disabled={creating === inv.id}
+                  style={{ fontFamily: mono, fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '6px 14px', borderRadius: 3, cursor: creating === inv.id ? 'not-allowed' : 'pointer', opacity: creating === inv.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                  {creating === inv.id ? 'Creating...' : 'Create Account →'}
+                </button>
+              ) : inv.status === 'accepted' ? (
+                <span style={{ fontFamily: mono, fontSize: 8, color: '#4ade80', letterSpacing: 1 }}>✓ Active</span>
+              ) : (
+                <span style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: 1 }}>—</span>
+              )}
             </div>
           </div>
+        ))}
+      </div>
 
-          <button onClick={reset} style={{ width:'100%', padding:'11px 0', background:'transparent', border:'1px solid var(--rule2)', borderRadius:6, cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--ink3)', letterSpacing:'2px' }}>
-            Invite Another Client
-          </button>
+      {/* Stats */}
+      {invites.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+          {[
+            { label: 'Total', value: invites.length },
+            { label: 'Pending', value: invites.filter(i => i.status === 'pending').length },
+            { label: 'Active', value: invites.filter(i => i.status === 'accepted').length },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'rgba(255,255,255,0.025)', border: `1px solid ${rule}`, borderRadius: 4, padding: '10px 18px', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ fontFamily: serif, fontSize: 20, color: ink }}>{s.value}</span>
+              <span style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase' }}>{s.label}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
