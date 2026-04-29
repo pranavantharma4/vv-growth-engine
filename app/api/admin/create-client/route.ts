@@ -21,7 +21,6 @@ export async function POST(req: Request) {
     const { name, email, company, plan, monthly_spend, notes, invite_id } = await req.json()
     if (!name || !email) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
 
-    // Lazy init — inside the handler, not at module level
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -62,12 +61,16 @@ export async function POST(req: Request) {
       role: 'client',
     })
 
-    // Create onboarding record
-    await supabaseAdmin.from('onboarding').insert({
-      client_id: clientRecord.id,
-      step: 'connect',
-      completed_steps: [],
-    }).catch(() => {}) // non-fatal if onboarding table structure differs
+    // Create onboarding record — wrapped in try/catch instead of .catch()
+    try {
+      await supabaseAdmin.from('onboarding').insert({
+        client_id: clientRecord.id,
+        step: 'connect',
+        completed_steps: [],
+      })
+    } catch (_) {
+      // non-fatal if onboarding table structure differs
+    }
 
     // Mark invite accepted
     if (invite_id) {
@@ -87,7 +90,7 @@ export async function POST(req: Request) {
     })
     if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 400 })
 
-    // Send welcome email via Resend — lazy init inside handler
+    // Send welcome email — lazy import so it never runs at build time
     const { Resend } = await import('resend')
     const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -119,7 +122,7 @@ export async function POST(req: Request) {
                 </td></tr>
                 <tr><td style="padding:0 40px 36px;">
                   <div style="font-size:12px;color:rgba(250,248,245,0.3);line-height:1.7;margin-top:12px;">
-                    This link expires in 24 hours. If you have any questions, reply to this email or contact us at intelligence@vngrdvisuals.com.
+                    This link expires in 24 hours. Questions? Reply to this email or contact intelligence@vngrdvisuals.com
                   </div>
                   <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;color:rgba(250,248,245,0.2);letter-spacing:1px;">
                     Vanguard Visuals · Confidential Client Portal · vngrdvisuals.com
