@@ -1,126 +1,213 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '@/app/dashboard/context'
-
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ width: 34, height: 19, borderRadius: 10, position: 'relative', cursor: 'pointer', border: 'none', background: on ? 'var(--green)' : 'var(--bg3)', transition: 'background .2s', flexShrink: 0, outline: 'none' }}>
-      <div style={{ position: 'absolute', top: 2, left: on ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: 'white', transition: 'left .18s', boxShadow: '0 1px 2px rgba(0,0,0,.15)' }} />
-    </button>
-  )
-}
+import { useApp } from '../context'
 
 export default function SettingsPage() {
-  const { client, dark, setDark, toast: showToast } = useApp()
   const supabase = createClientComponentClient()
-  const [email, setEmail] = useState('')
-  const [notifs, setNotifs] = useState({ weekly: true, leaks: true, reports: true, sync: false })
-  const [saving, setSaving] = useState(false)
+  const { client, toast, isAdmin } = useApp()
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setEmail(user.email || '')
-    })
-  }, [])
+  const [contactName, setContactName] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [notifWeekly, setNotifWeekly] = useState(true)
+  const [notifLeaks, setNotifLeaks] = useState(true)
+  const [notifReports, setNotifReports] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [authEmail, setAuthEmail] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
     if (!client) return
-    if (client.notification_preferences) {
-      setNotifs(prev => ({ ...prev, ...client.notification_preferences }))
+    setContactName(client.contact_name || '')
+    setContactEmail(client.contact_email || '')
+    const prefs = client.notification_preferences
+    if (prefs) {
+      setNotifWeekly(prefs.weekly ?? true)
+      setNotifLeaks(prefs.leaks ?? true)
+      setNotifReports(prefs.reports ?? false)
     }
+    supabase.auth.getUser().then(({ data }) => {
+      setAuthEmail(data.user?.email || '')
+    })
   }, [client])
 
-  async function toggleNotif(key: string) {
-    const updated = { ...notifs, [key]: !notifs[key as keyof typeof notifs] }
-    setNotifs(updated)
+  async function saveProfile() {
+    if (!client) return
     setSaving(true)
     const { error } = await supabase
       .from('clients')
-      .update({ notification_preferences: updated })
-      .eq('id', client!.id)
+      .update({
+        contact_name: contactName,
+        contact_email: contactEmail,
+        notification_preferences: {
+          weekly: notifWeekly,
+          leaks: notifLeaks,
+          reports: notifReports,
+          sync: true,
+        },
+      })
+      .eq('id', client.id)
+    if (error) toast('Error', error.message)
+    else toast('Saved', 'Settings updated successfully.')
     setSaving(false)
-    if (error) showToast('Error', 'Could not save preference. Try again.')
   }
 
-  async function disconnectAll() {
-    if (!client) return
-    await supabase
-      .from('ad_connections')
-      .update({ is_active: false, access_token: null })
-      .eq('client_id', client.id)
-    showToast('Disconnected', 'All ad account connections have been removed.')
+  async function changePassword() {
+    if (!newPassword || !confirmPassword) { toast('Missing fields', 'Enter your new password.'); return }
+    if (newPassword !== confirmPassword) { toast('Mismatch', 'Passwords do not match.'); return }
+    if (newPassword.length < 6) { toast('Too short', 'Password must be at least 6 characters.'); return }
+    setChangingPassword(true)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) toast('Error', error.message)
+    else {
+      toast('Password updated', 'Your password has been changed.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    }
+    setChangingPassword(false)
   }
 
-  const accountRows = [
-    ['Company',      client?.name || '—'],
-    ['Industry',     client?.industry || '—'],
-    ['Plan',         client?.plan ? client.plan.charAt(0).toUpperCase() + client.plan.slice(1) + ' · Active' : '—'],
-    ['Contact',      client?.contact_name || '—'],
-    ['Email',        client?.contact_email || email || '—'],
-    ['Member Since', client ? new Date(client.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—'],
-  ]
+  const ink   = 'rgba(250,248,245,0.92)'
+  const ink2  = 'rgba(250,248,245,0.58)'
+  const ink3  = 'rgba(250,248,245,0.28)'
+  const rule  = 'rgba(250,248,245,0.07)'
+  const gold  = '#c9a84c'
+  const mono  = "'DM Mono',monospace"
+  const serif = "'Cormorant Garamond',serif"
+  const sans  = "'DM Sans',sans-serif"
 
-  const notifRows = [
-    { key: 'weekly',  label: 'Weekly performance summary' },
-    { key: 'leaks',   label: 'Alert when Biggest Leak exceeds $500' },
-    { key: 'reports', label: 'Notify when monthly report is ready' },
-    { key: 'sync',    label: 'Notify on every data sync' },
-  ]
+  const fi: React.CSSProperties = {
+    width: '100%', padding: '10px 13px',
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${rule}`,
+    borderRadius: 4, color: ink,
+    fontFamily: sans, fontSize: 13,
+  }
+
+  const sectionHead = (label: string) => (
+    <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 16, paddingBottom: 10, borderBottom: `1px solid ${rule}` }}>
+      {label}
+    </div>
+  )
+
+  const toggle = (val: boolean, set: (v: boolean) => void, label: string, sub: string) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: `1px solid rgba(250,248,245,0.04)` }}>
+      <div>
+        <div style={{ fontFamily: sans, fontSize: 13, color: ink, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px' }}>{sub}</div>
+      </div>
+      <div
+        onClick={() => set(!val)}
+        style={{ width: 42, height: 24, borderRadius: 12, background: val ? gold : 'rgba(255,255,255,0.08)', border: `1px solid ${val ? gold : rule}`, cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease, border-color 0.2s ease', flexShrink: 0 }}
+      >
+        <div style={{ position: 'absolute', top: 3, left: val ? 20 : 3, width: 16, height: 16, borderRadius: '50%', background: val ? '#050509' : 'rgba(250,248,245,0.3)', transition: 'left 0.2s ease' }} />
+      </div>
+    </div>
+  )
 
   return (
-    <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 11 }}>
+    <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      <style>{`
+        input::placeholder { color: rgba(250,248,245,0.18); }
+        input:focus { outline: none; border-color: rgba(201,168,76,0.4) !important; }
+      `}</style>
 
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '17px 20px' }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Account</div>
-        {accountRows.map(([k, v], i) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < accountRows.length - 1 ? '1px solid var(--rule)' : 'none' }}>
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>{k}</span>
-            <span style={{ fontSize: 12, fontWeight: 500 }}>{v}</span>
+      {/* Account */}
+      <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        {sectionHead('Account')}
+        <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Company / Brand</div>
+            <div style={{ ...fi, background: 'rgba(255,255,255,0.02)', color: ink3, cursor: 'default' }}>{client?.name || '—'}</div>
           </div>
-        ))}
-      </div>
-
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '17px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>Notifications</div>
-          {saving && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: 1 }}>Saving...</div>}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Plan</div>
+            <div style={{ ...fi, background: 'rgba(255,255,255,0.02)', color: ink3, cursor: 'default', textTransform: 'capitalize' }}>{client?.plan || '—'}</div>
+          </div>
         </div>
-        {notifRows.map((row, i) => (
-          <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: i < notifRows.length - 1 ? '1px solid var(--rule)' : 'none' }}>
-            <span style={{ fontSize: 12 }}>{row.label}</span>
-            <Toggle
-              on={notifs[row.key as keyof typeof notifs]}
-              onClick={() => toggleNotif(row.key)}
-            />
-          </div>
-        ))}
-      </div>
+        <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Login Email</div>
+        <div style={{ ...fi, background: 'rgba(255,255,255,0.02)', color: ink3, cursor: 'default', marginBottom: 14 }}>{authEmail || '—'}</div>
 
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '17px 20px' }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Appearance</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0' }}>
-          <span style={{ fontSize: 12 }}>Dark mode</span>
-          <Toggle on={dark} onClick={() => setDark(!dark)} />
+        <div style={{ display: 'flex', gap: 14, marginBottom: 20 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Contact Name</div>
+            <input style={fi} placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Contact Email</div>
+            <input style={fi} type="email" placeholder="Reports sent here" value={contactEmail} onChange={e => setContactEmail(e.target.value)} />
+          </div>
         </div>
+
+        <button
+          onClick={saveProfile}
+          disabled={saving}
+          style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '10px 22px', borderRadius: 4, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+        >
+          {saving ? 'Saving...' : 'Save Changes →'}
+        </button>
       </div>
 
-      <div style={{ background: 'var(--card)', border: '1px solid var(--redborder)', borderRadius: 8, padding: '17px 20px' }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--red)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Danger Zone</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>Disconnect all accounts</div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>Removes all OAuth tokens and halts data sync</div>
-          </div>
+      {/* Notifications */}
+      <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        {sectionHead('Notifications')}
+        {toggle(notifWeekly, setNotifWeekly, 'Monday Intelligence Brief', 'Weekly AI brief delivered to your inbox every Monday at 7AM')}
+        {toggle(notifLeaks, setNotifLeaks, 'Budget Leak Alerts', 'Notified when a new BLEEDING or DEAD campaign is detected')}
+        {toggle(notifReports, setNotifReports, 'Monthly Reports', 'Monthly performance summary and optimization blueprint')}
+        <div style={{ marginTop: 16 }}>
           <button
-            onClick={disconnectAll}
-            style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid var(--redborder)', background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--red)', letterSpacing: 1 }}>
-            Disconnect All
+            onClick={saveProfile}
+            disabled={saving}
+            style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '10px 22px', borderRadius: 4, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+          >
+            {saving ? 'Saving...' : 'Save Preferences →'}
           </button>
         </div>
       </div>
 
+      {/* Password */}
+      <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        {sectionHead('Change Password')}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>New Password</div>
+            <input type="password" style={fi} placeholder="Min. 6 characters" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+          </div>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Confirm New Password</div>
+            <input type="password" style={fi} placeholder="Repeat new password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+          </div>
+        </div>
+        <button
+          onClick={changePassword}
+          disabled={changingPassword}
+          style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: gold, border: 'none', padding: '10px 22px', borderRadius: 4, cursor: changingPassword ? 'not-allowed' : 'pointer', opacity: changingPassword ? 0.7 : 1 }}
+        >
+          {changingPassword ? 'Updating...' : 'Update Password →'}
+        </button>
+      </div>
+
+      {/* Platform info */}
+      <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '24px 26px' }}>
+        {sectionHead('Platform')}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {[
+            { label: 'Version', value: 'v1.1' },
+            { label: 'Status', value: client?.status || 'Active' },
+            { label: 'Support', value: 'intelligence@vngrdvisuals.com' },
+          ].map(item => (
+            <div key={item.label} style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${rule}`, borderRadius: 4 }}>
+              <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>{item.label}</div>
+              <div style={{ fontFamily: mono, fontSize: 9, color: ink2, letterSpacing: '0.5px' }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
