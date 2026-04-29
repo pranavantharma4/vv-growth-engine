@@ -1,14 +1,35 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
-    const { campaign } = await req.json()
+    const supabase = createRouteHandlerClient({ cookies })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { campaign, client_id } = await req.json()
     if (!campaign) return NextResponse.json({ error: 'Campaign data required' }, { status: 400 })
 
-    const client = new Anthropic()
+    // Get client context
+    let agencyContext = { isAgency: false, agencyName: '', brandName: '' }
+    if (client_id) {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('name, account_type, agency_name, white_label_reports')
+        .eq('id', client_id)
+        .single()
+      agencyContext = {
+        isAgency: !!(clientData?.white_label_reports || clientData?.account_type === 'agency'),
+        agencyName: clientData?.agency_name || '',
+        brandName: clientData?.name || '',
+      }
+    }
+
+    const anthropic = new Anthropic()
 
     const ctr = campaign.impressions > 0
       ? ((campaign.clicks / campaign.impressions) * 100).toFixed(2)
@@ -17,48 +38,46 @@ export async function POST(req: Request) {
       ? (campaign.spend / campaign.conversions).toFixed(2)
       : '0'
 
-    const message = await client.messages.create({
+    const systemPrompt = agencyContext.isAgency
+      ? `You are a senior paid media strategist at ${agencyContext.agencyName}. You are preparing an optimization blueprint for ${agencyContext.brandName}, a client of the agency. Write professionally and authoritatively — this will be delivered directly to the client. Use "we" for agency recommendations. Never reference any third-party tool or platform by name.`
+      : `You are a senior paid media strategist with 10+ years experience managing DTC ad accounts on Meta, Google, and TikTok. Be direct, specific, and professional.`
+
+    const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
+      system: systemPrompt,
       messages: [{
         role: 'user',
-        content: `You are a senior paid media strategist with 10+ years experience managing DTC ad accounts on Meta, Google, and TikTok.
-
-A client's campaign requires an optimization blueprint. Here are the campaign details:
+        content: `Generate a precise, actionable optimization blueprint for this campaign.
 
 Campaign: ${campaign.campaign_name}
 Platform: ${campaign.platform.toUpperCase()}
 Health Status: ${campaign.health.toUpperCase()}
 Monthly Spend: $${Number(campaign.spend).toLocaleString()}
-Monthly Revenue: $${Number(campaign.revenue).toLocaleString()}
+Monthly Revenue: $${Number(campaign.revenue || 0).toLocaleString()}
 ROAS: ${Number(campaign.roas).toFixed(2)}x
 CTR: ${ctr}%
 CPA: $${cpa}
-Conversions: ${campaign.conversions}
-Impressions: ${Number(campaign.impressions).toLocaleString()}
-Clicks: ${Number(campaign.clicks).toLocaleString()}
+Conversions: ${campaign.conversions || 0}
+Impressions: ${Number(campaign.impressions || 0).toLocaleString()}
+Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
 
-Generate a precise, actionable optimization blueprint. Structure your response exactly like this:
+Structure your response exactly like this:
 
 ## Diagnosis
-2-3 sentences on exactly what is wrong with this campaign and why.
+2-3 sentences on exactly what is happening and why, tied to the specific numbers.
 
 ## Priority Actions
-Number each action 1-5. Each action must be:
-- Specific (exact % changes, exact audiences, exact creative directions)
-- Measurable (state the expected impact)
-- Time-bound (state when to do it)
+Number each action 1-5. Each must be specific (exact % changes, exact audiences, exact creative directions), measurable (expected impact), and time-bound (when to do it).
 
 ## Budget Recommendation
-Exact budget allocation recommendation with reasoning.
+Exact budget allocation recommendation with reasoning tied to current ROAS and spend.
 
 ## 30-Day Projection
-If these actions are taken, what should the ROAS look like in 30 days? Be specific.
+Specific ROAS and revenue projection if actions are taken. Be precise.
 
 ## Red Flags to Watch
-2-3 specific metrics or signals that would indicate the campaign is not responding to optimization.
-
-Be direct, specific, and professional. No generic advice. Every recommendation must be tied to the specific numbers above.`
+2-3 specific metrics that would signal the campaign is not responding to optimization.`,
       }],
     })
 
