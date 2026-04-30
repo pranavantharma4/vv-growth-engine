@@ -1,258 +1,238 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState, Suspense, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill } from '@/app/dashboard/components'
-import { fmtMoney, roasColor } from '@/lib/types'
-import type { CampaignSnapshot } from '@/lib/types'
-import { exportAnalysisPDF } from '@/lib/exportPDF'
+import { useApp } from '../context'
 
-const FALLBACK: Record<string, string> = {
-  dead: 'This campaign is spending at a loss on every dollar — ROAS below break-even indicates a fundamental mismatch between audience, creative, and objective. The longer this runs the more budget is destroyed. Pause immediately and redirect the full spend to your strongest performing campaign while you diagnose the root cause.',
-  bleeding: 'Performance is deteriorating and approaching total loss territory. The most common cause at this stage is audience saturation — the same people are seeing this ad repeatedly with diminishing response. Reduce budget by 50% within 48 hours to stem the bleed, then either refresh the creative or expand the audience pool before reassessing in 14 days.',
-  strong: 'This campaign is working — the creative-audience match is producing strong returns and the algorithm has found its rhythm. The primary risk now is complacency. Scale budget 20-30% incrementally, monitor CPM closely for signs of audience saturation, and begin testing new creative variants so you have a backup ready when performance eventually softens.',
-  weak: 'Performance has settled at a level that is neither growing nor collapsing — a sign of creative fatigue rather than a structural problem. The audience has seen enough of this ad that marginal response has declined. Introduce 2-3 fresh creative variants, tighten the audience targeting, and reassess with 14 days of fresh data before drawing conclusions.',
+type Campaign = {
+  id: string
+  campaign_name: string
+  platform: string
+  health: string
+  spend: number
+  roas: number
+  revenue: number
+  impressions: number
+  clicks: number
+  conversions: number
 }
 
-const ACTIONS: Record<string, string> = {
-  dead: 'Pause immediately. Redirect 100% of budget to your strongest campaign. This campaign needs a structural rebuild before reactivation.',
-  bleeding: 'Reduce budget by 50% within 48 hours. Refresh creative assets or expand audience. Pause entirely if ROAS does not recover within 14 days.',
-  strong: 'Scale budget 20-30% this week. Monitor CPM daily for the first 7 days. Prepare new creative variants to deploy when saturation signals appear.',
-  weak: 'Introduce new creative variants within 7 days. Tighten audience targeting. Reassess with 14 days of fresh data before making structural changes.',
-}
-
-function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div data-metric={label} style={{ background: 'var(--card2)', borderRadius: 5, padding: '8px 6px', textAlign: 'center' }}>
-      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: color || 'var(--ink)' }}>{value}</div>
-    </div>
-  )
-}
-
-function AnalysisContent() {
-  const { client } = useApp()
+export default function AnalysisPage() {
   const supabase = createClientComponentClient()
-  const params = useSearchParams()
-  const preId = params.get('id')
+  const { client, toast } = useApp()
 
-  const [camps, setCamps] = useState<CampaignSnapshot[]>([])
-  const [selected, setSelected] = useState<CampaignSnapshot | null>(null)
-  const [analysis, setAnalysis] = useState('')
-  const [action, setAction] = useState('')
-  const [analyzing, setAnalyzing] = useState(false)
-  const [isCached, setIsCached] = useState(false)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [selected, setSelected] = useState<Campaign | null>(null)
+  const [analysis, setAnalysis] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const pick = useCallback(async (c: CampaignSnapshot, force = false) => {
-    setSelected(c)
-    setAnalysis('')
-    setAction('')
-    setAnalyzing(true)
-    setIsCached(false)
-
-    if (!force) {
-      const cutoff = new Date(Date.now() - 86400000).toISOString()
-      const { data: hit } = await supabase
-        .from('ai_analyses')
-        .select('analysis, recommended_action')
-        .eq('client_id', client!.id)
-        .eq('campaign_id', c.campaign_id)
-        .gte('analyzed_at', cutoff)
-        .order('analyzed_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (hit) {
-        setAnalysis(hit.analysis)
-        setAction(hit.recommended_action || ACTIONS[c.health])
-        setIsCached(true)
-        setAnalyzing(false)
-        return
-      }
-    }
-
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaign: c, clientId: client!.id }),
-      })
-      if (!res.ok) throw new Error('API error ' + res.status)
-      const data = await res.json()
-      setAnalysis(data.analysis || FALLBACK[c.health])
-      setAction(data.recommended_action || ACTIONS[c.health])
-    } catch (err) {
-      console.error('Analysis fetch error:', err)
-      setAnalysis(FALLBACK[c.health])
-      setAction(ACTIONS[c.health])
-    }
-    setAnalyzing(false)
-  }, [client, supabase])
+  const [analyzing, setAnalyzing] = useState(false)
 
   useEffect(() => {
+    if (client) load()
+  }, [client])
+
+  async function load() {
     if (!client) return
+    setLoading(true)
     const today = new Date().toISOString().split('T')[0]
-    supabase
+    const { data } = await supabase
       .from('campaign_snapshots')
       .select('*')
       .eq('client_id', client.id)
       .eq('snapshot_date', today)
       .order('spend', { ascending: false })
-      .then(({ data }) => {
-        const list = data || []
-        setCamps(list)
-        setLoading(false)
-        if (preId && list.length > 0) {
-          const found = list.find((c: CampaignSnapshot) => c.campaign_id === preId)
-          if (found) pick(found)
-        }
+    setCampaigns(data || [])
+    setLoading(false)
+  }
+
+  async function analyze() {
+    if (!selected || !client) return
+    setAnalyzing(true)
+    setAnalysis(null)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaign: selected,
+          client_id: client.id,
+          all_campaigns: campaigns, // pass full portfolio for context
+        }),
       })
-  }, [client])
+      const data = await res.json()
+      if (!res.ok) { toast('Error', data.error); return }
+      setAnalysis(data.analysis)
+    } catch (e: any) {
+      toast('Error', e.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
+  const ink   = 'rgba(250,248,245,0.92)'
+  const ink2  = 'rgba(250,248,245,0.58)'
+  const ink3  = 'rgba(250,248,245,0.28)'
+  const rule  = 'rgba(250,248,245,0.07)'
+  const gold  = '#c9a84c'
+  const mono  = "'DM Mono',monospace"
+  const serif = "'Cormorant Garamond',serif"
+  const sans  = "'DM Sans',sans-serif"
 
-      {/* Campaign list */}
-      <div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, fontWeight: 400, marginBottom: 12 }}>Select Campaign</div>
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
-          {loading ? (
-            <div style={{ padding: 20, fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>Loading campaigns...</div>
-          ) : camps.length === 0 ? (
-            <div style={{ padding: 20, fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>No campaigns found. Sync your ad account first.</div>
-          ) : camps.map((c, i) => (
-            <div
-              key={c.id}
-              onClick={() => pick(c)}
-              style={{
-                padding: '11px 14px',
-                borderBottom: i < camps.length - 1 ? '1px solid var(--rule)' : 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: selected?.id === c.id ? 'var(--goldpaper)' : 'transparent',
-                borderLeft: '2px solid ' + (selected?.id === c.id ? 'var(--gold)' : 'transparent'),
-                transition: 'background .1s',
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, lineHeight: 1.3 }}>{c.campaign_name}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <PlatPill platform={c.platform} />
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>{fmtMoney(Number(c.spend))}</span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                <Pill health={c.health} />
-                <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 14, color: roasColor(Number(c.roas)) }}>{Number(c.roas).toFixed(1)}x</span>
-              </div>
-            </div>
-          ))}
-        </div>
+  const healthColor = (h: string) => ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' }[h] || ink3)
+  const healthBg    = (h: string) => ({ strong: 'rgba(74,222,128,0.08)', weak: 'rgba(251,191,36,0.08)', bleeding: 'rgba(251,146,60,0.08)', dead: 'rgba(248,113,113,0.08)' }[h] || 'transparent')
+  const platColor: Record<string, string> = { meta: '#1877f2', google: '#ea4335', tiktok: '#00f2ea' }
+  const fmt = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`
 
-        <div style={{ padding: '10px 12px', background: 'var(--card2)', border: '1px solid var(--rule)', borderRadius: 6 }}>
-          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 8 }}>Health Classification</div>
-          {[['strong','ROAS >= 3.0x'],['weak','ROAS >= 1.5x'],['bleeding','ROAS >= 0.8x'],['dead','ROAS < 0.8x']].map(([h, desc]) => (
-            <div key={h} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-              <Pill health={h} />
-              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>{desc}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Analysis panel */}
-      <div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, fontWeight: 400, marginBottom: 12 }}>Diagnosis</div>
-
-        {!selected ? (
-          <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: 32, minHeight: 280, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 56, color: 'var(--bg3)', marginBottom: 12, lineHeight: 1 }}>◉</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 300, color: 'var(--ink2)', marginBottom: 6 }}>Select a campaign</div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px' }}>Click any campaign on the left to generate a Claude AI diagnosis</div>
+  function renderAnalysis(text: string) {
+    return text.split('\n').map((line, i) => {
+      if (line.startsWith('## ')) {
+        return (
+          <div key={i} style={{ fontFamily: serif, fontSize: 20, color: ink, marginTop: i === 0 ? 0 : 28, marginBottom: 10, paddingTop: i === 0 ? 0 : 22, borderTop: i === 0 ? 'none' : `1px solid ${rule}` }}>
+            {line.replace('## ', '')}
           </div>
-        ) : (
-          <div id="analysis-export">
-            {/* Metrics */}
-            <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '16px 18px', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 5 }}>{selected.campaign_name}</div>
-                  <PlatPill platform={selected.platform} />
-                </div>
-                <Pill health={selected.health} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
-                <MetricCard label="Spend"  value={fmtMoney(Number(selected.spend))} />
-                <MetricCard label="Impr."  value={(Number(selected.impressions)/1000).toFixed(0)+'k'} />
-                <MetricCard label="CTR"    value={Number(selected.ctr||0).toFixed(2)+'%'} />
-                <MetricCard label="Conv."  value={String(selected.conversions)} />
-                <MetricCard label="ROAS"   value={Number(selected.roas).toFixed(1)+'x'} color={roasColor(Number(selected.roas))} />
-              </div>
-            </div>
-
-            {/* Claude output */}
-            <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '18px 20px', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--goldlt)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>Analysis — Claude AI</div>
-                {isCached && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', padding: '2px 7px', background: 'var(--card2)', borderRadius: 3, letterSpacing: 1 }}>CACHED</span>}
-              </div>
-              {analyzing ? (
-                <div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 10 }}>
-                    {[96,88,80,68].map(w => (
-                      <div key={w} style={{ height: 11, borderRadius: 3, background: 'var(--bg3)', width: w+'%', animation: 'sh 1.5s ease infinite' }} />
-                    ))}
-                  </div>
-                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1 }}>Claude is analyzing your campaign data...</div>
-                  <style>{`@keyframes sh{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
-                </div>
-              ) : (
-                <div data-analysis style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.9 }}>{analysis}</div>
-              )}
-            </div>
-
-            {/* Action */}
-            {action && !analyzing && (
-              <div style={{ background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderLeft: '3px solid var(--gold)', borderRadius: 8, padding: '14px 18px', marginBottom: 12 }}>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--goldlt)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 8 }}>Recommended Action</div>
-                <div data-action style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink2)', lineHeight: 1.75 }}>{action}</div>
-              </div>
-            )}
-
-            {/* Buttons */}
-            {!analyzing && analysis && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                <button
-                  onClick={async () => {
-                    await supabase.from('ai_analyses').delete().eq('client_id', client!.id).eq('campaign_id', selected.campaign_id)
-                    pick(selected, true)
-                  }}
-                  style={{ padding: '6px 14px', border: '1px solid var(--rule2)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1 }}>
-                  Re-analyze
-                </button>
-                <button
-                  onClick={() => exportAnalysisPDF(selected.campaign_name, selected.platform)}
-                  style={{ padding: '6px 14px', border: 'none', borderRadius: 5, background: 'var(--gold)', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#faf8f5', letterSpacing: 1 }}>
-                  Export PDF
-                </button>
-              </div>
-            )}
+        )
+      }
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <div key={i} style={{ fontFamily: sans, fontSize: 13, color: ink, fontWeight: 600, marginBottom: 6 }}>{line.replace(/\*\*/g, '')}</div>
+      }
+      if (line.match(/^\d+\./)) {
+        return (
+          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontFamily: mono, fontSize: 8, color: gold, flexShrink: 0, marginTop: 4, letterSpacing: '1px', minWidth: 16 }}>{line.match(/^\d+/)?.[0]}.</span>
+            <span style={{ fontSize: 13, color: ink2, lineHeight: 1.82 }}>{line.replace(/^\d+\./, '').trim()}</span>
           </div>
-        )}
-      </div>
+        )
+      }
+      if (line.startsWith('- ')) {
+        return (
+          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+            <span style={{ color: ink3, flexShrink: 0, marginTop: 5, fontSize: 8 }}>—</span>
+            <span style={{ fontSize: 13, color: ink2, lineHeight: 1.82 }}>{line.replace('- ', '')}</span>
+          </div>
+        )
+      }
+      if (line.trim() === '') return <div key={i} style={{ height: 8 }} />
+      return <p key={i} style={{ fontSize: 13, color: ink2, lineHeight: 1.82, marginBottom: 8 }}>{line}</p>
+    })
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '2px', textTransform: 'uppercase' }}>Loading campaigns...</div>
     </div>
   )
-}
 
-export default function AnalysisPage() {
   return (
-    <Suspense fallback={<div style={{ fontFamily:"'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>Loading...</div>}>
-      <AnalysisContent />
-    </Suspense>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Intelligence</div>
+        <div style={{ fontFamily: serif, fontSize: 28, fontWeight: 300, color: ink, marginBottom: 4 }}>AI Analysis</div>
+        <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '1px' }}>
+          Select a campaign — Claude diagnoses exactly what's happening, why, and what to do. Includes portfolio context across all your campaigns.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16 }}>
+
+        {/* Campaign list */}
+        <div>
+          <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 10 }}>Select Campaign</div>
+          {campaigns.length === 0 ? (
+            <div style={{ padding: '24px', background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, textAlign: 'center' }}>
+              <div style={{ fontFamily: serif, fontSize: 16, color: ink, marginBottom: 8 }}>No campaigns today</div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>Connect Meta Ads or add campaigns manually</div>
+            </div>
+          ) : campaigns.map(c => (
+            <div
+              key={c.id}
+              onClick={() => { setSelected(c); setAnalysis(null) }}
+              style={{ padding: '12px 14px', marginBottom: 6, background: selected?.id === c.id ? 'rgba(201,168,76,0.08)' : 'var(--bg2)', border: `1px solid ${selected?.id === c.id ? 'rgba(201,168,76,0.3)' : rule}`, borderRadius: 6, cursor: 'pointer', transition: 'all 0.12s ease' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                <div style={{ fontFamily: sans, fontSize: 11, color: ink, fontWeight: selected?.id === c.id ? 500 : 400, flex: 1, marginRight: 8, lineHeight: 1.4 }}>
+                  {c.campaign_name}
+                </div>
+                <span style={{ fontFamily: mono, fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthColor(c.health)}33`, padding: '2px 6px', borderRadius: 2, flexShrink: 0 }}>
+                  {c.health}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontFamily: mono, fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[c.platform] || '#444', padding: '1px 5px', borderRadius: 2 }}>
+                  {c.platform.toUpperCase()}
+                </span>
+                <span style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>{fmt(Number(c.spend))}</span>
+                <span style={{ fontFamily: serif, fontSize: 13, color: healthColor(c.health) }}>{Number(c.roas).toFixed(1)}x</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Analysis output */}
+        <div>
+          {!selected ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 300, background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontFamily: serif, fontSize: 22, color: ink, marginBottom: 10 }}>Select a campaign</div>
+                <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '1px' }}>
+                  Choose any campaign to get a full AI diagnosis
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* Campaign header */}
+              <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '16px 20px', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>Selected</div>
+                    <div style={{ fontFamily: serif, fontSize: 20, color: ink, marginBottom: 6 }}>{selected.campaign_name}</div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: mono, fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[selected.platform] || '#444', padding: '2px 6px', borderRadius: 2 }}>{selected.platform.toUpperCase()}</span>
+                      <span style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>{fmt(Number(selected.spend))}/mo spend</span>
+                      <span style={{ fontFamily: mono, fontSize: 8, color: ink3 }}>{fmt(Number(selected.revenue || 0))}/mo revenue</span>
+                      <span style={{ fontFamily: serif, fontSize: 15, color: healthColor(selected.health) }}>{Number(selected.roas).toFixed(2)}x ROAS</span>
+                      <span style={{ fontFamily: mono, fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(selected.health), background: healthBg(selected.health), border: `1px solid ${healthColor(selected.health)}33`, padding: '2px 6px', borderRadius: 2 }}>{selected.health}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={analyze}
+                    disabled={analyzing}
+                    style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: analyzing ? 'rgba(201,168,76,0.5)' : gold, border: 'none', padding: '11px 24px', borderRadius: 4, cursor: analyzing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {analyzing ? 'Analyzing...' : analysis ? 'Re-analyze →' : 'Analyze Campaign →'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Analyzing state */}
+              {analyzing && (
+                <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '52px', textAlign: 'center' }}>
+                  <div style={{ fontFamily: mono, fontSize: 8, color: gold, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Claude is analyzing...</div>
+                  <div style={{ fontFamily: serif, fontSize: 18, color: ink2, marginBottom: 8 }}>Deep-reading your campaign data</div>
+                  <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', lineHeight: 1.8 }}>
+                    Diagnosing funnel performance · Comparing to portfolio · Identifying root causes
+                  </div>
+                </div>
+              )}
+
+              {/* Analysis output */}
+              {analysis && !analyzing && (
+                <div style={{ background: 'var(--bg2)', border: `1px solid ${rule}`, borderRadius: 6, padding: '26px 28px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, paddingBottom: 16, borderBottom: `1px solid ${rule}` }}>
+                    <div>
+                      <div style={{ fontFamily: mono, fontSize: 7, color: gold, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>AI Campaign Analysis</div>
+                      <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '1px' }}>
+                        Powered by Claude · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · Portfolio context included
+                      </div>
+                    </div>
+                  </div>
+                  <div>{renderAnalysis(analysis)}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
