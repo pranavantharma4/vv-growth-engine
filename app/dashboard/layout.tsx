@@ -62,13 +62,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (justLoggedIn) {
       sessionStorage.removeItem('vv_just_logged_in')
       setPortalDone(false)
-      setPortalPhase(0)
       const t: ReturnType<typeof setTimeout>[] = []
       t.push(setTimeout(() => setPortalPhase(1), 60))
       t.push(setTimeout(() => setPortalPhase(2), 440))
       t.push(setTimeout(() => setPortalPhase(3), 820))
       t.push(setTimeout(() => setPortalPhase(4), 1020))
-      t.push(setTimeout(() => { setPortalDone(true) }, 1420))
+      t.push(setTimeout(() => setPortalDone(true), 1420))
       return () => t.forEach(clearTimeout)
     }
   }, [])
@@ -88,8 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname])
 
   useEffect(() => {
-    const routes = NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
-    routes.forEach(r => router.prefetch(r))
+    NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id)).forEach(r => router.prefetch(r))
   }, [])
 
   function toast(title: string, body: string) {
@@ -134,13 +132,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!client) { toast('No client', 'Select a client first.'); return }
     if (syncing) return
     const { data: conn } = await supabase
-      .from('ad_connections')
-      .select('id, platform, is_active, expires_at')
-      .eq('client_id', client.id)
-      .eq('platform', 'meta')
-      .eq('is_active', true)
-      .single()
-    if (!conn) { toast('No connection', 'Connect a Meta Ads account first under Connections.'); return }
+      .from('ad_connections').select('id,platform,is_active,expires_at')
+      .eq('client_id', client.id).eq('platform', 'meta').eq('is_active', true).single()
+    if (!conn) { toast('No connection', 'Connect a Meta Ads account under Connections.'); return }
     if (conn.expires_at && new Date(conn.expires_at) < new Date()) { toast('Token expired', 'Meta connection expired. Please reconnect.'); return }
     setSyncing(true)
     toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
@@ -152,26 +146,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       })
       const data = await res.json()
       if (!res.ok || data.error) toast('Sync failed', data.error || 'Something went wrong.')
-      else toast('Sync complete', `${data.campaigns_synced} campaigns updated from Meta Ads.`)
-    } catch { toast('Sync failed', 'Network error. Please try again.') }
+      else toast('Sync complete', `${data.campaigns_synced} campaigns updated.`)
+    } catch { toast('Sync failed', 'Network error.') }
     finally { setSyncing(false) }
   }
 
   useEffect(() => {
-    const savedDark = localStorage.getItem('vv_dark')
+    // Restore saved mode preferences
+    const savedDark    = localStorage.getItem('vv_dark')
     const savedMinimal = localStorage.getItem('vv_minimal')
-    // Default to dark mode
+
     if (savedDark === '0') {
       setDarkState(false)
       document.body.classList.add('light')
+      document.body.classList.remove('dark')
     } else {
       setDarkState(true)
       document.body.classList.remove('light')
     }
+
     if (savedMinimal === '1') {
       setMinimalState(true)
       document.body.classList.add('minimal')
     }
+
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
@@ -195,35 +193,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isActive = (id: string) => {
     const t = '/dashboard' + (id === 'dashboard' ? '' : '/' + id)
-    if (navTarget) return navTarget === t
-    return page === id
+    return navTarget ? navTarget === t : page === id
   }
 
-  const G = '#c9a84c'
-  const INK = 'rgba(245,243,239,0.95)'
-  const I3 = 'rgba(245,243,239,0.28)'
-  const I4 = 'rgba(245,243,239,0.11)'
-  const MONO = "'DM Mono',monospace"
+  const MONO  = "'DM Mono',monospace"
   const SERIF = "'Cormorant Garamond',serif"
+  const I3    = 'rgba(245,243,239,0.28)'
+  const I4    = 'rgba(245,243,239,0.11)'
+  const G     = '#c9a84c'
+  const INK   = 'rgba(245,243,239,0.95)'
 
-  const symVisible  = portalPhase === 1
-  const vvVisible   = portalPhase >= 2 && portalPhase <= 4
-  const tagVisible  = portalPhase >= 3
-  const overlayOn   = portalPhase < 4
+  const symVisible = portalPhase === 1
+  const vvVisible  = portalPhase >= 2 && portalPhase <= 4
+  const tagVisible = portalPhase >= 3
+  const overlayOn  = portalPhase < 4
 
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
 
-      {/* Portal intro */}
+      {/* ─── PORTAL INTRO ─── */}
       {!portalDone && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#020203', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: overlayOn ? 1 : 0, transition: portalPhase >= 4 ? 'opacity 0.42s cubic-bezier(0.4,0,0.6,1)' : 'none', pointerEvents: portalPhase >= 4 ? 'none' : 'all', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', inset: 0, opacity: 0.035, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E\")", backgroundSize: '200px', pointerEvents: 'none' }} />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#020203', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: overlayOn ? 1 : 0, transition: portalPhase >= 4 ? 'opacity 0.42s cubic-bezier(0.4,0,0.6,1)' : 'none', pointerEvents: portalPhase >= 4 ? 'none' : 'all' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,168,76,0.04) 0%, transparent 70%)', opacity: vvVisible ? 1 : 0, transition: 'opacity 1.8s ease', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(-72px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1)', opacity: 0.28 }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) translateY(76px)', height: '1px', width: portalPhase >= 1 ? '240px' : '0', background: `linear-gradient(to right,transparent,${G},transparent)`, transition: 'width 1.2s cubic-bezier(0.16,1,0.3,1) 0.12s', opacity: 0.28 }} />
-          <div style={{ position: 'absolute', display: 'flex', alignItems: 'center', gap: 24, opacity: symVisible ? 1 : 0, transition: symVisible ? 'opacity 0.18s ease' : 'opacity 0.12s ease' }}>
-            {[{ s: '↑', c: 'rgba(74,222,128,0.65)', d: '0ms' }, { s: '·', c: 'rgba(245,243,239,0.14)', d: '50ms' }, { s: '↓', c: 'rgba(248,113,113,0.65)', d: '100ms' }].map((x, i) => (
-              <span key={i} style={{ fontFamily: MONO, fontSize: 12, color: x.c, opacity: symVisible ? 1 : 0, transform: symVisible ? 'none' : 'translateY(3px)', transition: `opacity 0.18s ease ${x.d}, transform 0.18s ease ${x.d}` }}>{x.s}</span>
+          <div style={{ position: 'absolute', display: 'flex', alignItems: 'center', gap: 24, opacity: symVisible ? 1 : 0, transition: 'opacity 0.18s ease' }}>
+            {[{ s: '↑', c: 'rgba(74,222,128,0.65)' }, { s: '·', c: 'rgba(245,243,239,0.14)' }, { s: '↓', c: 'rgba(248,113,113,0.65)' }].map((x, i) => (
+              <span key={i} style={{ fontFamily: MONO, fontSize: 12, color: x.c }}>{x.s}</span>
             ))}
           </div>
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -242,84 +236,177 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <style>{`
         * { box-sizing: border-box; }
-        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+        body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-        @keyframes contentIn { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
-        @keyframes contentOut { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-5px)} }
-        .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; }
-        .content-out { animation: contentOut 0.09s ease both; pointer-events: none; }
+        /* ── TAB TRANSITIONS ── */
+        @keyframes contentIn  { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes contentOut { from{opacity:1;transform:translateY(0)}  to{opacity:0;transform:translateY(-4px)} }
+        .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; will-change: opacity,transform; }
+        .content-out { animation: contentOut 0.09s ease both; pointer-events: none; will-change: opacity,transform; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        .nav-btn { transition: background-color 0.1s ease, border-color 0.1s ease, opacity 0.1s ease; transform: translateZ(0); backface-visibility: hidden; }
+        /* ── NAV ── */
+        .nav-btn {
+          transform: translateZ(0);
+          backface-visibility: hidden;
+          transition: background-color 0.15s ease, border-color 0.15s ease;
+          border: none;
+          outline: none;
+        }
         .nav-btn:hover { background-color: rgba(255,255,255,0.055) !important; }
-        .nav-btn:active { transform: scale(0.975) translateZ(0) !important; }
-        .nav-icon { transition: color 0.12s ease; }
-        .nav-label { transition: color 0.12s ease; }
+        .nav-btn:active { transform: scale(0.975) translateZ(0) !important; transition: transform 0.08s ease !important; }
 
-        .dropdown-item { transition: background-color 0.1s ease; }
-        .dropdown-item:hover { background-color: rgba(255,255,255,0.06) !important; }
-        .client-switcher { transition: background-color 0.12s ease; }
-        .client-switcher:hover { background-color: rgba(255,255,255,0.05) !important; }
+        /* ── MINIMAL — smooth transitions ── */
+        .min-hide {
+          overflow: hidden;
+          opacity: 1;
+          max-height: 400px;
+          transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+        body.minimal .min-hide {
+          opacity: 0 !important;
+          max-height: 0 !important;
+          pointer-events: none;
+        }
+        .nav-section-label {
+          overflow: hidden;
+          max-height: 40px;
+          opacity: 1;
+          transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1), padding 0.35s ease;
+        }
+        body.minimal .nav-section-label {
+          opacity: 0 !important;
+          max-height: 0 !important;
+          padding: 0 !important;
+        }
+        .main-scroll {
+          transition: padding 0.4s cubic-bezier(0.4,0,0.2,1);
+          padding: 24px 26px;
+        }
+        body.minimal .main-scroll {
+          padding: 14px 18px !important;
+        }
+        .stat-card {
+          transition: padding 0.4s ease, font-size 0.4s ease;
+        }
+        body.minimal .stat-card {
+          padding: 12px 14px !important;
+        }
+        body.minimal .stat-val {
+          font-size: 26px !important;
+        }
+        .header-sub {
+          overflow: hidden;
+          max-height: 30px;
+          opacity: 1;
+          transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1);
+        }
+        body.minimal .header-sub {
+          opacity: 0 !important;
+          max-height: 0 !important;
+        }
+        .sync-btn {
+          overflow: hidden;
+          max-width: 120px;
+          opacity: 1;
+          transition: opacity 0.35s ease, max-width 0.45s ease;
+        }
+        body.minimal .sync-btn {
+          opacity: 0 !important;
+          max-width: 0 !important;
+          pointer-events: none;
+        }
+        .sidebar-logo-text {
+          overflow: hidden;
+          max-width: 200px;
+          opacity: 1;
+          transition: opacity 0.35s ease, max-width 0.45s ease;
+        }
+        body.minimal .sidebar-logo-text {
+          opacity: 0 !important;
+          max-width: 0 !important;
+        }
 
-        @keyframes dropIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-        .client-dropdown { animation: dropIn 0.14s cubic-bezier(0.16,1,0.3,1) both; }
-
-        button { transform: translateZ(0); transition: opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, transform 0.1s ease; }
-        button:active { transform: scale(0.97) translateZ(0) !important; }
-
-        ::-webkit-scrollbar { width: 3px; height: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.09); border-radius: 2px; }
-
-        .main-scroll { overflow-y: auto; overscroll-behavior: contain; transform: translateZ(0); }
-        .sidebar { transform: translateZ(0); will-change: auto; }
-        .toast-wrap { will-change: transform, opacity; transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease; }
-
-        /* Mode toggle buttons */
-        .mode-btn { padding: 3px 8px; border-radius: 3px; cursor: pointer; font-family: 'DM Mono',monospace; font-size: 7px; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: rgba(250,248,245,0.45); transition: all 0.15s ease; }
-        .mode-btn.active { background: rgba(201,168,76,0.12); border-color: rgba(201,168,76,0.3); color: #c9a84c; }
+        /* ── MODE BUTTONS ── */
+        .mode-btn {
+          flex: 1;
+          padding: 4px 8px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-family: 'DM Mono', monospace;
+          font-size: 7px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          border: 1px solid rgba(255,255,255,0.09);
+          background: rgba(255,255,255,0.04);
+          color: rgba(250,248,245,0.38);
+          transition: all 0.18s ease;
+          white-space: nowrap;
+        }
+        .mode-btn.active {
+          background: rgba(201,168,76,0.14);
+          border-color: rgba(201,168,76,0.32);
+          color: #c9a84c;
+        }
         .mode-btn:hover { background: rgba(255,255,255,0.08); }
 
-        /* Minimal mode */
-        body.minimal .minimal-hide { display: none !important; }
-        body.minimal .main-scroll { padding: 16px 20px !important; }
+        /* ── DROPDOWN ── */
+        @keyframes dropIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+        .client-dropdown { animation: dropIn 0.14s cubic-bezier(0.16,1,0.3,1) both; }
+        .dropdown-item { transition: background 0.1s ease; }
+        .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
+        .client-sw { transition: background 0.12s ease; }
+        .client-sw:hover { background: rgba(255,255,255,0.05) !important; }
+
+        /* ── BUTTONS ── */
+        button { transform: translateZ(0); }
+        button:active { transform: scale(0.97) translateZ(0) !important; transition: transform 0.08s ease !important; }
+
+        /* ── SCROLLBAR ── */
+        ::-webkit-scrollbar { width: 3px; height: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--rule2); border-radius: 2px; }
+
+        /* ── TOAST ── */
+        .toast-wrap {
+          will-change: transform, opacity;
+          transition: transform 0.32s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease;
+        }
 
         * { -webkit-tap-highlight-color: transparent; }
       `}</style>
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-        {/* SIDEBAR */}
-        <aside className="sidebar" style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
+        {/* ─── SIDEBAR ─── */}
+        <aside style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)', transform: 'translateZ(0)' }}>
 
           {/* Logo */}
-          <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--sb-rule)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2 }}>VV</span>
-              <div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>Vanguard Visuals</div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: 'rgba(250,248,245,0.25)', marginTop: 2 }}>Growth Ad Engine</div>
-              </div>
+          <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--sb-rule)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: SERIF, fontSize: 27, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2, flexShrink: 0 }}>VV</span>
+            <div className="sidebar-logo-text">
+              <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Vanguard Visuals</div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 8, color: 'rgba(250,248,245,0.2)', marginTop: 1, whiteSpace: 'nowrap' }}>Growth Ad Engine</div>
             </div>
           </div>
 
           {/* Client switcher */}
-          <div className="client-switcher" onClick={() => setDropdown(d => !d)} style={{ margin: '12px 12px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 12px', cursor: 'pointer', position: 'relative' }}>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
+          <div className="client-sw" onClick={() => setDropdown(d => !d)} style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
+            <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client?.name || 'Loading...'}</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client?.name || 'Loading...'}</div>
+                <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
               </div>
-              <span style={{ color: 'rgba(250,248,245,0.3)', fontSize: 10, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+              <span style={{ color: 'rgba(250,248,245,0.28)', fontSize: 10, flexShrink: 0, marginLeft: 6, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
             </div>
             {dropdown && clients.length > 1 && (
               <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                 {clients.map((c: Client) => (
-                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
+                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }} style={{ padding: '10px 11px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
                     <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
                   </div>
                 ))}
               </div>
@@ -327,18 +414,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           {/* Nav */}
-          <nav style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
+          <nav style={{ flex: 1, padding: '4px 8px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
               const active = isActive(item.id)
               const target = '/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id)
               return (
                 <div key={item.id}>
                   {item.section && (
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '12px 10px 5px' }}>{item.section}</div>
+                    <div className="nav-section-label" style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', padding: '10px 9px 4px' }}>
+                      {item.section}
+                    </div>
                   )}
-                  <button className="nav-btn" onClick={() => navigate(target)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 5, border: 'none', borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-                    <span className="nav-icon" style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)' }}>{item.icon}</span>
-                    <span className="nav-label" style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                  <button
+                    className="nav-btn"
+                    onClick={() => navigate(target)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 5, borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                  >
+                    <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', flexShrink: 0, transition: 'color 0.15s ease' }}>{item.icon}</span>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.15s ease' }}>{item.label}</span>
                   </button>
                 </div>
               )
@@ -346,53 +439,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
 
           {/* Footer */}
-          <div style={{ padding: '11px 15px', borderTop: '1px solid var(--sb-rule)' }}>
-            {/* Live indicator */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ padding: '10px 14px', borderTop: '1px solid var(--sb-rule)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4c8b4c', animation: 'pulse 2.5s ease infinite' }} />
-                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', animation: 'pulse 2.5s ease infinite' }} />
+                <span style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
               </div>
-              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'rgba(250,248,245,0.25)', padding: 4 }}>✕</button>
+              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.22)', padding: 3 }}>✕</button>
             </div>
-            {/* Mode toggles */}
             <div style={{ display: 'flex', gap: 5 }}>
-              <button
-                className={`mode-btn ${dark ? '' : 'active'}`}
-                onClick={() => setDark(!dark)}
-                style={{ flex: 1 }}
-              >
+              <button className={`mode-btn ${!dark ? 'active' : ''}`} onClick={() => setDark(!dark)}>
                 {dark ? 'Dark' : 'Light'}
               </button>
-              <button
-                className={`mode-btn ${minimal ? 'active' : ''}`}
-                onClick={() => setMinimal(!minimal)}
-                style={{ flex: 1 }}
-              >
+              <button className={`mode-btn ${minimal ? 'active' : ''}`} onClick={() => setMinimal(!minimal)}>
                 {minimal ? 'Full' : 'Minimal'}
               </button>
             </div>
           </div>
         </aside>
 
-        {/* MAIN */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <header style={{ padding: '15px 26px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+        {/* ─── MAIN ─── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)', transition: 'background 0.35s ease' }}>
+
+          {/* Header */}
+          <header style={{ padding: '13px 24px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
             <div>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, letterSpacing: 0.8, color: 'var(--ink)' }}>{title}</div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 3 }}>{subtitle}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 300, letterSpacing: 0.5, color: 'var(--ink)', transition: 'color 0.35s ease' }}>{title}</div>
+              <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2, transition: 'color 0.35s ease' }}>{subtitle}</div>
             </div>
-            <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-              <button onClick={handleSync} disabled={syncing} style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button className="sync-btn" onClick={handleSync} disabled={syncing} style={{ fontFamily: MONO, fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap', transition: 'color 0.3s ease, border-color 0.3s ease, background 0.3s ease' }}>
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1, transition: 'color 0.35s ease, border-color 0.35s ease' }}>
                 {now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </div>
             </div>
           </header>
 
-          <main className="main-scroll" style={{ flex: 1, padding: '24px 26px', background: 'var(--bg)' }}>
+          {/* Content */}
+          <main className="main-scroll" style={{ flex: 1, overflow: 'auto', background: 'var(--bg)', transition: 'background 0.35s ease, padding 0.4s cubic-bezier(0.4,0,0.2,1)' }}>
             <div key={contentKey} className={navTarget ? 'content-out' : 'content-in'}>
               {children}
             </div>
@@ -400,10 +486,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* Toast */}
-      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: '#faf8f5', marginBottom: 3 }}>{toastData.title}</div>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'rgba(250,248,245,0.55)', lineHeight: 1.5 }}>{toastData.body}</div>
+      {/* ─── TOAST ─── */}
+      <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', marginBottom: 3 }}>{toastData.title}</div>
+        <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--sb-muted)', lineHeight: 1.5 }}>{toastData.body}</div>
       </div>
 
     </AppCtx.Provider>
