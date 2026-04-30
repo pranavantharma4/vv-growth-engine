@@ -5,19 +5,17 @@
 /* ─── DARK (default) ─── */
 :root {
   --bg:          #050509;
-  --bg2:         #0f0e12;
+  --bg2:         rgba(255,255,255,0.025);
   --sb:          #0c0a0e;
   --sb-rule:     rgba(255,255,255,0.07);
   --sb-text:     rgba(250,248,245,0.92);
   --sb-muted:    rgba(250,248,245,0.28);
   --rule:        rgba(255,255,255,0.07);
-  --rule2:       rgba(255,255,255,0.09);
+  --rule2:       rgba(255,255,255,0.10);
   --ink:         rgba(250,248,245,0.92);
   --ink2:        rgba(250,248,245,0.60);
   --ink3:        rgba(250,248,245,0.32);
   --ink4:        rgba(250,248,245,0.12);
-  --card:        #0f0e12;
-  --card2:       #13111a;
   --gold:        #c9a84c;
   --goldlt:      #c9a84c;
   --goldpaper:   rgba(201,168,76,0.08);
@@ -36,33 +34,31 @@
 
 /* ─── LIGHT ─── */
 body.light {
-  --bg:          #f0ede8;
-  --bg2:         #e8e4de;
+  --bg:          #f2efe9;
+  --bg2:         #e9e5de;
   --sb:          #141210;
   --sb-rule:     rgba(255,255,255,0.08);
   --sb-text:     rgba(250,248,245,0.92);
-  --sb-muted:    rgba(250,248,245,0.38);
-  --rule:        rgba(0,0,0,0.10);
-  --rule2:       rgba(0,0,0,0.13);
-  --ink:         rgba(12,10,8,0.90);
-  --ink2:        rgba(12,10,8,0.60);
-  --ink3:        rgba(12,10,8,0.38);
-  --ink4:        rgba(12,10,8,0.14);
-  --card:        #e8e4de;
-  --card2:       #dedad3;
+  --sb-muted:    rgba(250,248,245,0.40);
+  --rule:        rgba(0,0,0,0.09);
+  --rule2:       rgba(0,0,0,0.14);
+  --ink:         rgba(14,11,8,0.90);
+  --ink2:        rgba(14,11,8,0.62);
+  --ink3:        rgba(14,11,8,0.40);
+  --ink4:        rgba(14,11,8,0.15);
   --gold:        #8a6820;
   --goldlt:      #c9a84c;
-  --goldpaper:   rgba(138,104,32,0.08);
-  --goldborder:  rgba(138,104,32,0.20);
+  --goldpaper:   rgba(138,104,32,0.09);
+  --goldborder:  rgba(138,104,32,0.22);
   --green:       #166534;
-  --greenpaper:  rgba(22,101,52,0.08);
-  --greenborder: rgba(22,101,52,0.20);
+  --greenpaper:  rgba(22,101,52,0.09);
+  --greenborder: rgba(22,101,52,0.22);
   --amber:       #9a3412;
-  --amberpaper:  rgba(154,52,18,0.08);
-  --amberborder: rgba(154,52,18,0.20);
+  --amberpaper:  rgba(154,52,18,0.09);
+  --amberborder: rgba(154,52,18,0.22);
   --red:         #b91c1c;
-  --redpaper:    rgba(185,28,28,0.08);
-  --redborder:   rgba(185,28,28,0.20);
+  --redpaper:    rgba(185,28,28,0.09);
+  --redborder:   rgba(185,28,28,0.22);
   --warn:        #92400e;
 }
 
@@ -76,103 +72,37 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition:
-    background 0.35s ease,
-    color 0.35s ease;
+  transition: background 0.35s ease, color 0.35s ease;
 }
 
 /* ─── SCROLLBAR ─── */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--rule2); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--ink4); }
 
-/* ─── INPUTS — always use CSS vars ─── */
+/* ─── INPUTS — always CSS vars ─── */
 input, select, textarea {
   background: var(--bg2) !important;
   border: 1px solid var(--rule) !important;
   color: var(--ink) !important;
   font-family: 'DM Sans', sans-serif;
-  transition: border-color 0.15s ease, background 0.3s ease;
+  transition: border-color 0.15s ease, background 0.3s ease, color 0.3s ease;
 }
 input::placeholder, textarea::placeholder { color: var(--ink3) !important; }
 input:focus, select:focus, textarea:focus {
-  outline: none;
+  outline: none !important;
   border-color: var(--goldborder) !important;
+  box-shadow: none !important;
 }
 select option { background: var(--sb); color: var(--sb-text); }
 
-/* ─── MINIMAL MODE ─── */
-/*
-  Minimal mode works by adding body.minimal which triggers
-  CSS transitions on layout elements. No JS state changes needed.
-  Everything transitions with cubic-bezier for smoothness.
-*/
-
-/* Elements hidden in minimal */
-body.minimal .min-hide {
-  opacity: 0;
-  pointer-events: none;
-  max-height: 0 !important;
-  overflow: hidden;
-  margin: 0 !important;
-  padding: 0 !important;
-  transition:
-    opacity 0.4s ease,
-    max-height 0.5s cubic-bezier(0.4,0,0.2,1),
-    margin 0.4s ease,
-    padding 0.4s ease;
-}
-
-/* Elements visible in normal, hidden in minimal */
-.min-hide {
-  opacity: 1;
-  max-height: 500px;
-  overflow: hidden;
-  transition:
-    opacity 0.4s ease,
-    max-height 0.5s cubic-bezier(0.4,0,0.2,1),
-    margin 0.4s ease,
-    padding 0.4s ease;
-}
-
-/* Compact padding in minimal */
-body.minimal .main-scroll {
-  padding: 16px 20px !important;
-}
-
-/* Stat cards compact in minimal */
-body.minimal .stat-card {
-  padding: 12px 14px !important;
-}
-body.minimal .stat-val {
-  font-size: 26px !important;
-}
-
-/* Nav compacts in minimal */
-body.minimal .nav-section-label {
-  display: none !important;
-}
-body.minimal .nav-btn {
-  padding: 6px 9px !important;
-}
-
-/* Header compact in minimal */
-body.minimal .header-sub {
-  display: none !important;
-}
-
-/* Smooth all transitions platform-wide */
-body, .main-scroll, header, aside, nav, footer,
-div[style*="background"], div[style*="border"],
-span[style*="color"] {
-  transition-property: background, color, border-color, opacity, padding, margin, font-size;
+/* ─── TRANSITIONS for light/dark switch ─── */
+div, span, p, button, a, header, aside, nav, main, footer {
+  transition-property: background-color, color, border-color;
   transition-duration: 0.3s;
   transition-timing-function: ease;
 }
-
-/* Prevent transition on layout-critical properties that cause jitter */
-div[style*="display:grid"], div[style*="display: grid"],
-div[style*="display:flex"], div[style*="display: flex"] {
-  transition: none;
+/* Don't transition layout properties — causes jitter */
+div[style*="grid"], div[style*="flex"] {
+  transition-property: background-color, color, border-color;
 }
