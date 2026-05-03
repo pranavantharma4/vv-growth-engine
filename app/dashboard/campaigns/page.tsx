@@ -1,118 +1,165 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '@/app/dashboard/context'
-import { Pill, PlatPill, StatCard } from '@/app/dashboard/components'
-import { fmtMoney, roasColor } from '@/lib/types'
-import type { CampaignSnapshot } from '@/lib/types'
+import { useApp } from '../context'
+
+type Campaign = {
+  id: string
+  campaign_name: string
+  platform: string
+  health: string
+  spend: number
+  roas: number
+  revenue: number
+  impressions: number
+  clicks: number
+  conversions: number
+  snapshot_date: string
+}
 
 export default function CampaignsPage() {
-  const { client } = useApp()
   const supabase = createClientComponentClient()
-  const router = useRouter()
-  const [camps, setCamps] = useState<CampaignSnapshot[]>([])
-  const [filter, setFilter] = useState('all')
+  const { client } = useApp()
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<string>('all')
+  const [platform, setPlatform] = useState<string>('all')
 
-  useEffect(() => {
+  useEffect(() => { if (client) load() }, [client])
+
+  async function load() {
     if (!client) return
-    const today = new Date().toISOString().split('T')[0];
-    (async () => {
-      const { data } = await supabase
-        .from('campaign_snapshots')
-        .select('*')
-        .eq('client_id', client.id)
-        .eq('snapshot_date', today)
-        .order('spend', { ascending: false })
-      setCamps(data || [])
-      setLoading(false)
-    })()
-  }, [client])
+    setLoading(true)
+    const today = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('campaign_snapshots')
+      .select('*')
+      .eq('client_id', client.id)
+      .eq('snapshot_date', today)
+      .order('spend', { ascending: false })
+    setCampaigns(data || [])
+    setLoading(false)
+  }
 
-  const platforms = Array.from(new Set(camps.map(c => c.platform)))
-  const filtered = filter === 'all' ? camps
-    : filter === 'issues' ? camps.filter(c => c.health === 'dead' || c.health === 'bleeding')
-    : camps.filter(c => c.platform === filter)
+  const filtered = campaigns.filter(c => {
+    const healthMatch = filter === 'all' || c.health === filter
+    const platMatch = platform === 'all' || c.platform === platform
+    return healthMatch && platMatch
+  })
 
-  const strong = camps.filter(c => c.health === 'strong' || c.health === 'weak').length
-  const issues = camps.filter(c => c.health === 'dead' || c.health === 'bleeding').length
-  const best   = camps.length ? Math.max(...camps.map(c => Number(c.roas))) : 0
-  const worst  = camps.length ? Math.min(...camps.map(c => Number(c.roas))) : 0
+  const totalSpend   = filtered.reduce((s, c) => s + Number(c.spend), 0)
+  const totalRevenue = filtered.reduce((s, c) => s + Number(c.revenue), 0)
+  const blendedRoas  = totalSpend > 0 ? totalRevenue / totalSpend : 0
 
-  const FILTERS = ['all', ...platforms, 'issues']
-  const FLBL: Record<string, string> = { all: 'All', meta: 'Meta', google: 'Google', tiktok: 'TikTok', linkedin: 'LinkedIn', issues: 'Issues' }
+  const healthColor  = (h: string) => ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' }[h] || 'var(--ink3)')
+  const healthBg     = (h: string) => ({ strong: 'rgba(74,222,128,0.08)', weak: 'rgba(251,191,36,0.08)', bleeding: 'rgba(251,146,60,0.08)', dead: 'rgba(248,113,113,0.08)' }[h] || 'transparent')
+  const healthBorder = (h: string) => ({ strong: 'rgba(74,222,128,0.2)', weak: 'rgba(251,191,36,0.2)', bleeding: 'rgba(251,146,60,0.2)', dead: 'rgba(248,113,113,0.2)' }[h] || 'var(--rule)')
+  const platColor: Record<string, string> = { meta: '#1877f2', google: '#ea4335', tiktok: '#00f2ea' }
+  const platLabel: Record<string, string> = { meta: 'Meta', google: 'Google', tiktok: 'TikTok' }
+  const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Number(n).toLocaleString()}`
+  const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Loading campaigns...</div>
+    </div>
+  )
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 11, marginBottom: 20 }}>
-        <StatCard label="Healthy"    value={String(strong)} hint="Performing or stable" type="good" />
-        <StatCard label="Issues"     value={String(issues)} hint="Require attention"    type="warn" />
-        <StatCard label="Best ROAS"  value={best.toFixed(1) + 'x'} hint="Top campaign" type="gold" />
-        <StatCard label="Worst ROAS" value={worst.toFixed(1) + 'x'} hint="Needs review" type="warn" />
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <style>{`
+        /* Minimal mode for campaigns page */
+        body.minimal .camp-filters { opacity: 0; max-height: 0; overflow: hidden; margin-bottom: 0 !important; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
+        .camp-filters { opacity: 1; max-height: 80px; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; margin-bottom: 16px; }
+        body.minimal .camp-extra-cols { opacity: 0; max-width: 0; overflow: hidden; transition: opacity 0.3s ease, max-width 0.4s ease; }
+        .camp-extra-cols { opacity: 1; max-width: 200px; transition: opacity 0.3s ease, max-width 0.4s ease; }
+        body.minimal .camp-summary { opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.3s ease, max-height 0.4s ease; }
+        .camp-summary { opacity: 1; max-height: 80px; transition: opacity 0.3s ease, max-height 0.4s ease; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Overview</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Campaigns</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>All active campaigns · classified by health · sorted by spend</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 2, border: '1px solid var(--rule2)', borderRadius: 6, padding: 3, background: 'var(--card2)', marginBottom: 14, width: 'fit-content' }}>
-        {FILTERS.map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            style={{ padding: '5px 12px', borderRadius: 4, border: 'none', background: filter === f ? 'var(--card)' : 'transparent', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: 1, color: filter === f ? 'var(--ink)' : 'var(--ink3)', textTransform: 'uppercase' }}>
-            {FLBL[f] || f}
-          </button>
+      {/* Filters */}
+      <div className="camp-filters" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {/* Health filter */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['all', 'strong', 'weak', 'bleeding', 'dead'].map(h => (
+            <button key={h} onClick={() => setFilter(h)}
+              style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 3, border: `1px solid ${filter === h ? (h === 'all' ? 'var(--goldborder)' : healthBorder(h)) : 'var(--rule)'}`, background: filter === h ? (h === 'all' ? 'var(--goldpaper)' : healthBg(h)) : 'transparent', color: filter === h ? (h === 'all' ? 'var(--gold)' : healthColor(h)) : 'var(--ink3)', cursor: 'pointer', transition: 'all 0.15s ease' }}>
+              {h}
+            </button>
+          ))}
+        </div>
+        {/* Platform filter */}
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          {['all', 'meta', 'google', 'tiktok'].map(p => (
+            <button key={p} onClick={() => setPlatform(p)}
+              style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 3, border: `1px solid ${platform === p ? 'var(--goldborder)' : 'var(--rule)'}`, background: platform === p ? 'var(--goldpaper)' : 'transparent', color: platform === p ? 'var(--gold)' : 'var(--ink3)', cursor: 'pointer', transition: 'all 0.15s ease' }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ background: 'var(--bg2)', padding: '11px 18px', borderBottom: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8 }}>
+          {['Campaign', 'Platform', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Health'].map(h => (
+            <div key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>{h}</div>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ padding: '48px', textAlign: 'center' }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: 'var(--ink)', marginBottom: 8 }}>No campaigns match</div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Try changing the filter above</div>
+          </div>
+        ) : filtered.map((c, i) => (
+          <div key={c.id || i} style={{ padding: '12px 18px', borderBottom: i < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8, alignItems: 'center', transition: 'background 0.1s ease' }}
+            onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg2)'}
+            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+          >
+            <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.campaign_name}
+            </div>
+            <div>
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[c.platform] || '#444', padding: '2px 6px', borderRadius: 2 }}>
+                {(platLabel[c.platform] || c.platform).toUpperCase()}
+              </span>
+            </div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink)' }}>{fmt(Number(c.spend))}</div>
+            <div className="camp-extra-cols" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{fmt(Number(c.revenue))}</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: Number(c.roas) >= 3 ? '#4ade80' : Number(c.roas) >= 1.5 ? '#fbbf24' : '#f87171' }}>{fmtRoas(Number(c.roas))}</div>
+            <div className="camp-extra-cols" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{Number(c.conversions).toLocaleString()}</div>
+            <div>
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthBorder(c.health)}`, padding: '2px 6px', borderRadius: 2 }}>
+                {c.health}
+              </span>
+            </div>
+          </div>
         ))}
       </div>
 
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule2)', borderRadius: 8, overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ padding: 32, fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', textAlign: 'center' }}>
-            Loading campaigns...
+      {/* Summary */}
+      <div className="camp-summary" style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Showing', value: `${filtered.length} campaigns` },
+          { label: 'Total Spend', value: fmt(totalSpend) },
+          { label: 'Total Revenue', value: fmt(totalRevenue) },
+          { label: 'Blended ROAS', value: fmtRoas(blendedRoas) },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 4, padding: '9px 16px', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: 'var(--ink)' }}>{s.value}</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{s.label}</span>
           </div>
-        ) : camps.length === 0 ? (
-          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, color: 'var(--bg3)', marginBottom: 12, lineHeight: 1 }}>◫</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 300, color: 'var(--ink2)', marginBottom: 8 }}>No campaigns yet</div>
-            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: 1, marginBottom: 16 }}>Connect a Meta Ads account and sync to see your campaigns here</div>
-            <button onClick={() => router.push('/dashboard/connect')}
-              style={{ padding: '7px 16px', border: 'none', borderRadius: 5, background: 'var(--gold)', color: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: 1 }}>
-              Connect Ad Account →
-            </button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)' }}>
-            No campaigns match this filter.
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Campaign', 'Platform', 'Spend', 'CTR', 'Conv.', 'ROAS', 'Health', 'Analyze', 'Optimize'].map(h => (
-                  <th key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: 2, textTransform: 'uppercase', padding: '9px 12px', borderBottom: '1px solid var(--rule2)', textAlign: ['Spend', 'CTR', 'Conv.', 'ROAS'].includes(h) ? 'right' : ['Health', 'Analyze', 'Optimize'].includes(h) ? 'center' : 'left', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c, i) => (
-                <tr key={c.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--rule)' : 'none' }}>
-                  <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 500 }}>{c.campaign_name}</td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center' }}><PlatPill platform={c.platform} /></td>
-                  <td style={{ padding: '11px 12px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--ink2)' }}>{fmtMoney(Number(c.spend))}</td>
-                  <td style={{ padding: '11px 12px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--ink2)' }}>{Number(c.ctr || 0).toFixed(2)}%</td>
-                  <td style={{ padding: '11px 12px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--ink2)' }}>{c.conversions}</td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center', fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: roasColor(Number(c.roas)) }}>{Number(c.roas).toFixed(1)}x</td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center' }}><Pill health={c.health} /></td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center' }}>
-                    <button onClick={() => router.push('/dashboard/analysis?id=' + c.campaign_id)}
-                      style={{ padding: '3px 9px', borderRadius: 3, fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', border: '1px solid var(--goldborder)', background: 'var(--goldpaper)', cursor: 'pointer' }}>Analyze</button>
-                  </td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center' }}>
-                    <button onClick={() => router.push('/dashboard/optimize?id=' + c.campaign_id)}
-                      style={{ padding: '3px 9px', borderRadius: 3, fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink2)', border: '1px solid var(--rule2)', background: 'var(--card2)', cursor: 'pointer' }}>Optimize</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        ))}
       </div>
     </div>
   )
