@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { Resend } from 'resend'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,14 +12,23 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: cu } = await supabase
+    // Use limit(1) not single() — admin may have multiple client rows
+    const { data: cuRows } = await supabase
       .from('client_users')
       .select('role')
       .eq('user_id', user.id)
-      .single()
-    if (cu?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      .eq('role', 'admin')
+      .limit(1)
 
-    const { name, email, company, plan, monthly_spend, notes, invite_id, account_type, agency_name } = await req.json()
+    if (!cuRows || cuRows.length === 0) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const {
+      name, email, company, plan, monthly_spend,
+      notes, invite_id, account_type, agency_name
+    } = await req.json()
+
     if (!name || !email) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
 
     const supabaseAdmin = createClient(
@@ -27,15 +37,27 @@ export async function POST(req: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { name, company },
-    })
-    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 400 })
+    // Check if user already exists
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const existingUser = existingUsers?.users?.find(u => u.email === email)
+
+    let authUserId: string
+
+    if (existingUser) {
+      authUserId = existingUser.id
+    } else {
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { name, company },
+      })
+      if (authErr) return NextResponse.json({ error: authErr.message }, { status: 400 })
+      authUserId = authUser.user.id
+    }
 
     const isAgency = account_type === 'agency'
 
+    // Create client record
     const { data: clientRecord, error: clientErr } = await supabaseAdmin
       .from('clients')
       .insert({
@@ -55,14 +77,26 @@ export async function POST(req: Request) {
       })
       .select()
       .single()
+
     if (clientErr) return NextResponse.json({ error: clientErr.message }, { status: 400 })
 
-    await supabaseAdmin.from('client_users').insert({
-      user_id: authUser.user.id,
-      client_id: clientRecord.id,
-      role: isAgency ? 'admin' : 'client',
-    })
+    // Link user to client — check if already linked first
+    const { data: existingLink } = await supabaseAdmin
+      .from('client_users')
+      .select('id')
+      .eq('user_id', authUserId)
+      .eq('client_id', clientRecord.id)
+      .limit(1)
 
+    if (!existingLink || existingLink.length === 0) {
+      await supabaseAdmin.from('client_users').insert({
+        user_id: authUserId,
+        client_id: clientRecord.id,
+        role: isAgency ? 'admin' : 'client',
+      })
+    }
+
+    // Create onboarding record
     try {
       await supabaseAdmin.from('onboarding').insert({
         client_id: clientRecord.id,
@@ -71,6 +105,7 @@ export async function POST(req: Request) {
       })
     } catch (_) {}
 
+    // Mark invite accepted
     if (invite_id) {
       await supabaseAdmin
         .from('client_invites')
@@ -78,6 +113,7 @@ export async function POST(req: Request) {
         .eq('id', invite_id)
     }
 
+    // Generate magic link
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
@@ -87,37 +123,46 @@ export async function POST(req: Request) {
     })
     if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 400 })
 
-    const { Resend } = await import('resend')
+    // Send welcome email
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json({ success: true, client_id: clientRecord.id, warning: 'Email not sent — RESEND_API_KEY missing' })
+    }
+
     const resend = new Resend(process.env.RESEND_API_KEY)
-
-    const subjectLine = isAgency
-      ? `Your VV Growth Ad Engine agency portal is ready`
-      : `Your VV Growth Ad Engine access is ready`
-
-    const welcomeMessage = isAgency
-      ? `Your agency account on VV Growth Ad Engine is ready. You can now connect your clients' ad accounts, generate white-labelled intelligence briefs, and manage all their campaigns from one place.`
-      : `Your VV Growth Ad Engine account is ready. Connect your ad accounts and receive your first intelligence brief on Monday morning.`
+    const isAgencyAccount = account_type === 'agency'
 
     await resend.emails.send({
       from: 'Vanguard Visuals <intelligence@vngrdvisuals.com>',
       to: email,
-      subject: subjectLine,
+      subject: isAgencyAccount
+        ? 'Your VV Growth Ad Engine agency portal is ready'
+        : 'Your VV Growth Ad Engine access is ready',
       html: `
         <!DOCTYPE html>
         <html>
         <body style="margin:0;padding:0;background:#050509;font-family:'DM Sans',Arial,sans-serif;color:#faf8f5;">
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#050509;padding:48px 24px;">
             <tr><td align="center">
-              <table width="560" cellpadding="0" cellspacing="0" style="background:#0c0b0f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
+              <table width="560" cellpadding="0" cellspacing="0" style="background:#0c0b0f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;max-width:560px;">
                 <tr><td style="padding:36px 40px 0;">
                   <div style="font-family:'Georgia',serif;font-size:36px;font-weight:300;font-style:italic;color:#faf8f5;letter-spacing:2px;margin-bottom:4px;">VV</div>
-                  <div style="font-size:9px;color:rgba(250,248,245,0.35);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;">Vanguard Visuals · Growth Ad Engine${isAgency ? ' · Agency Portal' : ''}</div>
+                  <div style="font-size:9px;color:rgba(250,248,245,0.35);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;">
+                    Vanguard Visuals · Growth Ad Engine${isAgencyAccount ? ' · Agency Portal' : ''}
+                  </div>
                   <div style="font-size:9px;color:rgba(201,168,76,0.6);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px;">You're in.</div>
-                  <div style="font-family:'Georgia',serif;font-size:26px;font-weight:300;color:#faf8f5;margin-bottom:18px;line-height:1.3;">Welcome${isAgency ? ` to the agency portal` : ''}, ${name}.</div>
-                  <div style="font-size:14px;color:rgba(250,248,245,0.55);line-height:1.85;margin-bottom:28px;">${welcomeMessage}</div>
+                  <div style="font-family:'Georgia',serif;font-size:26px;font-weight:300;color:#faf8f5;margin-bottom:18px;line-height:1.3;">
+                    Welcome${isAgencyAccount ? ' to the agency portal' : ''}, ${name}.
+                  </div>
+                  <div style="font-size:14px;color:rgba(250,248,245,0.55);line-height:1.85;margin-bottom:28px;">
+                    ${isAgencyAccount
+                      ? 'Your agency account is ready. Connect your clients\' ad accounts, generate white-labelled intelligence briefs, and manage all their campaigns from one place.'
+                      : 'Your VV Growth Ad Engine account is ready. Connect your ad accounts and receive your first intelligence brief on Monday morning.'
+                    }
+                  </div>
                 </td></tr>
                 <tr><td style="padding:0 40px 20px;">
-                  <a href="${linkData.properties.action_link}" style="display:inline-block;background:#c9a84c;color:#050509;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:14px 32px;border-radius:4px;font-family:'Courier New',monospace;">
+                  <a href="${linkData.properties.action_link}" 
+                     style="display:inline-block;background:#c9a84c;color:#050509;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:14px 32px;border-radius:4px;font-family:'Courier New',monospace;">
                     Enter Your Portal →
                   </a>
                 </td></tr>
@@ -139,6 +184,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, client_id: clientRecord.id })
   } catch (e: any) {
+    console.error('Create client error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
