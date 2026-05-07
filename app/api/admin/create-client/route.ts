@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Use limit(1) not single() — admin may have multiple client rows
+    // Use limit(1) with role filter — works even when admin has multiple client rows
     const { data: cuRows } = await supabase
       .from('client_users')
       .select('role')
@@ -29,7 +29,9 @@ export async function POST(req: Request) {
       notes, invite_id, account_type, agency_name
     } = await req.json()
 
-    if (!name || !email) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
+    if (!name || !email) {
+      return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
+    }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,10 +39,9 @@ export async function POST(req: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Check if user already exists
+    // Check if auth user already exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
     const existingUser = existingUsers?.users?.find(u => u.email === email)
-
     let authUserId: string
 
     if (existingUser) {
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
 
     if (clientErr) return NextResponse.json({ error: clientErr.message }, { status: 400 })
 
-    // Link user to client — check if already linked first
+    // Link user to client — check if already linked
     const { data: existingLink } = await supabaseAdmin
       .from('client_users')
       .select('id')
@@ -121,66 +122,94 @@ export async function POST(req: Request) {
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?onboarding=1`,
       },
     })
-    if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 400 })
 
-    // Send welcome email
-    if (!process.env.RESEND_API_KEY) {
-      return NextResponse.json({ success: true, client_id: clientRecord.id, warning: 'Email not sent — RESEND_API_KEY missing' })
+    if (linkErr) {
+      console.error('Magic link error:', linkErr)
+      return NextResponse.json({ error: linkErr.message }, { status: 400 })
     }
 
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    const isAgencyAccount = account_type === 'agency'
+    // Send welcome email from team@vngrdvisuals.com
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY not set')
+      return NextResponse.json({
+        success: true,
+        client_id: clientRecord.id,
+        warning: 'Account created but email not sent — RESEND_API_KEY missing',
+      })
+    }
 
-    await resend.emails.send({
-      from: 'Vanguard Visuals <intelligence@vngrdvisuals.com>',
-      to: email,
-      subject: isAgencyAccount
-        ? 'Your VV Growth Ad Engine agency portal is ready'
-        : 'Your VV Growth Ad Engine access is ready',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <body style="margin:0;padding:0;background:#050509;font-family:'DM Sans',Arial,sans-serif;color:#faf8f5;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#050509;padding:48px 24px;">
-            <tr><td align="center">
-              <table width="560" cellpadding="0" cellspacing="0" style="background:#0c0b0f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;max-width:560px;">
-                <tr><td style="padding:36px 40px 0;">
-                  <div style="font-family:'Georgia',serif;font-size:36px;font-weight:300;font-style:italic;color:#faf8f5;letter-spacing:2px;margin-bottom:4px;">VV</div>
-                  <div style="font-size:9px;color:rgba(250,248,245,0.35);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;">
-                    Vanguard Visuals · Growth Ad Engine${isAgencyAccount ? ' · Agency Portal' : ''}
-                  </div>
-                  <div style="font-size:9px;color:rgba(201,168,76,0.6);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px;">You're in.</div>
-                  <div style="font-family:'Georgia',serif;font-size:26px;font-weight:300;color:#faf8f5;margin-bottom:18px;line-height:1.3;">
-                    Welcome${isAgencyAccount ? ' to the agency portal' : ''}, ${name}.
-                  </div>
-                  <div style="font-size:14px;color:rgba(250,248,245,0.55);line-height:1.85;margin-bottom:28px;">
-                    ${isAgencyAccount
-                      ? 'Your agency account is ready. Connect your clients\' ad accounts, generate white-labelled intelligence briefs, and manage all their campaigns from one place.'
-                      : 'Your VV Growth Ad Engine account is ready. Connect your ad accounts and receive your first intelligence brief on Monday morning.'
-                    }
-                  </div>
-                </td></tr>
-                <tr><td style="padding:0 40px 20px;">
-                  <a href="${linkData.properties.action_link}" 
-                     style="display:inline-block;background:#c9a84c;color:#050509;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:14px 32px;border-radius:4px;font-family:'Courier New',monospace;">
-                    Enter Your Portal →
-                  </a>
-                </td></tr>
-                <tr><td style="padding:0 40px 36px;">
-                  <div style="font-size:12px;color:rgba(250,248,245,0.3);line-height:1.7;margin-top:12px;">
-                    This link expires in 24 hours. Questions? Reply here or contact intelligence@vngrdvisuals.com
-                  </div>
-                  <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;color:rgba(250,248,245,0.2);letter-spacing:1px;">
-                    Vanguard Visuals · Confidential Client Portal · vngrdvisuals.com
-                  </div>
-                </td></tr>
-              </table>
-            </td></tr>
-          </table>
-        </body>
-        </html>
-      `,
-    })
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY)
+
+      const emailResult = await resend.emails.send({
+        from: 'Vanguard Visuals <team@vngrdvisuals.com>',
+        to: email,
+        subject: isAgency
+          ? 'Your VV Growth Ad Engine agency portal is ready'
+          : 'Your VV Growth Ad Engine access is ready',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <body style="margin:0;padding:0;background:#050509;font-family:'DM Sans',Arial,sans-serif;color:#faf8f5;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#050509;padding:48px 24px;">
+              <tr><td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="background:#0c0b0f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;max-width:560px;">
+                  <tr><td style="padding:36px 40px 0;">
+                    <div style="font-family:'Georgia',serif;font-size:36px;font-weight:300;font-style:italic;color:#faf8f5;letter-spacing:2px;margin-bottom:4px;">VV</div>
+                    <div style="font-size:9px;color:rgba(250,248,245,0.35);letter-spacing:3px;text-transform:uppercase;margin-bottom:32px;">
+                      Vanguard Visuals · Growth Ad Engine${isAgency ? ' · Agency Portal' : ''}
+                    </div>
+                    <div style="font-size:9px;color:rgba(201,168,76,0.6);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px;">You're in.</div>
+                    <div style="font-family:'Georgia',serif;font-size:26px;font-weight:300;color:#faf8f5;margin-bottom:18px;line-height:1.3;">
+                      Welcome${isAgency ? ' to the agency portal' : ''}, ${name}.
+                    </div>
+                    <div style="font-size:14px;color:rgba(250,248,245,0.55);line-height:1.85;margin-bottom:28px;">
+                      ${isAgency
+                        ? "Your agency account is ready. Connect your clients' ad accounts, generate white-labelled intelligence briefs, and manage all their campaigns from one place."
+                        : 'Your VV Growth Ad Engine account is ready. Click the button below to set up your account and start seeing intelligence on your campaigns.'
+                      }
+                    </div>
+                  </td></tr>
+                  <tr><td style="padding:0 40px 20px;">
+                    <a href="${linkData.properties.action_link}"
+                       style="display:inline-block;background:#c9a84c;color:#050509;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:1.5px;padding:14px 32px;border-radius:4px;font-family:'Courier New',monospace;">
+                      Set Up Your Account →
+                    </a>
+                  </td></tr>
+                  <tr><td style="padding:0 40px 36px;">
+                    <div style="font-size:12px;color:rgba(250,248,245,0.3);line-height:1.7;margin-top:4px;">
+                      This link expires in 24 hours. Questions? Reply to this email or contact team@vngrdvisuals.com
+                    </div>
+                    <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;color:rgba(250,248,245,0.2);letter-spacing:1px;">
+                      Vanguard Visuals · Confidential Client Portal · vngrdvisuals.com
+                    </div>
+                  </td></tr>
+                </table>
+              </td></tr>
+            </table>
+          </body>
+          </html>
+        `,
+      })
+
+      console.log('Resend result:', JSON.stringify(emailResult))
+
+      if (emailResult.error) {
+        console.error('Resend error:', emailResult.error)
+        return NextResponse.json({
+          success: true,
+          client_id: clientRecord.id,
+          email_error: emailResult.error.message,
+        })
+      }
+    } catch (emailErr: any) {
+      console.error('Email failed:', emailErr.message)
+      return NextResponse.json({
+        success: true,
+        client_id: clientRecord.id,
+        email_error: emailErr.message,
+      })
+    }
 
     return NextResponse.json({ success: true, client_id: clientRecord.id })
   } catch (e: any) {

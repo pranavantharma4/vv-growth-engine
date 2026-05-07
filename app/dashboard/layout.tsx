@@ -87,7 +87,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname])
 
   useEffect(() => {
-    NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id)).forEach(r => router.prefetch(r))
+    NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
+      .forEach(r => router.prefetch(r))
   }, [])
 
   function toast(title: string, body: string) {
@@ -110,21 +111,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   function setDark(v: boolean) {
     setDarkState(v)
-    if (v) {
-      document.body.classList.remove('light')
-    } else {
-      document.body.classList.add('light')
-    }
+    if (v) document.body.classList.remove('light')
+    else document.body.classList.add('light')
     localStorage.setItem('vv_dark', v ? '1' : '0')
   }
 
   function setMinimal(v: boolean) {
     setMinimalState(v)
-    if (v) {
-      document.body.classList.add('minimal')
-    } else {
-      document.body.classList.remove('minimal')
-    }
+    if (v) document.body.classList.add('minimal')
+    else document.body.classList.remove('minimal')
     localStorage.setItem('vv_minimal', v ? '1' : '0')
   }
 
@@ -132,16 +127,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!client) { toast('No client', 'Select a client first.'); return }
     if (syncing) return
     const { data: conn } = await supabase
-      .from('ad_connections').select('id,platform,is_active,expires_at')
-      .eq('client_id', client.id).eq('platform', 'meta').eq('is_active', true).single()
+      .from('ad_connections')
+      .select('id, platform, is_active, expires_at')
+      .eq('client_id', client.id)
+      .eq('platform', 'meta')
+      .eq('is_active', true)
+      .single()
     if (!conn) { toast('No connection', 'Connect a Meta Ads account under Connections.'); return }
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) { toast('Token expired', 'Meta connection expired. Please reconnect.'); return }
+    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
+      toast('Token expired', 'Meta connection expired. Please reconnect.')
+      return
+    }
     setSyncing(true)
     toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-meta-campaigns`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify({ client_id: client.id }),
       })
       const data = await res.json()
@@ -155,16 +160,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Restore saved mode preferences
     const savedDark    = localStorage.getItem('vv_dark')
     const savedMinimal = localStorage.getItem('vv_minimal')
-
     if (savedDark === '0') {
       setDarkState(false)
       document.body.classList.add('light')
-      document.body.classList.remove('dark')
     } else {
       setDarkState(true)
       document.body.classList.remove('light')
     }
-
     if (savedMinimal === '1') {
       setMinimalState(true)
       document.body.classList.add('minimal')
@@ -173,13 +175,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: cu } = await supabase.from('client_users').select('role').eq('user_id', user.id).limit(1).single()
-      setIsAdmin(cu?.role === 'admin')
-      const { data: cd } = await supabase.from('clients').select('*').order('name')
+
+      // Get this user's roles across all linked clients
+      const { data: allRoles } = await supabase
+        .from('client_users')
+        .select('role, client_id')
+        .eq('user_id', user.id)
+
+      if (!allRoles || allRoles.length === 0) {
+        router.push('/login')
+        return
+      }
+
+      // Admin if they have admin role on ANY client
+      const hasAdminRole = allRoles.some(r => r.role === 'admin')
+      setIsAdmin(hasAdminRole)
+
+      // Fetch ONLY the clients this user is linked to
+      const linkedClientIds = allRoles.map(r => r.client_id)
+
+      const { data: cd } = await supabase
+        .from('clients')
+        .select('*')
+        .in('id', linkedClientIds)
+        .order('name')
+
       if (cd?.length) {
         setClients(cd)
         const saved = localStorage.getItem('vv_client')
-        setClientState(cd.find((c: Client) => c.id === saved) || cd[0])
+
+        // Non-admin users are locked to their one client — no switcher
+        if (!hasAdminRole) {
+          setClientState(cd[0])
+          localStorage.setItem('vv_client', cd[0].id)
+        } else {
+          // Admin users can switch — restore last selected
+          setClientState(cd.find((c: Client) => c.id === saved) || cd[0])
+        }
       }
     })()
   }, [])
@@ -211,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
 
-      {/* ─── PORTAL INTRO ─── */}
+      {/* Portal intro */}
       {!portalDone && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#020203', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: overlayOn ? 1 : 0, transition: portalPhase >= 4 ? 'opacity 0.42s cubic-bezier(0.4,0,0.6,1)' : 'none', pointerEvents: portalPhase >= 4 ? 'none' : 'all' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,168,76,0.04) 0%, transparent 70%)', opacity: vvVisible ? 1 : 0, transition: 'opacity 1.8s ease', pointerEvents: 'none' }} />
@@ -238,180 +270,108 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         * { box-sizing: border-box; }
         body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-        /* ── TAB TRANSITIONS ── */
         @keyframes contentIn  { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes contentOut { from{opacity:1;transform:translateY(0)}  to{opacity:0;transform:translateY(-4px)} }
+        @keyframes contentOut { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(-4px)} }
         .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; will-change: opacity,transform; }
-        .content-out { animation: contentOut 0.09s ease both; pointer-events: none; will-change: opacity,transform; }
+        .content-out { animation: contentOut 0.09s ease both; pointer-events:none; will-change: opacity,transform; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        /* ── NAV ── */
-        .nav-btn {
-          transform: translateZ(0);
-          backface-visibility: hidden;
-          transition: background-color 0.15s ease, border-color 0.15s ease;
-          border: none;
-          outline: none;
-        }
-        .nav-btn:hover { background-color: rgba(255,255,255,0.055) !important; }
-        .nav-btn:active { transform: scale(0.975) translateZ(0) !important; transition: transform 0.08s ease !important; }
+        .nav-btn { transform:translateZ(0); backface-visibility:hidden; transition:background-color 0.15s ease,border-color 0.15s ease; border:none; outline:none; }
+        .nav-btn:hover { background-color:rgba(255,255,255,0.055) !important; }
+        .nav-btn:active { transform:scale(0.975) translateZ(0) !important; }
 
-        /* ── MINIMAL — smooth transitions ── */
-        .min-hide {
-          overflow: hidden;
-          opacity: 1;
-          max-height: 400px;
-          transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1);
-        }
-        body.minimal .min-hide {
-          opacity: 0 !important;
-          max-height: 0 !important;
-          pointer-events: none;
-        }
-        .nav-section-label {
-          overflow: hidden;
-          max-height: 40px;
-          opacity: 1;
-          transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1), padding 0.35s ease;
-        }
-        body.minimal .nav-section-label {
-          opacity: 0 !important;
-          max-height: 0 !important;
-          padding: 0 !important;
-        }
-        .main-scroll {
-          transition: padding 0.4s cubic-bezier(0.4,0,0.2,1);
-          padding: 24px 26px;
-        }
-        body.minimal .main-scroll {
-          padding: 14px 18px !important;
-        }
-        .stat-card {
-          transition: padding 0.4s ease, font-size 0.4s ease;
-        }
-        body.minimal .stat-card {
-          padding: 12px 14px !important;
-        }
-        body.minimal .stat-val {
-          font-size: 26px !important;
-        }
-        .header-sub {
-          overflow: hidden;
-          max-height: 30px;
-          opacity: 1;
-          transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1);
-        }
-        body.minimal .header-sub {
-          opacity: 0 !important;
-          max-height: 0 !important;
-        }
-        .sync-btn {
-          overflow: hidden;
-          max-width: 120px;
-          opacity: 1;
-          transition: opacity 0.35s ease, max-width 0.45s ease;
-        }
-        body.minimal .sync-btn {
-          opacity: 0 !important;
-          max-width: 0 !important;
-          pointer-events: none;
-        }
-        .sidebar-logo-text {
-          overflow: hidden;
-          max-width: 200px;
-          opacity: 1;
-          transition: opacity 0.35s ease, max-width 0.45s ease;
-        }
-        body.minimal .sidebar-logo-text {
-          opacity: 0 !important;
-          max-width: 0 !important;
-        }
+        .min-hide { overflow:hidden; opacity:1; max-height:400px; transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
+        body.minimal .min-hide { opacity:0 !important; max-height:0 !important; pointer-events:none; }
 
-        /* ── MODE BUTTONS ── */
-        .mode-btn {
-          flex: 1;
-          padding: 4px 8px;
-          border-radius: 3px;
-          cursor: pointer;
-          font-family: 'DM Mono', monospace;
-          font-size: 7px;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-          border: 1px solid rgba(255,255,255,0.09);
-          background: rgba(255,255,255,0.04);
-          color: rgba(250,248,245,0.38);
-          transition: all 0.18s ease;
-          white-space: nowrap;
-        }
-        .mode-btn.active {
-          background: rgba(201,168,76,0.14);
-          border-color: rgba(201,168,76,0.32);
-          color: #c9a84c;
-        }
-        .mode-btn:hover { background: rgba(255,255,255,0.08); }
+        .nav-section-label { overflow:hidden; max-height:40px; opacity:1; transition:opacity 0.35s ease,max-height 0.45s cubic-bezier(0.4,0,0.2,1),padding 0.35s ease; }
+        body.minimal .nav-section-label { opacity:0 !important; max-height:0 !important; padding:0 !important; }
 
-        /* ── DROPDOWN ── */
+        .main-scroll { transition:padding 0.4s cubic-bezier(0.4,0,0.2,1); padding:24px 26px; overflow-y:auto; overscroll-behavior:contain; transform:translateZ(0); }
+        body.minimal .main-scroll { padding:14px 18px !important; }
+
+        .header-sub { overflow:hidden; max-height:30px; opacity:1; transition:opacity 0.35s ease,max-height 0.45s cubic-bezier(0.4,0,0.2,1); }
+        body.minimal .header-sub { opacity:0 !important; max-height:0 !important; }
+
+        .sync-btn { overflow:hidden; opacity:1; transition:opacity 0.35s ease; }
+        body.minimal .sync-btn { opacity:0 !important; pointer-events:none; }
+
+        .mode-btn { flex:1; padding:4px 8px; border-radius:3px; cursor:pointer; font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,0.09); background:rgba(255,255,255,0.04); color:rgba(250,248,245,0.38); transition:all 0.18s ease; white-space:nowrap; }
+        .mode-btn.active { background:rgba(201,168,76,0.14); border-color:rgba(201,168,76,0.32); color:#c9a84c; }
+        .mode-btn:hover { background:rgba(255,255,255,0.08); }
+
         @keyframes dropIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-        .client-dropdown { animation: dropIn 0.14s cubic-bezier(0.16,1,0.3,1) both; }
-        .dropdown-item { transition: background 0.1s ease; }
-        .dropdown-item:hover { background: rgba(255,255,255,0.06) !important; }
-        .client-sw { transition: background 0.12s ease; }
-        .client-sw:hover { background: rgba(255,255,255,0.05) !important; }
+        .client-dropdown { animation:dropIn 0.14s cubic-bezier(0.16,1,0.3,1) both; }
+        .dropdown-item { transition:background 0.1s ease; }
+        .dropdown-item:hover { background:rgba(255,255,255,0.06) !important; }
+        .client-sw { transition:background 0.12s ease; }
+        .client-sw:hover { background:rgba(255,255,255,0.05) !important; }
 
-        /* ── BUTTONS ── */
-        button { transform: translateZ(0); }
-        button:active { transform: scale(0.97) translateZ(0) !important; transition: transform 0.08s ease !important; }
+        button { transform:translateZ(0); }
+        button:active { transform:scale(0.97) translateZ(0) !important; transition:transform 0.08s ease !important; }
 
-        /* ── SCROLLBAR ── */
-        ::-webkit-scrollbar { width: 3px; height: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--rule2); border-radius: 2px; }
+        ::-webkit-scrollbar { width:3px; height:3px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:var(--rule2); border-radius:2px; }
 
-        /* ── TOAST ── */
-        .toast-wrap {
-          will-change: transform, opacity;
-          transition: transform 0.32s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease;
-        }
-
-        * { -webkit-tap-highlight-color: transparent; }
+        .toast-wrap { will-change:transform,opacity; transition:transform 0.32s cubic-bezier(0.16,1,0.3,1),opacity 0.24s ease; }
+        * { -webkit-tap-highlight-color:transparent; }
       `}</style>
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-        {/* ─── SIDEBAR ─── */}
+        {/* SIDEBAR */}
         <aside style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)', transform: 'translateZ(0)' }}>
 
           {/* Logo */}
           <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--sb-rule)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontFamily: SERIF, fontSize: 27, fontWeight: 600, fontStyle: 'italic', color: '#faf8f5', letterSpacing: 2, flexShrink: 0 }}>VV</span>
-            <div className="sidebar-logo-text">
+            <div className="min-hide">
               <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Vanguard Visuals</div>
               <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 8, color: 'rgba(250,248,245,0.2)', marginTop: 1, whiteSpace: 'nowrap' }}>Growth Ad Engine</div>
             </div>
           </div>
 
-          {/* Client switcher */}
-          <div className="client-sw" onClick={() => setDropdown(d => !d)} style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
-            <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client?.name || 'Loading...'}</div>
-                <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client?.plan} · {client?.status}</div>
-              </div>
-              <span style={{ color: 'rgba(250,248,245,0.28)', fontSize: 10, flexShrink: 0, marginLeft: 6, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
-            </div>
-            {dropdown && clients.length > 1 && (
-              <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
-                {clients.map((c: Client) => (
-                  <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }} style={{ padding: '10px 11px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
-                    <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
-                    <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
+          {/* Client switcher — only show if admin with multiple clients */}
+          {isAdmin && clients.length > 0 && (
+            <div className="client-sw" onClick={() => setDropdown(d => !d)}
+              style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
+              <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {client?.name || 'Loading...'}
                   </div>
-                ))}
+                  <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>
+                    {client?.plan} · {client?.status}
+                  </div>
+                </div>
+                {clients.length > 1 && (
+                  <span style={{ color: 'rgba(250,248,245,0.28)', fontSize: 10, flexShrink: 0, marginLeft: 6, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
+                )}
               </div>
-            )}
-          </div>
+              {dropdown && clients.length > 1 && (
+                <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
+                  {clients.map((c: Client) => (
+                    <div key={c.id} className="dropdown-item" onClick={e => { e.stopPropagation(); setClient(c) }}
+                      style={{ padding: '10px 11px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', background: client?.id === c.id ? 'rgba(201,168,76,0.1)' : 'transparent' }}>
+                      <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: client?.id === c.id ? 'var(--goldlt)' : 'rgba(250,248,245,0.85)' }}>{c.name}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.3)', marginTop: 2 }}>{c.plan} · ${(c.monthly_ad_spend || 0).toLocaleString()}/mo</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Client name display for non-admin — no switcher */}
+          {!isAdmin && client && (
+            <div style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px' }}>
+              <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Your Account</div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client.name}</div>
+              <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client.plan} · {client.status}</div>
+            </div>
+          )}
 
           {/* Nav */}
           <nav style={{ flex: 1, padding: '4px 8px', overflowY: 'auto' }}>
@@ -425,11 +385,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       {item.section}
                     </div>
                   )}
-                  <button
-                    className="nav-btn"
-                    onClick={() => navigate(target)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 5, borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                  >
+                  <button className="nav-btn" onClick={() => navigate(target)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 5, borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
                     <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', flexShrink: 0, transition: 'color 0.15s ease' }}>{item.icon}</span>
                     <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.15s ease' }}>{item.label}</span>
                   </button>
@@ -445,7 +402,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', animation: 'pulse 2.5s ease infinite' }} />
                 <span style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: 1 }}>Live</span>
               </div>
-              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.22)', padding: 3 }}>✕</button>
+              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 8, color: 'rgba(250,248,245,0.22)', padding: 3 }}>✕</button>
             </div>
             <div style={{ display: 'flex', gap: 5 }}>
               <button className={`mode-btn ${!dark ? 'active' : ''}`} onClick={() => setDark(!dark)}>
@@ -458,27 +416,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </aside>
 
-        {/* ─── MAIN ─── */}
+        {/* MAIN */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)', transition: 'background 0.35s ease' }}>
 
           {/* Header */}
           <header style={{ padding: '13px 24px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 300, letterSpacing: 0.5, color: 'var(--ink)', transition: 'color 0.35s ease' }}>{title}</div>
-              <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2, transition: 'color 0.35s ease' }}>{subtitle}</div>
+              <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button className="sync-btn" onClick={handleSync} disabled={syncing} style={{ fontFamily: MONO, fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap', transition: 'color 0.3s ease, border-color 0.3s ease, background 0.3s ease' }}>
+              <button className="sync-btn" onClick={handleSync} disabled={syncing}
+                style={{ fontFamily: MONO, fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap', transition: 'color 0.3s ease, border-color 0.3s ease, background 0.3s ease' }}>
                 {syncing ? '↻ Syncing...' : '↻ Sync Now'}
               </button>
-              <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1, transition: 'color 0.35s ease, border-color 0.35s ease' }}>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
                 {now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </div>
             </div>
           </header>
 
           {/* Content */}
-          <main className="main-scroll" style={{ flex: 1, overflow: 'auto', background: 'var(--bg)', transition: 'background 0.35s ease, padding 0.4s cubic-bezier(0.4,0,0.2,1)' }}>
+          <main className="main-scroll" style={{ flex: 1, background: 'var(--bg)', transition: 'background 0.35s ease' }}>
             <div key={contentKey} className={navTarget ? 'content-out' : 'content-in'}>
               {children}
             </div>
@@ -486,7 +445,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* ─── TOAST ─── */}
+      {/* Toast */}
       <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
         <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', marginBottom: 3 }}>{toastData.title}</div>
         <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--sb-muted)', lineHeight: 1.5 }}>{toastData.body}</div>
