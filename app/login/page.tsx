@@ -1,8 +1,7 @@
 'use client'
-export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const supabase = createClientComponentClient()
@@ -10,12 +9,19 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [signingIn, setSigningIn] = useState(false)
+  const [error, setError] = useState('')
+  const [mode, setMode] = useState<'login' | 'forgot'>('login')
+  const [resetSent, setResetSent] = useState(false)
 
-  useEffect(() => { setMounted(true) }, [])
+  const mono  = "'DM Mono',monospace"
+  const serif = "'Cormorant Garamond',serif"
+  const sans  = "'DM Sans',sans-serif"
+  const gold  = '#c9a84c'
+  const ink   = 'rgba(250,248,245,0.92)'
+  const ink2  = 'rgba(250,248,245,0.55)'
+  const ink3  = 'rgba(250,248,245,0.28)'
+  const rule  = 'rgba(250,248,245,0.08)'
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -24,114 +30,178 @@ export default function LoginPage() {
     setError('')
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) {
+      setError(err.message)
       setLoading(false)
-      setError('Invalid email or password.')
       return
     }
-    // Set flag so dashboard layout plays the portal intro once
     sessionStorage.setItem('vv_just_logged_in', '1')
-    setSigningIn(true)
-    setTimeout(() => router.push('/dashboard'), 120)
+    router.push('/dashboard')
   }
 
-  if (!mounted) return null
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email) { setError('Enter your email address.'); return }
+    setLoading(true)
+    setError('')
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (err) { setError(err.message); setLoading(false); return }
+    setResetSent(true)
+    setLoading(false)
+  }
 
-  const G = '#c9a84c'
-  const INK = 'rgba(245,243,239,0.95)'
-  const I3 = 'rgba(245,243,239,0.28)'
-  const I4 = 'rgba(245,243,239,0.11)'
-  const MONO = "'DM Mono',monospace"
-  const SERIF = "'Cormorant Garamond',serif"
-  const SANS = "'DM Sans',sans-serif"
+  const fi: React.CSSProperties = {
+    width: '100%',
+    padding: '12px 14px',
+    background: 'rgba(255,255,255,0.05)',
+    border: `1px solid ${rule}`,
+    borderRadius: 4,
+    color: ink,
+    fontFamily: sans,
+    fontSize: 14,
+    outline: 'none',
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#050509', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: '#050509', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { -webkit-font-smoothing: antialiased; }
-
-        @keyframes noiseShift { 0%{background-position:0 0} 100%{background-position:200px 200px} }
-        @keyframes scanMove { 0%{top:0} 100%{top:100vh} }
-        @keyframes formIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes formOut { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(1.01)} }
-
-        .noise {
-          position: fixed; inset: 0; opacity: 0.025; pointer-events: none; z-index: 0;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E");
-          background-size: 200px; animation: noiseShift 8s steps(4) infinite;
-        }
-        .scanline {
-          position: fixed; left: 0; right: 0; height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(201,168,76,0.06), transparent);
-          pointer-events: none; z-index: 1; animation: scanMove 18s linear infinite;
-        }
-        .atm-grid {
-          position: fixed; inset: 0; pointer-events: none; z-index: 0;
-          background-image: linear-gradient(rgba(255,255,255,0.011) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(255,255,255,0.011) 1px, transparent 1px);
-          background-size: 84px 84px;
-        }
-        .form-wrap { animation: formIn 0.45s cubic-bezier(0.16,1,0.3,1) 0.05s both; }
-        .form-exit  { animation: formOut 0.2s ease both; pointer-events: none; }
-
-        input::placeholder { color: ${I4}; }
-        input:focus { outline: none; border-color: rgba(201,168,76,0.4) !important; }
-        input { transition: border-color 0.2s ease; }
-        .btn-submit { transition: background 0.18s ease, opacity 0.15s ease, transform 0.1s ease; }
-        .btn-submit:hover:not(:disabled) { background: #b8972a !important; }
-        .btn-submit:active:not(:disabled) { transform: scale(0.98); }
-        * { -webkit-tap-highlight-color: transparent; }
+        input::placeholder { color: rgba(250,248,245,0.22); }
+        input:focus { border-color: rgba(201,168,76,0.4) !important; }
+        * { box-sizing: border-box; }
       `}</style>
 
-      <div className="noise" />
-      <div className="scanline" />
-      <div className="atm-grid" />
-      <div style={{ position: 'fixed', top: '-30%', left: '50%', transform: 'translateX(-50%)', width: '100vw', height: '80vh', background: 'radial-gradient(ellipse,rgba(80,82,200,0.055) 0%,transparent 72%)', pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ width: '100%', maxWidth: 400 }}>
 
-      <div className={`form-wrap${signingIn ? ' form-exit' : ''}`} style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 400, padding: '0 24px' }}>
-
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontFamily: SERIF, fontSize: 56, fontWeight: 300, fontStyle: 'italic', color: INK, letterSpacing: '2px', lineHeight: 1, marginBottom: 10 }}>VV</div>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3.5px', textTransform: 'uppercase', marginBottom: 5 }}>Vanguard Visuals</div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <div style={{ height: 1, width: 20, background: 'rgba(201,168,76,0.2)' }} />
-            <div style={{ fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Growth Ad Engine · v1.1</div>
-            <div style={{ height: 1, width: 20, background: 'rgba(201,168,76,0.2)' }} />
-          </div>
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div style={{ fontFamily: serif, fontSize: 52, fontWeight: 300, fontStyle: 'italic', color: ink, letterSpacing: 2, lineHeight: 1, marginBottom: 8 }}>VV</div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 2 }}>Vanguard Visuals</div>
+          <div style={{ fontFamily: mono, fontSize: 7, color: 'rgba(250,248,245,0.18)', letterSpacing: '2px', textTransform: 'uppercase' }}>Growth Ad Engine</div>
         </div>
 
-        <div style={{ background: 'rgba(255,255,255,0.022)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '30px 26px' }}>
-          <div style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,168,76,0.45)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 5 }}>Secured Access</div>
-          <div style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 300, color: INK, marginBottom: 22 }}>Sign in</div>
+        {/* Card */}
+        <div style={{ background: 'rgba(255,255,255,0.025)', border: `1px solid ${rule}`, borderRadius: 8, padding: '32px 36px' }}>
 
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 7, color: I3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Email Address</div>
-              <input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email"
-                style={{ width: '100%', padding: '10px 13px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, color: INK, fontFamily: SANS, fontSize: 13 }} />
-            </div>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 7, color: I3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Password</div>
-              <input type="password" placeholder="••••••••••••" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"
-                style={{ width: '100%', padding: '10px 13px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, color: INK, fontFamily: SANS, fontSize: 13 }} />
-            </div>
+          {mode === 'login' ? (
+            <>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Account</div>
+              <div style={{ fontFamily: serif, fontSize: 22, color: ink, marginBottom: 24 }}>Sign in to your portal</div>
 
-            {error && (
-              <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(248,113,113,0.7)', letterSpacing: '0.5px', padding: '8px 11px', background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.1)', borderRadius: 3 }}>
-                {error}
+              <form onSubmit={handleLogin}>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 6 }}>Email</div>
+                  <input
+                    style={fi}
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    autoComplete="email"
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Password</div>
+                    <button
+                      type="button"
+                      onClick={() => { setMode('forgot'); setError('') }}
+                      style={{ fontFamily: mono, fontSize: 7, color: gold, background: 'transparent', border: 'none', cursor: 'pointer', letterSpacing: '1px', textDecoration: 'underline', padding: 0 }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <input
+                    style={fi}
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                {error && (
+                  <div style={{ fontFamily: mono, fontSize: 8, color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 4, padding: '10px 12px', marginBottom: 16, letterSpacing: '0.5px' }}>
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{ width: '100%', padding: '13px', fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#050509', background: loading ? 'rgba(201,168,76,0.5)' : gold, border: 'none', borderRadius: 4, cursor: loading ? 'not-allowed' : 'pointer' }}
+                >
+                  {loading ? 'Signing in...' : 'Enter Portal →'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Account</div>
+              <div style={{ fontFamily: serif, fontSize: 22, color: ink, marginBottom: 8 }}>Reset your password</div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', lineHeight: 1.7, marginBottom: 24 }}>
+                Enter your email and we'll send you a link to set a new password.
               </div>
-            )}
 
-            <button type="submit" disabled={loading || signingIn} className="btn-submit"
-              style={{ marginTop: 4, padding: '12px', borderRadius: 4, fontSize: 10, background: G, color: '#050509', border: 'none', cursor: loading || signingIn ? 'not-allowed' : 'pointer', fontFamily: MONO, fontWeight: 600, letterSpacing: '1.5px', opacity: loading || signingIn ? 0.7 : 1 }}>
-              {signingIn ? 'Entering...' : loading ? 'Signing in...' : 'Sign In →'}
-            </button>
-          </form>
+              {resetSent ? (
+                <div>
+                  <div style={{ fontFamily: mono, fontSize: 8, color: '#4ade80', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 4, padding: '14px 16px', marginBottom: 20, letterSpacing: '0.5px', lineHeight: 1.7 }}>
+                    ✓ Reset link sent to {email}. Check your inbox and spam folder.
+                  </div>
+                  <button
+                    onClick={() => { setMode('login'); setResetSent(false); setError('') }}
+                    style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, borderRadius: 4, padding: '10px 18px', cursor: 'pointer', letterSpacing: '1px' }}
+                  >
+                    ← Back to sign in
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword}>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontFamily: mono, fontSize: 7, color: ink3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 6 }}>Email</div>
+                    <input
+                      style={fi}
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      autoComplete="email"
+                    />
+                  </div>
+
+                  {error && (
+                    <div style={{ fontFamily: mono, fontSize: 8, color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 4, padding: '10px 12px', marginBottom: 16, letterSpacing: '0.5px' }}>
+                      {error}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setMode('login'); setError('') }}
+                      style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, borderRadius: 4, padding: '12px 18px', cursor: 'pointer', letterSpacing: '1px' }}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      style={{ flex: 1, padding: '12px', fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#050509', background: loading ? 'rgba(201,168,76,0.5)' : gold, border: 'none', borderRadius: 4, cursor: loading ? 'not-allowed' : 'pointer' }}
+                    >
+                      {loading ? 'Sending...' : 'Send Reset Link →'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </>
+          )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 16, fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '1.5px' }}>
-          Vanguard Visuals · Confidential Client Portal
+        {/* Footer */}
+        <div style={{ textAlign: 'center', marginTop: 24, fontFamily: mono, fontSize: 7, color: 'rgba(250,248,245,0.15)', letterSpacing: '1.5px' }}>
+          VANGUARD VISUALS · CONFIDENTIAL CLIENT PORTAL
         </div>
       </div>
     </div>
