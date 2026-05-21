@@ -79,6 +79,7 @@ export async function POST(req: Request) {
 
     if (clientErr) return NextResponse.json({ error: clientErr.message }, { status: 400 })
 
+    // Link user to client — check if already linked
     const { data: existingLink } = await supabaseAdmin
       .from('client_users')
       .select('id')
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
       })
     }
 
+    // Create onboarding record
     try {
       await supabaseAdmin.from('onboarding').insert({
         client_id: clientRecord.id,
@@ -102,6 +104,7 @@ export async function POST(req: Request) {
       })
     } catch (_) {}
 
+    // Mark invite accepted
     if (invite_id) {
       await supabaseAdmin
         .from('client_invites')
@@ -109,11 +112,12 @@ export async function POST(req: Request) {
         .eq('id', invite_id)
     }
 
+    // Generate magic link — redirects through auth callback
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?onboarding=1`,
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/dashboard`,
       },
     })
 
@@ -195,7 +199,7 @@ function generateWelcomeEmail(name: string, link: string, isAgency = false): str
               Your portal is<br><em style="color:#c9a84c;">ready.</em>
             </div>
             <div style="font-size:13px;color:rgba(250,248,245,0.5);letter-spacing:0.5px;line-height:1.7;">
-              VV Growth Ad Engine · ${isAgency ? 'Agency Portal' : 'Confidential Access'}
+              VV Growth Ad Engine &middot; ${isAgency ? 'Agency Portal' : 'Confidential Access'}
             </div>
           </td></tr>
 
@@ -211,7 +215,7 @@ function generateWelcomeEmail(name: string, link: string, isAgency = false): str
                   <div style="font-size:8px;color:#9a9590;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Monday Brief</div>
                 </td>
                 <td style="text-align:center;padding:0 0 0 20px;">
-                  <div style="font-family:Georgia,serif;font-size:28px;color:#c9a84c;font-weight:300;">∞</div>
+                  <div style="font-family:Georgia,serif;font-size:28px;color:#c9a84c;font-weight:300;">&infin;</div>
                   <div style="font-size:8px;color:#9a9590;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Intelligence</div>
                 </td>
               </tr>
@@ -221,32 +225,45 @@ function generateWelcomeEmail(name: string, link: string, isAgency = false): str
           <tr><td style="padding:40px 48px;">
             <p style="font-size:15px;color:#3a3733;line-height:1.85;margin:0 0 20px;">Hi ${name},</p>
             <p style="font-size:15px;color:#3a3733;line-height:1.85;margin:0 0 20px;">
-              Welcome to VV Growth Ad Engine. Your account is ready — one click takes you inside.
+              Welcome to VV Growth Ad Engine. Your account is ready &mdash; one click takes you inside.
             </p>
             <p style="font-size:14px;color:#6b6560;line-height:1.85;margin:0 0 32px;">
               ${isAgency
-                ? "Connect your clients' ad accounts and VAI begins working immediately — classifying every campaign, identifying budget leaks across your entire portfolio, and generating white-labelled intelligence briefs you can deliver directly to your clients."
-                : 'Connect your ad accounts and VAI begins working — classifying every campaign, finding your biggest budget leaks, and delivering a plain-English intelligence brief every Monday morning at 7AM.'
+                ? "Connect your clients' ad accounts and VAI begins working immediately &mdash; classifying every campaign, identifying budget leaks across your entire portfolio, and generating white-labelled intelligence briefs you can deliver directly to your clients."
+                : 'Connect your ad accounts and VAI begins working &mdash; classifying every campaign, finding your biggest budget leaks, and delivering a plain-English intelligence brief every Monday morning at 7AM.'
               }
             </p>
 
             <div style="background:#f5f4f0;border-radius:8px;padding:24px 28px;margin-bottom:32px;">
               <div style="font-size:9px;color:rgba(26,23,20,0.4);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:16px;">What happens next</div>
               <table cellpadding="0" cellspacing="0" width="100%">
-                ${[
-                  ['Enter your portal', 'Click the button below — your account is already set up'],
-                  ['Connect your ad accounts', 'One-click OAuth — read only, we never touch your campaigns'],
-                  ['Monday 7AM — your first brief', 'Your biggest budget leak, identified. One action to take.'],
-                ].map(([title, sub], i) => `
                 <tr>
                   <td style="padding:8px 0;vertical-align:top;width:28px;">
-                    <div style="width:20px;height:20px;background:#1a1714;border-radius:50%;text-align:center;line-height:20px;font-size:9px;color:#c9a84c;font-weight:700;">${i + 1}</div>
+                    <div style="width:20px;height:20px;background:#1a1714;border-radius:50%;text-align:center;line-height:20px;font-size:9px;color:#c9a84c;font-weight:700;">1</div>
                   </td>
                   <td style="padding:8px 0 8px 12px;">
-                    <div style="font-size:13px;color:#3a3733;font-weight:500;margin-bottom:2px;">${title}</div>
-                    <div style="font-size:12px;color:#9a9590;line-height:1.6;">${sub}</div>
+                    <div style="font-size:13px;color:#3a3733;font-weight:500;margin-bottom:2px;">Enter your portal</div>
+                    <div style="font-size:12px;color:#9a9590;line-height:1.6;">Click the button below &mdash; your account is already set up and waiting</div>
                   </td>
-                </tr>`).join('')}
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;vertical-align:top;width:28px;">
+                    <div style="width:20px;height:20px;background:#1a1714;border-radius:50%;text-align:center;line-height:20px;font-size:9px;color:#c9a84c;font-weight:700;">2</div>
+                  </td>
+                  <td style="padding:8px 0 8px 12px;">
+                    <div style="font-size:13px;color:#3a3733;font-weight:500;margin-bottom:2px;">Connect your Meta Ads</div>
+                    <div style="font-size:12px;color:#9a9590;line-height:1.6;">One-click OAuth &mdash; read only, we never touch your campaigns</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;vertical-align:top;width:28px;">
+                    <div style="width:20px;height:20px;background:#1a1714;border-radius:50%;text-align:center;line-height:20px;font-size:9px;color:#c9a84c;font-weight:700;">3</div>
+                  </td>
+                  <td style="padding:8px 0 8px 12px;">
+                    <div style="font-size:13px;color:#3a3733;font-weight:500;margin-bottom:2px;">Monday 7AM &mdash; your first brief</div>
+                    <div style="font-size:12px;color:#9a9590;line-height:1.6;">Your biggest budget leak, identified. One action to take. Plain English.</div>
+                  </td>
+                </tr>
               </table>
             </div>
 
@@ -255,7 +272,7 @@ function generateWelcomeEmail(name: string, link: string, isAgency = false): str
                 <td align="center">
                   <a href="${link}"
                      style="display:inline-block;background:#1a1714;border-radius:6px;padding:16px 40px;font-family:'Courier New',monospace;font-size:12px;font-weight:700;letter-spacing:2px;color:#c9a84c;text-decoration:none;text-transform:uppercase;">
-                    Enter Your Portal →
+                    Enter Your Portal &rarr;
                   </a>
                 </td>
               </tr>

@@ -41,10 +41,18 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!client) return
-    if ((client as any).onboarding_complete === false) {
+
+    // Check URL for onboarding param OR onboarding_complete flag
+    const params = new URLSearchParams(window.location.search)
+    const isOnboarding = params.get('onboarding') === '1'
+
+    if (isOnboarding || (client as any).onboarding_complete === false) {
+      // Set portal intro flag so animation plays when they land
+      sessionStorage.setItem('vv_just_logged_in', '1')
       router.push('/dashboard/onboarding')
       return
     }
+
     load()
   }, [client])
 
@@ -132,21 +140,16 @@ export default function DashboardPage() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <style>{`
-        /* Minimal mode — client dashboard simplification */
-        body.minimal .dash-leak-banner { opacity: 0; max-height: 0; overflow: hidden; margin-bottom: 0 !important; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
-        .dash-leak-banner { opacity: 1; max-height: 120px; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
-
-        body.minimal .dash-plat-health { opacity: 0; max-height: 0; overflow: hidden; margin-bottom: 0 !important; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
-        .dash-plat-health { opacity: 1; max-height: 600px; margin-bottom: 16px; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
-
-        body.minimal .dash-bottom { opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
-        .dash-bottom { opacity: 1; max-height: 400px; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
-
-        body.minimal .stat-sub { opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.3s ease, max-height 0.4s ease; }
-        .stat-sub { opacity: 1; max-height: 30px; transition: opacity 0.3s ease, max-height 0.4s ease; }
-
-        body.minimal .stat-val { font-size: 28px !important; transition: font-size 0.35s ease !important; }
-        .stat-val { transition: font-size 0.35s ease; }
+        body.minimal .dash-leak-banner { opacity:0;max-height:0;overflow:hidden;margin-bottom:0!important;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1),margin 0.4s ease; }
+        .dash-leak-banner { opacity:1;max-height:120px;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1),margin 0.4s ease; }
+        body.minimal .dash-plat-health { opacity:0;max-height:0;overflow:hidden;margin-bottom:0!important;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1),margin 0.4s ease; }
+        .dash-plat-health { opacity:1;max-height:600px;margin-bottom:16px;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1),margin 0.4s ease; }
+        body.minimal .dash-bottom { opacity:0;max-height:0;overflow:hidden;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
+        .dash-bottom { opacity:1;max-height:400px;transition:opacity 0.4s ease,max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
+        body.minimal .stat-sub { opacity:0;max-height:0;overflow:hidden;transition:opacity 0.3s ease,max-height 0.4s ease; }
+        .stat-sub { opacity:1;max-height:30px;transition:opacity 0.3s ease,max-height 0.4s ease; }
+        body.minimal .stat-val { font-size:28px!important;transition:font-size 0.35s ease!important; }
+        .stat-val { transition:font-size 0.35s ease; }
       `}</style>
 
       {/* BIGGEST LEAK BANNER */}
@@ -198,7 +201,7 @@ export default function DashboardPage() {
       <div className="dash-plat-health" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
         {/* Platform performance */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', transition: 'background 0.35s ease' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Platform Performance</div>
           </div>
@@ -234,10 +237,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Campaign health */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', transition: 'background 0.35s ease' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Campaign Health</div>
-            <button onClick={() => router.push('/dashboard/campaigns')} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', background: 'transparent', border: 'none', cursor: 'pointer', letterSpacing: '1px' }}>
+            <button
+              onClick={() => router.push('/dashboard/campaigns')}
+              style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', background: 'transparent', border: 'none', cursor: 'pointer', letterSpacing: '1px' }}
+            >
               View All →
             </button>
           </div>
@@ -271,7 +277,7 @@ export default function DashboardPage() {
       <div className="dash-bottom" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
 
         {/* Health breakdown */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px', transition: 'background 0.35s ease' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Health Breakdown</div>
           {[
             { label: 'STRONG',   h: 'strong' },
@@ -301,7 +307,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Latest brief */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px', transition: 'background 0.35s ease' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Latest Brief</div>
           {brief ? (
             <div>
@@ -311,7 +317,10 @@ export default function DashboardPage() {
                 {fmt(Number(brief.biggest_leak_amount))}
                 <span style={{ fontSize: 11, color: 'var(--ink3)', fontFamily: "'DM Mono',monospace" }}>/mo wasted</span>
               </div>
-              <button onClick={() => router.push('/dashboard/brief')} style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '7px 14px', borderRadius: 3, cursor: 'pointer' }}>
+              <button
+                onClick={() => router.push('/dashboard/brief')}
+                style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '7px 14px', borderRadius: 3, cursor: 'pointer' }}
+              >
                 Read Full Brief →
               </button>
             </div>
@@ -326,7 +335,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick actions */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px', transition: 'background 0.35s ease' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Quick Actions</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[
@@ -339,7 +348,7 @@ export default function DashboardPage() {
               <button
                 key={action.path}
                 onClick={() => router.push(action.path)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: 'var(--rule)', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', textAlign: 'left', transition: 'background 0.12s ease' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: 'var(--rule)', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', textAlign: 'left' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--rule2)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--rule)' }}
               >
@@ -349,6 +358,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+
       </div>
     </div>
   )
