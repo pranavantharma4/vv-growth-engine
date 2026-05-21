@@ -1,194 +1,220 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '@/app/dashboard/context'
+import { useApp } from '../context'
 
-const PLATFORMS = [
-  { id:'meta',     label:'Meta Ads',   icon:'f',  bg:'#e8f0fe', color:'#1a56cc', scope:'ads_read, ads_management' },
-  { id:'google',   label:'Google Ads', icon:'G',  bg:'#e8f4e8', color:'#1a6e1a', scope:'adwords read-only' },
-  { id:'tiktok',   label:'TikTok Ads', icon:'TT', bg:'#fee8ee', color:'#cc1a3a', scope:'ad.read' },
-  { id:'linkedin', label:'LinkedIn',   icon:'in', bg:'#e8f4fb', color:'#0a66c2', scope:'r_ads' },
-]
-
-const META_APP_ID = '4462090677412633'
 const SUPABASE_URL = 'https://ofqnhlkjazlsfctldbng.supabase.co'
+const META_APP_ID = '4462090677412633'
 
-function getMetaOAuthURL(clientId: string): string {
-  const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
-  const state = btoa(clientId)
-  const params = new URLSearchParams({
-    client_id: META_APP_ID,
-    redirect_uri: redirectUri,
-    scope: 'ads_read,ads_management,business_management',
-    response_type: 'code',
-    state,
-  })
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`
-}
-
-function getTokenStatus(conn: any): 'expired' | 'expiring' | 'healthy' {
-  if (!conn?.expires_at) return 'healthy'
-  const expiresAt = new Date(conn.expires_at)
-  const now = new Date()
-  const daysLeft = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  if (daysLeft < 0) return 'expired'
-  if (daysLeft <= 7) return 'expiring'
-  return 'healthy'
-}
-
-function daysUntilExpiry(conn: any): number {
-  if (!conn?.expires_at) return 999
-  const expiresAt = new Date(conn.expires_at)
-  return Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-}
-
-export default function ConnectionsPage() {
-  const { client, toast: showToast } = useApp()
+export default function ConnectPage() {
   const supabase = createClientComponentClient()
-  const [connections, setConnections] = useState<any[]>([])
+  const { client, toast } = useApp()
+
+  const [connection, setConnection] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   useEffect(() => {
-    if (!client) return
-    supabase.from('ad_connections').select('*').eq('client_id', client.id)
-      .then(({ data }) => { setConnections(data || []); setLoading(false) })
-  }, [client])
+    if (client) load()
 
-  useEffect(() => {
+    // Check if we just returned from Meta OAuth
     const params = new URLSearchParams(window.location.search)
-    const success = params.get('success')
-    const error = params.get('error')
-    if (success === 'meta_connected') {
-      showToast('Meta Ads connected', 'Your Meta Ads account is now syncing data.')
-      window.history.replaceState({}, '', window.location.pathname)
-      if (client) {
-        supabase.from('ad_connections').select('*').eq('client_id', client.id)
-          .then(({ data }) => setConnections(data || []))
-      }
-    } else if (error) {
-      const messages: Record<string, string> = {
-        meta_denied: 'Meta connection was cancelled.',
-        meta_token_failed: 'Meta token exchange failed. Please try again.',
-        meta_longtoken_failed: 'Meta token upgrade failed. Please try again.',
-        meta_db_failed: 'Failed to save Meta connection. Please try again.',
-      }
-      showToast('Connection failed', messages[error] || 'Something went wrong.')
-      window.history.replaceState({}, '', window.location.pathname)
+    if (params.get('connected') === 'meta') {
+      toast('Meta Ads connected', 'Your ad account is now connected. Click Sync Now to pull your campaigns.')
+      // Clean the URL
+      window.history.replaceState({}, '', '/dashboard/connect')
+    }
+    if (params.get('error')) {
+      toast('Connection failed', decodeURIComponent(params.get('error') || 'Unknown error'))
+      window.history.replaceState({}, '', '/dashboard/connect')
     }
   }, [client])
 
-  function getConn(platform: string) { return connections.find(c => c.platform === platform) }
-
-  async function disconnect(platform: string) {
-    const conn = getConn(platform)
-    if (!conn) return
-    await supabase.from('ad_connections').update({ is_active: false, access_token: null }).eq('id', conn.id)
-    setConnections(prev => prev.map(c => c.platform === platform ? { ...c, is_active: false } : c))
-    showToast('Disconnected', PLATFORMS.find(p => p.id === platform)?.label + ' has been disconnected.')
+  async function load() {
+    if (!client) return
+    setLoading(true)
+    const { data } = await supabase
+      .from('ad_connections')
+      .select('*')
+      .eq('client_id', client.id)
+      .eq('platform', 'meta')
+      .maybeSingle()
+    setConnection(data)
+    setLoading(false)
   }
 
-  function handleConnect(platformId: string) {
-    if (platformId === 'meta') {
-      if (!client?.id) { showToast('Error', 'No client session found. Please refresh.'); return }
-      window.location.href = getMetaOAuthURL(client.id)
-    } else {
-      showToast('Coming soon', 'Platform connections will be live in the next build session.')
-    }
+  async function connectMeta() {
+    if (!client) return
+
+    const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
+    const scope = 'ads_read,ads_management,business_management,read_insights'
+    const state = encodeURIComponent(JSON.stringify({
+      client_id: client.id,
+      return_url: `${window.location.origin}/dashboard/connect?connected=meta`,
+    }))
+
+    const oauthUrl = `https://www.facebook.com/v19.0/dialog/oauth?` +
+      `client_id=${META_APP_ID}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${scope}` +
+      `&state=${state}` +
+      `&response_type=code`
+
+    // Open in same tab — Meta OAuth works best this way
+    // The callback edge function will redirect back to return_url
+    window.location.href = oauthUrl
   }
+
+  async function disconnect() {
+    if (!client || !connection) return
+    setDisconnecting(true)
+    await supabase
+      .from('ad_connections')
+      .update({ is_active: false, access_token: null })
+      .eq('id', connection.id)
+    toast('Disconnected', 'Meta Ads account disconnected.')
+    setConnection(null)
+    setDisconnecting(false)
+  }
+
+  const isExpired = connection?.expires_at && new Date(connection.expires_at) < new Date()
+  const daysUntilExpiry = connection?.expires_at
+    ? Math.max(0, Math.ceil((new Date(connection.expires_at).getTime() - Date.now()) / 86400000))
+    : null
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Loading connections...</div>
+    </div>
+  )
 
   return (
-    <div style={{ maxWidth: 620 }}>
-      <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'var(--ink2)', lineHeight:1.75, marginBottom:20 }}>
-        Connect your ad accounts to enable live data sync. Vanguard reads your data in read-only mode — we never modify campaigns without your explicit instruction.
-      </p>
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Connections</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Ad Account Connections</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>
+          Connect your ad platforms to start syncing campaign data automatically
+        </div>
+      </div>
 
-      {PLATFORMS.map(plat => {
-        const conn = getConn(plat.id)
-        const active = conn?.is_active === true
-        const tokenStatus = plat.id === 'meta' && active ? getTokenStatus(conn) : 'healthy'
-        const days = plat.id === 'meta' && active ? daysUntilExpiry(conn) : 999
-
-        return (
-          <div key={plat.id}>
-            {/* Expiry warning banner — shown above the card */}
-            {active && tokenStatus !== 'healthy' && (
-              <div style={{
-                background: tokenStatus === 'expired' ? 'var(--redpaper)' : 'var(--amberpaper)',
-                border: `1px solid ${tokenStatus === 'expired' ? 'var(--redborder)' : 'var(--amberborder)'}`,
-                borderRadius: 6,
-                padding: '10px 14px',
-                marginBottom: 6,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}>
-                <div>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, fontWeight:500, color: tokenStatus === 'expired' ? 'var(--red)' : 'var(--amber)', letterSpacing:1, textTransform:'uppercase', marginBottom:2 }}>
-                    {tokenStatus === 'expired' ? '⚠ Meta token expired' : `⚠ Token expiring in ${days} day${days === 1 ? '' : 's'}`}
-                  </div>
-                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:'var(--ink2)' }}>
-                    {tokenStatus === 'expired'
-                      ? 'Reconnect your Meta account to resume data sync.'
-                      : 'Reconnect now to avoid losing sync continuity.'}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleConnect(plat.id)}
-                  style={{ padding:'5px 12px', borderRadius:5, border:'none', background: tokenStatus === 'expired' ? 'var(--red)' : 'var(--amber)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'#faf8f5', letterSpacing:1, flexShrink:0, marginLeft:12 }}>
-                  Reconnect →
-                </button>
-              </div>
+      {/* Meta Ads */}
+      <div style={{ background: 'var(--bg2)', border: `1px solid ${connection && !isExpired ? 'rgba(74,222,128,0.2)' : isExpired ? 'rgba(248,113,113,0.2)' : 'var(--rule)'}`, borderRadius: 8, padding: '24px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, background: '#1877f2', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 16, fontFamily: 'Arial' }}>f</span>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>Meta Ads</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1px', marginTop: 2 }}>Facebook & Instagram Advertising</div>
+            </div>
+          </div>
+          <div>
+            {connection && !isExpired ? (
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#4ade80', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>
+                ● CONNECTED
+              </span>
+            ) : isExpired ? (
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>
+                ● EXPIRED
+              </span>
+            ) : (
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', background: 'var(--rule)', border: '1px solid var(--rule2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>
+                NOT CONNECTED
+              </span>
             )}
+          </div>
+        </div>
 
-            {/* Platform card */}
-            <div style={{ background:'var(--card2)', border:`1px solid ${tokenStatus !== 'healthy' && active ? (tokenStatus === 'expired' ? 'var(--redborder)' : 'var(--amberborder)') : 'var(--rule)'}`, borderRadius:8, padding:'15px 19px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:9 }}>
-              <div style={{ display:'flex', alignItems:'center' }}>
-                <div style={{ width:36, height:36, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, marginRight:12, background:plat.bg, color:plat.color, fontFamily:"'DM Mono',monospace", fontWeight:700, flexShrink:0 }}>{plat.icon}</div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:500 }}>{plat.label}</div>
-                  {active && conn ? (
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color: tokenStatus === 'expired' ? 'var(--red)' : tokenStatus === 'expiring' ? 'var(--amber)' : 'var(--green)', marginTop:3 }}>
-                      {tokenStatus === 'expired'
-                        ? '✕ Token expired · reconnect required'
-                        : tokenStatus === 'expiring'
-                          ? `● Connected · expires in ${days}d · Last synced: ${conn.last_synced_at ? new Date(conn.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'never'}`
-                          : `● Connected · ${conn.account_name || conn.account_id || 'account linked'} · Last synced: ${conn.last_synced_at ? new Date(conn.last_synced_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'never'}`
-                      }
-                    </div>
-                  ) : (
-                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:3 }}>○ Not connected · Requires {plat.scope}</div>
-                  )}
-                </div>
+        {connection && !isExpired && (
+          <div style={{ background: 'var(--rule)', borderRadius: 4, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>Account</div>
+                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink)' }}>{connection.account_name || 'Connected'}</div>
               </div>
-              <div style={{ display:'flex', gap:7 }}>
-                {active ? (
-                  <>
-                    {tokenStatus === 'expired' && (
-                      <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'none', background:'var(--gold)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'#faf8f5', letterSpacing:1 }}>Reconnect →</button>
-                    )}
-                    <button onClick={() => disconnect(plat.id)} style={{ padding:'4px 10px', borderRadius:5, border:'1px solid var(--redborder)', background:'transparent', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--red)', letterSpacing:1 }}>Disconnect</button>
-                  </>
-                ) : (
-                  <button onClick={() => handleConnect(plat.id)} style={{ padding:'4px 12px', borderRadius:5, border:'none', background: plat.id === 'meta' ? 'var(--gold)' : 'var(--card3)', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color: plat.id === 'meta' ? '#faf8f5' : 'var(--ink3)', letterSpacing:1 }}>
-                    {plat.id === 'meta' ? 'Connect →' : 'Soon'}
-                  </button>
-                )}
+              <div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>Token Expires</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: daysUntilExpiry && daysUntilExpiry < 14 ? '#fbbf24' : '#4ade80' }}>
+                  {daysUntilExpiry !== null ? `${daysUntilExpiry} days` : 'Long-lived'}
+                </div>
               </div>
             </div>
           </div>
-        )
-      })}
+        )}
 
-      <div style={{ background:'var(--card2)', border:'1px solid var(--rule)', borderRadius:8, padding:'15px 18px', marginTop:14 }}>
-        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--ink3)', letterSpacing:2, textTransform:'uppercase', marginBottom:10 }}>Data Security</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-          {[['Read-only','We never modify your campaigns'],['AES-256','Tokens encrypted at rest'],['No resale','Your data stays yours, always']].map(([t,s]) => (
-            <div key={t} style={{ display:'flex', gap:7 }}>
-              <span style={{ color:'var(--green)', fontSize:9, marginTop:3 }}>◈</span>
-              <div><div style={{ fontSize:11, fontWeight:500 }}>{t}</div><div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', marginTop:1 }}>{s}</div></div>
+        {isExpired && (
+          <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 4, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#f87171', letterSpacing: '1px', lineHeight: 1.7 }}>
+              Your Meta connection has expired. Reconnect to resume syncing.
             </div>
-          ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          {!connection || isExpired ? (
+            <button onClick={connectMeta}
+              style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#fff', background: '#1877f2', border: 'none', padding: '11px 22px', borderRadius: 4, cursor: 'pointer' }}>
+              {isExpired ? 'Reconnect Meta Ads →' : 'Connect Meta Ads →'}
+            </button>
+          ) : (
+            <>
+              <button onClick={connectMeta}
+                style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: 'var(--gold)', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', padding: '10px 18px', borderRadius: 4, cursor: 'pointer' }}>
+                Reconnect
+              </button>
+              <button onClick={disconnect} disabled={disconnecting}
+                style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '1px', color: '#f87171', background: 'transparent', border: '1px solid rgba(248,113,113,0.2)', padding: '10px 18px', borderRadius: 4, cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Google Ads — coming soon */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 8, padding: '24px', marginBottom: 12, opacity: 0.6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, background: '#ea4335', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'Arial' }}>G</span>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>Google Ads</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1px', marginTop: 2 }}>Search, Display & YouTube</div>
+            </div>
+          </div>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', background: 'var(--rule)', border: '1px solid var(--rule2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>
+            COMING SOON
+          </span>
+        </div>
+      </div>
+
+      {/* TikTok Ads — coming soon */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 8, padding: '24px', opacity: 0.6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, background: '#010101', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#00f2ea', fontWeight: 700, fontSize: 13, fontFamily: 'Arial' }}>T</span>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>TikTok Ads</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1px', marginTop: 2 }}>TikTok for Business</div>
+            </div>
+          </div>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', background: 'var(--rule)', border: '1px solid var(--rule2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>
+            COMING SOON
+          </span>
+        </div>
+      </div>
+
+      {/* Info note */}
+      <div style={{ marginTop: 20, padding: '14px 16px', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderRadius: 4 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>Read-Only Access</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '0.5px', lineHeight: 1.8 }}>
+          VV Growth Ad Engine only reads your campaign data. We never create, edit, pause, or delete any of your ads. Your ad accounts remain fully under your control at all times.
         </div>
       </div>
     </div>
