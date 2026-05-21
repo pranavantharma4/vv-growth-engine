@@ -40,20 +40,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!client) return
-
-    // Check URL for onboarding param OR onboarding_complete flag
-    const params = new URLSearchParams(window.location.search)
-    const isOnboarding = params.get('onboarding') === '1'
-
-    if (isOnboarding || (client as any).onboarding_complete === false) {
-      // Set portal intro flag so animation plays when they land
-      sessionStorage.setItem('vv_just_logged_in', '1')
-      router.push('/dashboard/onboarding')
-      return
-    }
-
-    load()
+    // Onboarding routing is enforced by middleware — just load campaign data.
+    if (client) load()
   }, [client])
 
   async function load() {

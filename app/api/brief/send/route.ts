@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const { clientId } = await req.json()
 
     // Get client info
-    const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).single()
+    const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle()
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
 
     const today = new Date().toISOString().split('T')[0]
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     // Try to send via Resend
     const resendKey = process.env.RESEND_API_KEY
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'intelligence@vanguardvisuals.com'
+    const fromEmail = 'Vanguard Visuals <team@vngrdvisuals.com>'
     const toEmail = client.contact_email || session.user.email
 
     if (resendKey && resendKey !== 'your_resend_api_key_here') {
@@ -159,16 +159,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Health breakdown + week start — consumed by brief/page.tsx and reports/page.tsx
+    const briefNow = new Date()
+    const monday = new Date(briefNow)
+    monday.setDate(briefNow.getDate() - ((briefNow.getDay() + 6) % 7))
+    const weekStart = monday.toISOString().split('T')[0]
+    const strongCount   = camps.filter((c: any) => c.health === 'strong').length
+    const weakCount     = camps.filter((c: any) => c.health === 'weak').length
+    const bleedingCount = camps.filter((c: any) => c.health === 'bleeding').length
+    const deadCount     = camps.filter((c: any) => c.health === 'dead').length
+    const summary = recommendations.length
+      ? recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n\n')
+      : 'No critical actions this week — campaigns are holding steady.'
+
     // Always save to Supabase regardless of email send status
     const { error } = await supabase.from('weekly_briefs').upsert({
       client_id: clientId,
       week_ref: weekRef,
+      week_start: weekStart,
       biggest_leak_campaign: leak?.campaign_name || null,
       biggest_leak_amount: leak ? Number(leak.spend) : null,
       biggest_leak_platform: leak?.platform || null,
       total_spend: totalSpend,
       total_wasted: totalWasted,
       blended_roas: blendedROAS,
+      strong_count: strongCount,
+      weak_count: weakCount,
+      bleeding_count: bleedingCount,
+      dead_count: deadCount,
+      summary,
       campaign_summary: camps as any,
       recommendations: recommendations as any,
       brief_html: html,

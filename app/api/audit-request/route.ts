@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'intelligence@vanguardvisuals.com',
+        from: 'Vanguard Visuals <team@vngrdvisuals.com>',
         to: 'agency.vanguardia@gmail.com',
         subject: `Audit Request — ${clientName}`,
         html: `<p><strong>${clientName}</strong> has requested a custom audit.</p><p>Client email: ${email || 'not set'}</p><p>Follow up within 24 hours.</p>`,

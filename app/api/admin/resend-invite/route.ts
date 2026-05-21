@@ -31,11 +31,12 @@ export async function POST(req: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.vngrdvisuals.com'
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/dashboard`,
+        redirectTo: `${siteUrl}/auth/callback?next=/dashboard`,
       },
     })
 

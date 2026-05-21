@@ -6,10 +6,9 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 
 const STEPS = [
-  { id: 'welcome',  label: 'Welcome',        icon: '◈' },
-  { id: 'connect',  label: 'Connect Ads',    icon: '◎' },
-  { id: 'confirm',  label: 'Confirm Data',   icon: '◉' },
-  { id: 'done',     label: 'You\'re Live',   icon: '✓' },
+  { id: 'welcome', label: 'Welcome' },
+  { id: 'connect', label: 'Connect Ads' },
+  { id: 'confirm', label: "You're Live" },
 ]
 
 export default function OnboardingPage() {
@@ -26,6 +25,17 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     checkMetaConnection()
+
+    // Returning from Meta OAuth — clean the URL. checkMetaConnection advances the step.
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === 'meta') {
+      toast('Meta Ads connected', 'Your ad account is linked. Finishing setup...')
+      window.history.replaceState({}, '', '/dashboard/onboarding')
+    }
+    if (params.get('error')) {
+      toast('Connection failed', decodeURIComponent(params.get('error') || 'Unknown error'))
+      window.history.replaceState({}, '', '/dashboard/onboarding')
+    }
   }, [client])
 
   async function checkMetaConnection() {
@@ -36,17 +46,26 @@ export default function OnboardingPage() {
       .eq('client_id', client.id)
       .eq('platform', 'meta')
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
     setMetaConnected(!!data)
     if (data && step < 2) setStep(2)
   }
 
   async function connectMeta() {
     if (!client) return
-    const state = encodeURIComponent(JSON.stringify({ client_id: client.id }))
-    const redirect = encodeURIComponent(`${SUPABASE_URL}/functions/v1/meta-oauth-callback`)
-    const scope = 'ads_read,ads_management,business_management'
-    window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${redirect}&scope=${scope}&state=${state}&response_type=code`
+    const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
+    const scope = 'ads_read,ads_management,business_management,read_insights'
+    const state = encodeURIComponent(JSON.stringify({
+      client_id: client.id,
+      return_url: `${window.location.origin}/dashboard/onboarding?connected=meta`,
+    }))
+    window.location.href =
+      `https://www.facebook.com/v19.0/dialog/oauth?` +
+      `client_id=${META_APP_ID}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${scope}` +
+      `&state=${state}` +
+      `&response_type=code`
   }
 
   async function completeOnboarding() {
@@ -55,6 +74,7 @@ export default function OnboardingPage() {
     await supabase.from('clients').update({ onboarding_complete: true, onboarding_step: 'done' }).eq('id', client.id)
     await supabase.from('onboarding').update({ step: 'done', completed_steps: ['welcome', 'connect', 'confirm'], completed_at: new Date().toISOString() }).eq('client_id', client.id)
     toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
+    sessionStorage.setItem('vv_just_logged_in', '1')
     router.push('/dashboard')
   }
 

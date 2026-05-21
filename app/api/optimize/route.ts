@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         .from('clients')
         .select('name, account_type, agency_name, white_label_reports')
         .eq('id', client_id)
-        .single()
+        .maybeSingle()
       agencyContext = {
         isAgency: !!(clientData?.white_label_reports || clientData?.account_type === 'agency'),
         agencyName: clientData?.agency_name || '',

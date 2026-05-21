@@ -8,14 +8,16 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
 
+  // Honor ?next= but only for safe, same-origin relative paths
+  let next = requestUrl.searchParams.get('next') || '/dashboard'
+  if (!next.startsWith('/') || next.startsWith('//')) next = '/dashboard'
+
   if (code) {
     const supabase = createRouteHandlerClient({ cookies })
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Always redirect to dashboard with onboarding flag
-  // The dashboard page will check onboarding_complete and redirect accordingly
-  return NextResponse.redirect(
-    new URL('/dashboard?onboarding=1', requestUrl.origin)
-  )
+  // Land them on the dashboard — middleware routes incomplete clients
+  // into /dashboard/onboarding automatically.
+  return NextResponse.redirect(new URL(next, requestUrl.origin))
 }

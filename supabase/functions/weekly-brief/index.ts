@@ -5,10 +5,8 @@ const SUPABASE_URL  = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const RESEND_KEY    = Deno.env.get('RESEND_API_KEY') ?? ''
 
-// Use Resend's shared test sender until domain is verified
-// Once vanguardvisuals.com is added to Resend, change this to:
-// 'Vanguard Intelligence <intelligence@vanguardvisuals.com>'
-const FROM_EMAIL = 'Vanguard Intelligence <onboarding@resend.dev>'
+// All outbound email sends from the verified vngrdvisuals.com domain
+const FROM_EMAIL = 'Vanguard Visuals <team@vngrdvisuals.com>'
 
 Deno.serve(async (req) => {
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
@@ -113,15 +111,32 @@ Be direct, specific, and use exact numbers. No fluff. Write as their embedded gr
     health: c.health,
   }))
 
+  // Health breakdown + week start — consumed by brief/page.tsx and reports/page.tsx
+  const strongCount   = campaigns.filter((c: any) => c.health === 'strong').length
+  const weakCount     = campaigns.filter((c: any) => c.health === 'weak').length
+  const bleedingCount = campaigns.filter((c: any) => c.health === 'bleeding').length
+  const deadCount     = campaigns.filter((c: any) => c.health === 'dead').length
+
+  const now = new Date()
+  const monday = new Date(now)
+  monday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
+  const weekStart = monday.toISOString().split('T')[0]
+
   await supabase.from('weekly_briefs').upsert({
     client_id: client.id,
     week_ref: weekRef,
+    week_start: weekStart,
     biggest_leak_campaign: biggestLeak?.campaign_name ?? null,
     biggest_leak_amount: biggestLeak ? Number(biggestLeak.spend) : null,
     biggest_leak_platform: biggestLeak?.platform ?? null,
     total_spend: totalSpend,
     total_wasted: wasted,
     blended_roas: blendedRoas,
+    strong_count: strongCount,
+    weak_count: weakCount,
+    bleeding_count: bleedingCount,
+    dead_count: deadCount,
+    summary: aiSummary,
     campaign_summary: campaignSummary,
     recommendations: { ai_summary: aiSummary },
     brief_html: aiSummary,

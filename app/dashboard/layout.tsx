@@ -132,7 +132,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .eq('client_id', client.id)
       .eq('platform', 'meta')
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
     if (!conn) { toast('No connection', 'Connect a Meta Ads account under Connections.'); return }
     if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
       toast('Token expired', 'Meta connection expired. Please reconnect.')
