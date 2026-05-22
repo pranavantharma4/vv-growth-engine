@@ -128,6 +128,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: linkErr.message }, { status: 400 })
     }
 
+    // Supabase magic links verify via token_hash + type. Point the email
+    // straight at our /auth/callback so it runs verifyOtp server-side —
+    // do NOT use properties.action_link (Supabase's hosted /verify redirect).
+    const tokenHash = linkData.properties?.hashed_token
+    if (!tokenHash) {
+      return NextResponse.json({ error: 'Failed to generate magic link token' }, { status: 400 })
+    }
+    const magicLink = `${siteUrl}/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`
+
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json({
         success: true,
@@ -144,7 +153,7 @@ export async function POST(req: Request) {
         subject: isAgency
           ? 'Your VV Growth Ad Engine agency portal is ready'
           : 'Your VV Growth Ad Engine portal is ready',
-        html: generateWelcomeEmail(name, linkData.properties.action_link, isAgency),
+        html: generateWelcomeEmail(name, magicLink, isAgency),
       })
 
       console.log('Resend result:', JSON.stringify(emailResult))

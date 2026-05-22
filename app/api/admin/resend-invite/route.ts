@@ -45,6 +45,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: linkErr.message }, { status: 400 })
     }
 
+    // Point the email at our /auth/callback with token_hash — it runs
+    // verifyOtp server-side. Not properties.action_link (hosted /verify).
+    const tokenHash = linkData.properties?.hashed_token
+    if (!tokenHash) {
+      return NextResponse.json({ error: 'Failed to generate magic link token' }, { status: 400 })
+    }
+    const magicLink = `${siteUrl}/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`
+
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json({ error: 'Email not configured' }, { status: 500 })
     }
@@ -55,7 +63,7 @@ export async function POST(req: Request) {
       from: 'Vanguard Visuals <team@vngrdvisuals.com>',
       to: email,
       subject: 'Your VV Growth Ad Engine portal access',
-      html: generateWelcomeEmail(name || email, linkData.properties.action_link),
+      html: generateWelcomeEmail(name || email, magicLink),
     })
 
     console.log('Resend result:', JSON.stringify(result))
