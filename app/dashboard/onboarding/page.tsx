@@ -38,6 +38,19 @@ export default function OnboardingPage() {
     }
   }, [client])
 
+  // The Meta OAuth popup posts back here when the connection succeeds
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.type === 'META_CONNECTED') {
+        checkMetaConnection()
+        toast('Meta Ads connected', 'Your ad account is now connected.')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [client])
+
   async function checkMetaConnection() {
     if (!client) return
     const { data } = await supabase
@@ -51,21 +64,36 @@ export default function OnboardingPage() {
     if (data && step < 2) setStep(2)
   }
 
-  async function connectMeta() {
+  function connectMeta() {
     if (!client) return
     const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
     const scope = 'ads_read,ads_management,business_management,read_insights'
+    const returnUrl = `${window.location.origin}/auth/meta-success?next=${encodeURIComponent('/dashboard/onboarding')}`
     const state = encodeURIComponent(JSON.stringify({
       client_id: client.id,
-      return_url: `${window.location.origin}/dashboard/onboarding?connected=meta`,
+      return_url: returnUrl,
     }))
-    window.location.href =
+    const oauthUrl =
       `https://www.facebook.com/v19.0/dialog/oauth?` +
       `client_id=${META_APP_ID}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&scope=${scope}` +
       `&state=${state}` +
       `&response_type=code`
+
+    // Open Facebook OAuth in a popup so onboarding stays open underneath
+    const popup = window.open(oauthUrl, 'MetaOAuth', 'width=600,height=720,scrollbars=yes')
+    if (!popup) {
+      toast('Popup blocked', 'Please allow popups for this site, then try again.')
+      return
+    }
+    // Fallback: if the popup is closed manually, re-check the connection
+    const interval = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(interval)
+        checkMetaConnection()
+      }
+    }, 1000)
   }
 
   async function completeOnboarding() {

@@ -31,6 +31,19 @@ export default function ConnectPage() {
     }
   }, [client])
 
+  // The Meta OAuth popup posts back here when the connection succeeds
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.type === 'META_CONNECTED') {
+        load()
+        toast('Meta Ads connected', 'Your ad account is now connected. Click Sync Now to pull your campaigns.')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [client])
+
   async function load() {
     if (!client) return
     setLoading(true)
@@ -44,14 +57,15 @@ export default function ConnectPage() {
     setLoading(false)
   }
 
-  async function connectMeta() {
+  function connectMeta() {
     if (!client) return
 
     const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
     const scope = 'ads_read,ads_management,business_management,read_insights'
+    const returnUrl = `${window.location.origin}/auth/meta-success?next=${encodeURIComponent('/dashboard/connect')}`
     const state = encodeURIComponent(JSON.stringify({
       client_id: client.id,
-      return_url: `${window.location.origin}/dashboard/connect?connected=meta`,
+      return_url: returnUrl,
     }))
 
     const oauthUrl = `https://www.facebook.com/v19.0/dialog/oauth?` +
@@ -61,9 +75,19 @@ export default function ConnectPage() {
       `&state=${state}` +
       `&response_type=code`
 
-    // Open in same tab — Meta OAuth works best this way
-    // The callback edge function will redirect back to return_url
-    window.location.href = oauthUrl
+    // Open Facebook OAuth in a popup so the Connections page stays open underneath
+    const popup = window.open(oauthUrl, 'MetaOAuth', 'width=600,height=720,scrollbars=yes')
+    if (!popup) {
+      toast('Popup blocked', 'Please allow popups for this site, then try again.')
+      return
+    }
+    // Fallback: if the popup is closed manually, re-check the connection
+    const interval = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(interval)
+        load()
+      }
+    }, 1000)
   }
 
   async function disconnect() {
