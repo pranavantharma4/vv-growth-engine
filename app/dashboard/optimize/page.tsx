@@ -307,8 +307,14 @@ export default function OptimizePage() {
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 10 }}>Select Campaign</div>
             {campaigns.length === 0 ? (
               <div style={{ padding: '24px', background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>No campaigns today</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>Connect Meta Ads or add campaigns manually</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>No campaigns yet</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', marginBottom: 12 }}>Add a campaign to build optimization blueprints.</div>
+                <button
+                  onClick={() => (window.location.href = '/dashboard/add-campaign')}
+                  style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '9px 18px', borderRadius: 4, cursor: 'pointer' }}
+                >
+                  + Add Campaign
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

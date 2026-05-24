@@ -7,35 +7,32 @@ import { AppCtx } from './context'
 import type { Client } from '@/lib/types'
 
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard',       icon: '◈', section: 'Overview',      admin: false },
-  { id: 'campaigns', label: 'Campaigns',        icon: '◫', section: null,            admin: false },
-  { id: 'analysis',  label: 'AI Analysis',      icon: '◉', section: 'Intelligence', admin: false },
-  { id: 'optimize',  label: 'Ads Optimization', icon: '◑', section: null,            admin: false },
-  { id: 'brief',     label: 'Weekly Brief',     icon: '◧', section: null,            admin: false },
-  { id: 'reports',   label: 'Reports',          icon: '▣', section: null,            admin: false },
-  { id: 'admin',     label: 'Client Health',    icon: '▲', section: 'Admin',         admin: true  },
-  { id: 'connect',   label: 'Connections',      icon: '◎', section: null,            admin: false },
-  { id: 'settings',  label: 'Settings',         icon: '◌', section: null,            admin: false },
-  { id: 'invite',    label: 'Invite Client',    icon: '+', section: 'Admin',         admin: true  },
-  { id: 'data-tool', label: 'Campaign Data',    icon: '✎', section: 'Admin',         admin: true  },
+  { id: 'dashboard',     label: 'Dashboard',       icon: '◈', section: 'Overview',      admin: false },
+  { id: 'campaigns',     label: 'Campaigns',        icon: '◫', section: null,            admin: false },
+  { id: 'add-campaign',  label: 'Add Campaign',     icon: '+', section: null,            admin: false },
+  { id: 'analysis',      label: 'AI Analysis',      icon: '◉', section: 'Intelligence', admin: false },
+  { id: 'optimize',      label: 'Ads Optimization', icon: '◑', section: null,            admin: false },
+  { id: 'brief',         label: 'Weekly Brief',     icon: '◧', section: null,            admin: false },
+  { id: 'reports',       label: 'Reports',          icon: '▣', section: null,            admin: false },
+  { id: 'admin',         label: 'Client Health',    icon: '▲', section: 'Admin',         admin: true  },
+  { id: 'settings',      label: 'Settings',         icon: '◌', section: 'Account',       admin: false },
+  { id: 'invite',        label: 'Invite Client',    icon: '+', section: 'Admin',         admin: true  },
+  { id: 'data-tool',     label: 'Campaign Data',    icon: '✎', section: 'Admin',         admin: true  },
 ]
 
 const TITLES: Record<string, [string, string]> = {
-  dashboard:   ['Overview',          ''],
-  campaigns:   ['Campaigns',         'All active campaigns across platforms'],
-  analysis:    ['AI Analysis',       'Claude-powered campaign diagnostics'],
-  optimize:    ['Ads Optimization',  'Build and refine campaigns from AI insights'],
-  brief:       ['Weekly Brief',      'Automated intelligence summary'],
-  reports:     ['Reports',           'Monthly audits and optimization blueprints'],
-  admin:       ['Client Health',     'All accounts at a glance'],
-  connect:     ['Connections',       'Manage ad account integrations'],
-  settings:    ['Settings',          'Account preferences and notifications'],
-  invite:      ['Invite Client',     'Create and onboard a new client account'],
-  'data-tool': ['Campaign Data',     'Update client campaign metrics'],
+  dashboard:      ['Overview',          ''],
+  campaigns:      ['Campaigns',         'All active campaigns across platforms'],
+  'add-campaign': ['Campaign Data',     'Add and manage your campaign numbers'],
+  analysis:       ['AI Analysis',       'Claude-powered campaign diagnostics'],
+  optimize:       ['Ads Optimization',  'Build and refine campaigns from AI insights'],
+  brief:          ['Weekly Brief',      'Automated intelligence summary'],
+  reports:        ['Reports',           'Monthly audits and optimization blueprints'],
+  admin:          ['Client Health',     'All accounts at a glance'],
+  settings:       ['Settings',          'Account preferences and notifications'],
+  invite:         ['Invite Client',     'Create and onboard a new client account'],
+  'data-tool':    ['Campaign Data',     'Update client campaign metrics'],
 }
-
-const SUPABASE_URL = 'https://ofqnhlkjazlsfctldbng.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mcW5obGtqYXpsc2ZjdGxkYm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MDU0OTYsImV4cCI6MjA4OTA4MTQ5Nn0.abff7Fdqidvcg8hs0c5Gz7fO0cGmgVPxbrrRlpZ-sws'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClientComponentClient()
@@ -49,7 +46,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [minimal, setMinimalState] = useState(false)
   const [dropdown, setDropdown] = useState(false)
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
-  const [syncing, setSyncing] = useState(false)
   const [navTarget, setNavTarget] = useState('')
   const [contentKey, setContentKey] = useState(pathname)
 
@@ -121,39 +117,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (v) document.body.classList.add('minimal')
     else document.body.classList.remove('minimal')
     localStorage.setItem('vv_minimal', v ? '1' : '0')
-  }
-
-  async function handleSync() {
-    if (!client) { toast('No client', 'Select a client first.'); return }
-    if (syncing) return
-    const { data: conn } = await supabase
-      .from('ad_connections')
-      .select('id, platform, is_active, expires_at')
-      .eq('client_id', client.id)
-      .eq('platform', 'meta')
-      .eq('is_active', true)
-      .maybeSingle()
-    if (!conn) { toast('No connection', 'Connect a Meta Ads account under Connections.'); return }
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
-      toast('Token expired', 'Meta connection expired. Please reconnect.')
-      return
-    }
-    setSyncing(true)
-    toast('Syncing', 'Pulling latest campaigns from Meta Ads...')
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-meta-campaigns`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ client_id: client.id }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) toast('Sync failed', data.error || 'Something went wrong.')
-      else toast('Sync complete', `${data.campaigns_synced} campaigns updated.`)
-    } catch { toast('Sync failed', 'Network error.') }
-    finally { setSyncing(false) }
   }
 
   useEffect(() => {
@@ -293,9 +256,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .header-sub { overflow:hidden; max-height:30px; opacity:1; transition:opacity 0.35s ease,max-height 0.45s cubic-bezier(0.4,0,0.2,1); }
         body.minimal .header-sub { opacity:0 !important; max-height:0 !important; }
 
-        .sync-btn { overflow:hidden; opacity:1; transition:opacity 0.35s ease; }
-        body.minimal .sync-btn { opacity:0 !important; pointer-events:none; }
-
         .mode-btn { flex:1; padding:4px 8px; border-radius:3px; cursor:pointer; font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,0.09); background:rgba(255,255,255,0.04); color:rgba(250,248,245,0.38); transition:all 0.18s ease; white-space:nowrap; }
         .mode-btn.active { background:rgba(201,168,76,0.14); border-color:rgba(201,168,76,0.32); color:#c9a84c; }
         .mode-btn:hover { background:rgba(255,255,255,0.08); }
@@ -426,10 +386,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button className="sync-btn" onClick={handleSync} disabled={syncing}
-                style={{ fontFamily: MONO, fontSize: 8, color: syncing ? 'var(--ink3)' : 'var(--green)', padding: '5px 10px', border: `1px solid ${syncing ? 'var(--rule2)' : 'var(--greenborder)'}`, borderRadius: 4, background: syncing ? 'transparent' : 'var(--greenpaper)', cursor: syncing ? 'not-allowed' : 'pointer', letterSpacing: 1, opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap', transition: 'color 0.3s ease, border-color 0.3s ease, background 0.3s ease' }}>
-                {syncing ? '↻ Syncing...' : '↻ Sync Now'}
-              </button>
               <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
                 {now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from './context'
+import { carryForwardManualCampaigns } from '@/lib/manual-campaigns'
 
 type Campaign = {
   id: string
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   async function load() {
     if (!client) return
     setLoading(true)
+    await carryForwardManualCampaigns(supabase, client.id)
     const today = new Date().toISOString().split('T')[0]
     const [{ data: camps }, { data: briefData }] = await Promise.all([
       supabase
@@ -114,13 +116,13 @@ export default function DashboardPage() {
         No campaign data yet
       </div>
       <div style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.85, marginBottom: 28 }}>
-        Connect your ad accounts and sync to start seeing intelligence on your campaigns.
+        Add your first campaign to start seeing health classification, AI diagnostics, and your Monday brief.
       </div>
       <button
-        onClick={() => router.push('/dashboard/connect')}
+        onClick={() => router.push('/dashboard/add-campaign')}
         style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '12px 26px', borderRadius: 4, cursor: 'pointer' }}
       >
-        Connect Ad Accounts →
+        Add Your First Campaign →
       </button>
     </div>
   )
@@ -327,11 +329,11 @@ export default function DashboardPage() {
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Quick Actions</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[
-              { label: 'AI Campaign Diagnosis', icon: '◉', path: '/dashboard/analysis', accent: 'var(--gold)' },
-              { label: 'View All Campaigns',    icon: '◫', path: '/dashboard/campaigns', accent: 'var(--ink3)' },
-              { label: 'Ads Optimization',      icon: '◑', path: '/dashboard/optimize',  accent: 'var(--ink3)' },
-              { label: 'Weekly Brief',          icon: '◧', path: '/dashboard/brief',      accent: 'var(--ink3)' },
-              { label: 'Connect Ad Accounts',   icon: '◎', path: '/dashboard/connect',    accent: 'var(--ink3)' },
+              { label: 'AI Campaign Diagnosis', icon: '◉', path: '/dashboard/analysis',     accent: 'var(--gold)' },
+              { label: 'Add Campaign Data',     icon: '+', path: '/dashboard/add-campaign', accent: 'var(--gold)' },
+              { label: 'View All Campaigns',    icon: '◫', path: '/dashboard/campaigns',    accent: 'var(--ink3)' },
+              { label: 'Ads Optimization',      icon: '◑', path: '/dashboard/optimize',     accent: 'var(--ink3)' },
+              { label: 'Weekly Brief',          icon: '◧', path: '/dashboard/brief',        accent: 'var(--ink3)' },
             ].map(action => (
               <button
                 key={action.path}
