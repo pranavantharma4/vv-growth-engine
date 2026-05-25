@@ -41,7 +41,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const [clients, setClients] = useState<Client[]>([])
   const [client, setClientState] = useState<Client | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [roles, setRoles] = useState<{ client_id: string; role: string }[]>([])
+  const [hasAnyAdminRole, setHasAnyAdminRole] = useState(false)
   const [dark, setDarkState] = useState(true)
   const [minimal, setMinimalState] = useState(false)
   const [dropdown, setDropdown] = useState(false)
@@ -150,9 +151,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return
       }
 
-      // Admin if they have admin role on ANY client
+      // Track every role this user has — admin nav visibility is then computed
+      // per active client. A user only sees admin tabs when the active client
+      // is one they hold an admin role on.
+      setRoles(allRoles)
       const hasAdminRole = allRoles.some(r => r.role === 'admin')
-      setIsAdmin(hasAdminRole)
+      setHasAnyAdminRole(hasAdminRole)
 
       // Fetch ONLY the clients this user is linked to
       const linkedClientIds = allRoles.map(r => r.client_id)
@@ -167,17 +171,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setClients(cd)
         const saved = localStorage.getItem('vv_client')
 
-        // Non-admin users are locked to their one client — no switcher
+        // Users with no admin role anywhere are locked to their first client
         if (!hasAdminRole) {
           setClientState(cd[0])
           localStorage.setItem('vv_client', cd[0].id)
         } else {
-          // Admin users can switch — restore last selected
+          // Users with at least one admin link can switch — restore last selected
           setClientState(cd.find((c: Client) => c.id === saved) || cd[0])
         }
       }
     })()
   }, [])
+
+  // Admin nav reflects the role on the ACTIVE client, not a global flag.
+  // pranavantharma4 (role=client only) never sees admin tabs; an agency admin
+  // who switches the dropdown to a client-role client also drops to client view.
+  const activeRole = client ? roles.find(r => r.client_id === client.id)?.role : null
+  const isAdmin = activeRole === 'admin'
 
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
@@ -292,8 +302,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {/* Client switcher — only show if admin with multiple clients */}
-          {isAdmin && clients.length > 0 && (
+          {/* Client switcher — only show if user is admin somewhere with multiple clients */}
+          {hasAnyAdminRole && clients.length > 0 && (
             <div className="client-sw" onClick={() => setDropdown(d => !d)}
               style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
@@ -325,7 +335,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* Client name display for non-admin — no switcher */}
-          {!isAdmin && client && (
+          {!hasAnyAdminRole && client && (
             <div style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Your Account</div>
               <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client.name}</div>
