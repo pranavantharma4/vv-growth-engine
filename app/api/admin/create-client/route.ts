@@ -79,7 +79,11 @@ export async function POST(req: Request) {
 
     if (clientErr) return NextResponse.json({ error: clientErr.message }, { status: 400 })
 
-    // Link user to client — check if already linked
+    // Link user to client. If this fails, the client row is orphaned (auth user
+    // exists, clients row exists, but they can't log into the dashboard), so
+    // roll back the clients row and surface a hard error instead of silently
+    // succeeding. This is the exact failure mode that left pranavantharma4
+    // unable to sign in.
     const { data: existingLink } = await supabaseAdmin
       .from('client_users')
       .select('id')
@@ -88,21 +92,36 @@ export async function POST(req: Request) {
       .limit(1)
 
     if (!existingLink || existingLink.length === 0) {
-      await supabaseAdmin.from('client_users').insert({
+      const { error: linkErr } = await supabaseAdmin.from('client_users').insert({
         user_id: authUserId,
         client_id: clientRecord.id,
         role: isAgency ? 'admin' : 'client',
       })
+      if (linkErr) {
+        await supabaseAdmin.from('clients').delete().eq('id', clientRecord.id)
+        console.error('client_users insert failed, rolled back client:', linkErr)
+        return NextResponse.json(
+          { error: `Failed to link user to client: ${linkErr.message}` },
+          { status: 500 }
+        )
+      }
     }
 
-    // Create onboarding record
-    try {
-      await supabaseAdmin.from('onboarding').insert({
-        client_id: clientRecord.id,
-        step: 'connect',
-        completed_steps: [],
-      })
-    } catch (_) {}
+    // Create onboarding record. Not load-bearing for login (middleware also
+    // reads clients.onboarding_complete), but a missing row will skip the
+    // onboarding gate via onboarding.completed_at, so surface failures.
+    const { error: obErr } = await supabaseAdmin.from('onboarding').insert({
+      client_id: clientRecord.id,
+      step: 'connect',
+      completed_steps: [],
+    })
+    if (obErr && !obErr.message.toLowerCase().includes('duplicate')) {
+      console.error('onboarding insert failed:', obErr)
+      return NextResponse.json(
+        { error: `Failed to create onboarding record: ${obErr.message}` },
+        { status: 500 }
+      )
+    }
 
     // Mark invite accepted
     if (invite_id) {
