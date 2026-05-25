@@ -1,6 +1,7 @@
 'use client'
 export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import { carryForwardManualCampaigns } from '@/lib/manual-campaigns'
@@ -35,6 +36,7 @@ const platLabel: Record<string, string> = { meta: 'Meta', google: 'Google', tikt
 
 export default function AddCampaignPage() {
   const supabase = createClientComponentClient()
+  const router = useRouter()
   const { client, toast } = useApp()
 
   const [campaigns, setCampaigns] = useState<Row[]>([])
@@ -171,13 +173,24 @@ export default function AddCampaignPage() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 22, padding: '14px 16px', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderRadius: 4 }}>
-        <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>
-          Auto-sync coming soon
+      <div style={{ marginTop: 22, padding: '18px 20px', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>
+            Skip the manual entry
+          </div>
+          <div style={{ fontFamily: SANS, fontSize: 14, color: 'var(--ink)', marginBottom: 4, fontWeight: 500 }}>
+            Connect your Meta Ads account directly
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--ink3)', letterSpacing: '0.5px', lineHeight: 1.7 }}>
+            One-click read-only OAuth pulls every Facebook &amp; Instagram campaign automatically and keeps numbers fresh.
+          </div>
         </div>
-        <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--ink3)', letterSpacing: '0.5px', lineHeight: 1.7 }}>
-          Direct Meta &amp; Google ad-account integrations are on the V1.2 roadmap. For now, your manually-entered numbers power every dashboard view, VAI analysis, and Monday brief.
-        </div>
+        <button
+          onClick={() => router.push('/dashboard/connect')}
+          style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#fff', background: '#1877f2', border: 'none', padding: '11px 22px', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Connect Meta Ads →
+        </button>
       </div>
     </div>
   )

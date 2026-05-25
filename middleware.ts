@@ -13,11 +13,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  // Anonymous users have nothing else to gate
   if (!session) return res
 
-  // Resolve this user's client links + role.
-  // NEVER use .single() on client_users — an admin can be linked to many clients.
+  // Resolve the user's client links + onboarding state. NEVER use .single() on
+  // client_users — an admin can be linked to many clients.
   async function getUserState() {
     const { data: links } = await supabase
       .from('client_users')
@@ -28,23 +27,24 @@ export async function middleware(req: NextRequest) {
       return { hasClient: false, isAdmin: false, onboarded: false }
     }
 
-    const isAdmin = links.some(l => l.role === 'admin')
+    // Admins skip the client onboarding flow entirely.
+    if (links.some(l => l.role === 'admin')) {
+      return { hasClient: true, isAdmin: true, onboarded: true }
+    }
 
-    // Admins never go through the client onboarding flow
-    if (isAdmin) return { hasClient: true, isAdmin: true, onboarded: true }
-
-    // Onboarded if EITHER signal says so: clients.onboarding_complete is the
-    // reliable flag (the clients row always exists); onboarding.completed_at
-    // covers clients onboarded through the older flow.
+    // For pure clients, treat onboarded as TRUE only when clients.onboarding_complete
+    // is explicitly true on at least one linked client. The onboarding-table
+    // completed_at signal is a fallback for the older flow.
     const clientIds = links.map(l => l.client_id)
-    const [{ data: clientRows }, { data: obRows }] = await Promise.all([
-      supabase.from('clients').select('onboarding_complete').in('id', clientIds),
-      supabase.from('onboarding').select('completed_at').in('client_id', clientIds),
+    const [clientsQ, obQ] = await Promise.all([
+      supabase.from('clients').select('id, onboarding_complete').in('id', clientIds),
+      supabase.from('onboarding').select('client_id, completed_at').in('client_id', clientIds),
     ])
 
-    const onboarded =
-      !!(clientRows && clientRows.some(c => c.onboarding_complete)) ||
-      !!(obRows && obRows.some(o => o.completed_at))
+    const clientsDone = (clientsQ.data || []).some(c => c.onboarding_complete === true)
+    const obDone = (obQ.data || []).some(o => o.completed_at !== null)
+    const onboarded = clientsDone || obDone
+
     return { hasClient: true, isAdmin: false, onboarded }
   }
 
@@ -61,14 +61,17 @@ export async function middleware(req: NextRequest) {
   if (path.startsWith('/dashboard')) {
     const { hasClient, isAdmin, onboarded } = await getUserState()
 
-    // A logged-in user with no client link can't use the dashboard
+    // Logged-in user with no client link can't use the dashboard
     if (!hasClient) return NextResponse.redirect(new URL('/login', req.url))
 
     const onOnboarding = path === '/dashboard/onboarding'
 
-    // Incomplete onboarding → force the connect flow (admins exempt)
+    // Incomplete onboarding → force the connect flow (admins exempt).
+    // This covers /dashboard, /dashboard/add-campaign, /dashboard/connect,
+    // /dashboard/campaigns — every dashboard route except onboarding itself.
     if (!onboarded && !isAdmin && !onOnboarding) {
-      return NextResponse.redirect(new URL('/dashboard/onboarding', req.url))
+      const url = new URL('/dashboard/onboarding', req.url)
+      return NextResponse.redirect(url)
     }
 
     // Already onboarded → no reason to see the onboarding screen again

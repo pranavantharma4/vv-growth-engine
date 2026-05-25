@@ -179,6 +179,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           // Users with at least one admin link can switch — restore last selected
           setClientState(cd.find((c: Client) => c.id === saved) || cd[0])
         }
+
+        // Client-side onboarding gate. Middleware enforces this server-side,
+        // but if a deploy/edge race ever lets a non-onboarded client slip past
+        // the middleware to /dashboard or /dashboard/add-campaign, push them
+        // back into the onboarding flow before any sensitive UI renders.
+        if (!hasAdminRole && pathname !== '/dashboard/onboarding') {
+          const nonAdminClients = cd.filter(c =>
+            allRoles.some(r => r.client_id === c.id && r.role === 'client')
+          )
+          const stillOnboarding = nonAdminClients.length > 0 &&
+            nonAdminClients.every(c => c.onboarding_complete !== true)
+          if (stillOnboarding) {
+            router.replace('/dashboard/onboarding')
+            return
+          }
+        }
       }
     })()
   }, [])
