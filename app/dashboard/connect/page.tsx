@@ -63,7 +63,7 @@ export default function ConnectPage() {
     if (!client) return
 
     const redirectUri = `${SUPABASE_URL}/functions/v1/meta-oauth-callback`
-    const scope = 'ads_read,ads_management,business_management,read_insights'
+    const scope = 'ads_read,ads_management,business_management'
     const returnUrl = `${window.location.origin}/auth/meta-success?next=${encodeURIComponent('/dashboard/connect')}`
     const state = encodeURIComponent(JSON.stringify({
       client_id: client.id,
