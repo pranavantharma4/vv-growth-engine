@@ -48,26 +48,33 @@ export default function DashboardPage() {
   async function load() {
     if (!client) return
     setLoading(true)
-    await carryForwardManualCampaigns(supabase, client.id)
-    const today = new Date().toISOString().split('T')[0]
-    const [{ data: camps }, { data: briefData }] = await Promise.all([
-      supabase
-        .from('campaign_snapshots')
-        .select('*')
-        .eq('client_id', client.id)
-        .eq('snapshot_date', today)
-        .order('spend', { ascending: false }),
-      supabase
-        .from('weekly_briefs')
-        .select('*')
-        .eq('client_id', client.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ])
-    setCampaigns(camps || [])
-    setBrief(briefData || null)
-    setLoading(false)
+    try {
+      await carryForwardManualCampaigns(supabase, client.id).catch(() => {})
+      const today = new Date().toISOString().split('T')[0]
+      const [campsRes, briefRes] = await Promise.all([
+        supabase
+          .from('campaign_snapshots')
+          .select('*')
+          .eq('client_id', client.id)
+          .eq('snapshot_date', today)
+          .order('spend', { ascending: false }),
+        supabase
+          .from('weekly_briefs')
+          .select('*')
+          .eq('client_id', client.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+      setCampaigns(campsRes.data || [])
+      setBrief(briefRes.data || null)
+    } catch {
+      setCampaigns([])
+      setBrief(null)
+    } finally {
+      // Always drop the spinner — empty results render the empty state below.
+      setLoading(false)
+    }
   }
 
   const totalSpend       = campaigns.reduce((s, c) => s + Number(c.spend), 0)

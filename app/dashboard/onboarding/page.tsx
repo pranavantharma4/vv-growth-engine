@@ -118,6 +118,23 @@ export default function OnboardingPage() {
     setCompleting(true)
     await supabase.from('clients').update({ onboarding_complete: true, onboarding_step: 'done' }).eq('id', client.id)
     await supabase.from('onboarding').update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() }).eq('client_id', client.id)
+
+    // Kick off a Meta sync so the dashboard has campaign_snapshots for today.
+    // Without this the user lands on an empty dashboard until the nightly cron runs.
+    // Best-effort with a 12s cap — never block the redirect if Graph API is slow.
+    if (metaConnected) {
+      try {
+        const ctrl = new AbortController()
+        const timeout = setTimeout(() => ctrl.abort(), 12000)
+        await supabase.functions.invoke('sync-meta-campaigns', {
+          body: { client_id: client.id },
+        })
+        clearTimeout(timeout)
+      } catch {
+        // ignore — dashboard will show empty state and the cron will fill it
+      }
+    }
+
     toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
     sessionStorage.setItem('vv_just_logged_in', '1')
     router.push('/dashboard')
