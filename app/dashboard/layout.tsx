@@ -50,6 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [navTarget, setNavTarget] = useState('')
   const [contentKey, setContentKey] = useState(pathname)
   const [phase, setPhase] = useState<'idle' | 'exit' | 'enter'>('idle')
+  const [syncing, setSyncing] = useState(false)
 
   // Portal intro
   const [portalPhase, setPortalPhase] = useState(0)
@@ -107,6 +108,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setPhase('exit')
     // CSS handles the 120ms fade — we just need to push the route after it.
     exitTimer.current = setTimeout(() => router.push(path), 120)
+  }
+
+  async function syncNow() {
+    if (!client || syncing) return
+    setSyncing(true)
+    try {
+      const { error } = await supabase.functions.invoke('sync-meta-campaigns', {
+        body: { client_id: client.id },
+      })
+      if (error) {
+        const msg = (error as any)?.context?.error || (error as any)?.message || 'Sync failed'
+        toast('Sync failed', String(msg))
+      } else {
+        toast('Sync complete', 'Latest Meta campaign data pulled into the dashboard.')
+        router.refresh()
+      }
+    } catch (e: any) {
+      toast('Sync failed', e?.message || 'Unknown error')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   function setClient(c: Client) {
@@ -274,6 +296,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .page-content.page-enter { opacity: 0; transition: none; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
         .nav-btn { transform:translateZ(0); backface-visibility:hidden; transition:background-color 0.15s ease,border-color 0.15s ease; border:none; outline:none; }
         .nav-btn:hover { background-color:rgba(255,255,255,0.055) !important; }
@@ -421,6 +444,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={syncNow}
+                disabled={!client || syncing}
+                title="Pull the latest Meta campaign data into the dashboard"
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  letterSpacing: '1.2px',
+                  textTransform: 'uppercase',
+                  color: syncing ? 'var(--ink3)' : '#050509',
+                  background: syncing ? 'rgba(201,168,76,0.18)' : G,
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: 4,
+                  cursor: !client || syncing ? 'not-allowed' : 'pointer',
+                  opacity: !client ? 0.5 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background 0.18s ease, color 0.18s ease, opacity 0.18s ease',
+                }}
+              >
+                <span style={{ fontFamily: MONO, fontSize: 10, lineHeight: 1, display: 'inline-block', animation: syncing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+                {syncing ? 'Syncing…' : 'Sync Now'}
+              </button>
               <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', padding: '5px 10px', border: '1px solid var(--rule2)', borderRadius: 4, letterSpacing: 1 }}>
                 {now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </div>
