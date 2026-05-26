@@ -2,15 +2,24 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Dashboard responses must never be served from disk/back-forward cache. After
+// onboarding flips onboarding_complete=true, the next /dashboard navigation
+// needs a fresh middleware pass so it doesn't bounce back to /onboarding.
+function noStore(response: NextResponse) {
+  response.headers.set('Cache-Control', 'no-store, must-revalidate')
+  return response
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req, res })
   const { data: { session } } = await supabase.auth.getSession()
   const path = req.nextUrl.pathname
+  const isDashboard = path.startsWith('/dashboard')
 
   // Not logged in — protect the dashboard
-  if (path.startsWith('/dashboard') && !session) {
-    return NextResponse.redirect(new URL('/login', req.url))
+  if (isDashboard && !session) {
+    return noStore(NextResponse.redirect(new URL('/login', req.url)))
   }
 
   if (!session) return res
@@ -58,11 +67,11 @@ export async function middleware(req: NextRequest) {
   }
 
   // Logged in + inside the dashboard — enforce the onboarding gate
-  if (path.startsWith('/dashboard')) {
+  if (isDashboard) {
     const { hasClient, isAdmin, onboarded } = await getUserState()
 
     // Logged-in user with no client link can't use the dashboard
-    if (!hasClient) return NextResponse.redirect(new URL('/login', req.url))
+    if (!hasClient) return noStore(NextResponse.redirect(new URL('/login', req.url)))
 
     const onOnboarding = path === '/dashboard/onboarding'
 
@@ -70,14 +79,15 @@ export async function middleware(req: NextRequest) {
     // This covers /dashboard, /dashboard/add-campaign, /dashboard/connect,
     // /dashboard/campaigns — every dashboard route except onboarding itself.
     if (!onboarded && !isAdmin && !onOnboarding) {
-      const url = new URL('/dashboard/onboarding', req.url)
-      return NextResponse.redirect(url)
+      return noStore(NextResponse.redirect(new URL('/dashboard/onboarding', req.url)))
     }
 
     // Already onboarded → no reason to see the onboarding screen again
     if (onboarded && onOnboarding) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
+      return noStore(NextResponse.redirect(new URL('/dashboard', req.url)))
     }
+
+    return noStore(res)
   }
 
   return res

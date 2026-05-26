@@ -49,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [toastData, setToastData] = useState({ show: false, title: '', body: '' })
   const [navTarget, setNavTarget] = useState('')
   const [contentKey, setContentKey] = useState(pathname)
+  const [phase, setPhase] = useState<'idle' | 'exit' | 'enter'>('idle')
 
   // Portal intro
   const [portalPhase, setPortalPhase] = useState(0)
@@ -70,19 +71,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [])
 
   const prevPathRef = useRef(pathname)
-  const routeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // When the URL changes, swap the content key (forces remount of the page
+  // wrapper with .page-enter at opacity 0), then drop the class on the next
+  // paint so the base CSS transition animates opacity 0→1 over 180ms.
   useEffect(() => {
     if (prevPathRef.current === pathname) return
     prevPathRef.current = pathname
-    if (routeTimer.current) clearTimeout(routeTimer.current)
-    routeTimer.current = setTimeout(() => {
-      setContentKey(pathname)
-      setNavTarget('')
-    }, 90)
-    return () => { if (routeTimer.current) clearTimeout(routeTimer.current) }
+    setContentKey(pathname)
+    setNavTarget('')
+    setPhase('enter')
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setPhase('idle'))
+    })
+    return () => cancelAnimationFrame(raf1)
   }, [pathname])
 
+  // Prefetch every dashboard route on mount so cross-tab navigation has no
+  // network wait — the page transition is the only thing the user perceives.
   useEffect(() => {
     NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
       .forEach(r => router.prefetch(r))
@@ -96,7 +103,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function navigate(path: string) {
     if (pathname === path) return
     setNavTarget(path)
-    setTimeout(() => router.push(path), 90)
+    if (exitTimer.current) clearTimeout(exitTimer.current)
+    setPhase('exit')
+    // CSS handles the 120ms fade — we just need to push the route after it.
+    exitTimer.current = setTimeout(() => router.push(path), 120)
   }
 
   function setClient(c: Client) {
@@ -259,10 +269,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         * { box-sizing: border-box; }
         body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-        @keyframes contentIn  { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes contentOut { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(-4px)} }
-        .content-in  { animation: contentIn  0.22s cubic-bezier(0.16,1,0.3,1) both; will-change: opacity,transform; }
-        .content-out { animation: contentOut 0.09s ease both; pointer-events:none; will-change: opacity,transform; }
+        .page-content { opacity: 1; transition: opacity 180ms ease; will-change: opacity; }
+        .page-content.page-exit { opacity: 0; transition: opacity 120ms ease; pointer-events: none; }
+        .page-content.page-enter { opacity: 0; transition: none; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
@@ -420,7 +429,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Content */}
           <main className="main-scroll" style={{ flex: 1, background: 'var(--bg)', transition: 'background 0.35s ease' }}>
-            <div key={contentKey} className={navTarget ? 'content-out' : 'content-in'}>
+            <div
+              key={contentKey}
+              className={`page-content${phase === 'exit' ? ' page-exit' : ''}${phase === 'enter' ? ' page-enter' : ''}`}
+            >
               {children}
             </div>
           </main>

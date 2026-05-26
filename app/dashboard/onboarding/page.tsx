@@ -173,6 +173,11 @@ export default function OnboardingPage() {
 
     toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
     sessionStorage.setItem('vv_just_logged_in', '1')
+
+    // Pause briefly so the onboarding_complete write propagates before the
+    // middleware re-evaluates state on /dashboard — otherwise a stale read
+    // bounces the user back to /onboarding and the button feels stuck.
+    await new Promise(r => setTimeout(r, 800))
     router.push('/dashboard')
   }
 
