@@ -7,6 +7,7 @@ import { useApp } from '../context'
 import AddCampaignForm from '../add-campaign/AddCampaignForm'
 
 const STEPS = [
+  { id: 'secure',  label: 'Secure' },
   { id: 'welcome', label: 'Welcome' },
   { id: 'data',    label: 'Add Campaigns' },
   { id: 'confirm', label: "You're Live" },
@@ -24,11 +25,21 @@ export default function OnboardingPage() {
   const [metaConnected, setMetaConnected] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [showManual, setShowManual] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [settingPassword, setSettingPassword] = useState(false)
 
   useEffect(() => {
     if (!client) return
     refreshCount()
     checkMetaConnection()
+
+    // Skip the password step if it was already set on this browser
+    try {
+      if (localStorage.getItem(`vv_pwd_set_${client.id}`) === '1') {
+        setStep(s => (s === 0 ? 1 : s))
+      }
+    } catch {}
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('connected') === 'meta') {
@@ -81,6 +92,31 @@ export default function OnboardingPage() {
   function onCampaignAdded() {
     toast('Campaign added', 'Add more or continue to your dashboard.')
     refreshCount()
+  }
+
+  async function setPasswordAndContinue() {
+    if (password.length < 8) {
+      toast('Password too short', 'Use at least 8 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      toast("Passwords don't match", 'Re-enter the same password in both fields.')
+      return
+    }
+    setSettingPassword(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setSettingPassword(false)
+    if (error) {
+      toast('Could not set password', error.message)
+      return
+    }
+    if (client) {
+      try { localStorage.setItem(`vv_pwd_set_${client.id}`, '1') } catch {}
+    }
+    setPassword('')
+    setConfirmPassword('')
+    toast('Password set', 'You can now log in any time with email + password.')
+    setStep(1)
   }
 
   function connectMeta() {
@@ -151,6 +187,19 @@ export default function OnboardingPage() {
 
   const hasData = metaConnected || campaignCount > 0
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '12px 14px',
+    background: 'rgba(255,255,255,0.025)',
+    border: `1px solid ${rule}`,
+    borderRadius: 4,
+    color: ink,
+    fontFamily: sans,
+    fontSize: 14,
+    outline: 'none',
+    transition: 'border-color 0.18s ease, background 0.18s ease',
+  }
+
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', paddingTop: 24 }}>
 
@@ -171,8 +220,60 @@ export default function OnboardingPage() {
         })}
       </div>
 
-      {/* Step 0 — Welcome */}
+      {/* Step 0 — Secure (set password) */}
       {step === 0 && (
+        <div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 1 of 3 · Account security</div>
+          <div style={{ fontFamily: serif, fontSize: 38, fontWeight: 300, color: ink, lineHeight: 1.05, letterSpacing: '-0.5px', marginBottom: 18 }}>Secure your account</div>
+          <div style={{ fontSize: 14, color: ink2, lineHeight: 1.85, marginBottom: 28, fontWeight: 300 }}>
+            You signed in via a magic link. Set a password now so you can log back in any time without waiting for an email — sessions expire after a few days.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 7 }}>Password</div>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                disabled={settingPassword}
+                onKeyDown={e => { if (e.key === 'Enter') setPasswordAndContinue() }}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 7 }}>Confirm Password</div>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                placeholder="Re-enter your password"
+                disabled={settingPassword}
+                onKeyDown={e => { if (e.key === 'Enter') setPasswordAndContinue() }}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', marginBottom: 24, lineHeight: 1.7 }}>
+            ⓘ Stored with industry-standard hashing (bcrypt via Supabase Auth). VV staff never see your password.
+          </div>
+
+          <button
+            onClick={setPasswordAndContinue}
+            disabled={settingPassword}
+            style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '13px 32px', borderRadius: 4, cursor: settingPassword ? 'not-allowed' : 'pointer', opacity: settingPassword ? 0.7 : 1 }}
+          >
+            {settingPassword ? 'Saving...' : 'Set Password & Continue →'}
+          </button>
+        </div>
+      )}
+
+      {/* Step 1 — Welcome */}
+      {step === 1 && (
         <div>
           <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Welcome to VV Growth Ad Engine</div>
           <div style={{ fontFamily: serif, fontSize: 38, fontWeight: 300, color: ink, lineHeight: 1.05, letterSpacing: '-0.5px', marginBottom: 20 }}>Let's get your intelligence system live.</div>
@@ -194,16 +295,16 @@ export default function OnboardingPage() {
               </div>
             ))}
           </div>
-          <button onClick={() => setStep(1)} style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '13px 32px', borderRadius: 4, cursor: 'pointer' }}>
+          <button onClick={() => setStep(2)} style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '13px 32px', borderRadius: 4, cursor: 'pointer' }}>
             Get Started →
           </button>
         </div>
       )}
 
-      {/* Step 1 — Bring in campaigns (OAuth + manual side by side) */}
-      {step === 1 && (
+      {/* Step 2 — Bring in campaigns (OAuth + manual side by side) */}
+      {step === 2 && (
         <div>
-          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 1 of 2</div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 2 of 3</div>
           <div style={{ fontFamily: serif, fontSize: 34, fontWeight: 300, color: ink, lineHeight: 1.1, marginBottom: 16 }}>Bring in your campaigns</div>
           <div style={{ fontSize: 13, color: ink2, lineHeight: 1.85, marginBottom: 24, fontWeight: 300 }}>
             Pick whichever is easier — one-click Meta OAuth, or manual entry. You can do both, and you can always add more after onboarding.
@@ -251,17 +352,17 @@ export default function OnboardingPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={() => setStep(0)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
+            <button onClick={() => setStep(1)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
               ← Back
             </button>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               {!hasData && (
-                <button onClick={() => setStep(2)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: 'none', padding: '11px 14px', cursor: 'pointer', letterSpacing: '1px' }}>
+                <button onClick={() => setStep(3)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: 'none', padding: '11px 14px', cursor: 'pointer', letterSpacing: '1px' }}>
                   Skip for now
                 </button>
               )}
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
                 style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '13px 28px', borderRadius: 4, cursor: 'pointer' }}
               >
                 Continue →
@@ -271,10 +372,10 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {/* Step 2 — Confirm */}
-      {step === 2 && (
+      {/* Step 3 — Confirm */}
+      {step === 3 && (
         <div>
-          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 2 of 2</div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 3 of 3</div>
           <div style={{ fontFamily: serif, fontSize: 34, fontWeight: 300, color: ink, lineHeight: 1.1, marginBottom: 16 }}>
             {hasData ? 'Your data is live.' : "You're all set."}
           </div>
@@ -294,6 +395,7 @@ export default function OnboardingPage() {
               <div style={{ fontFamily: mono, fontSize: 8, color: '#4ade80', letterSpacing: '2px', textTransform: 'uppercase' }}>Account Active</div>
             </div>
             {[
+              'Password set — log in any time at vngrdvisuals.com',
               metaConnected ? 'Meta Ads syncing daily at 2AM UTC' : 'Dashboard ready with live campaign view',
               'AI diagnosis available for each campaign',
               'Monday 7AM — your first intelligence brief',
@@ -306,7 +408,7 @@ export default function OnboardingPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={() => setStep(1)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
+            <button onClick={() => setStep(2)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
               ← Back
             </button>
             <button onClick={completeOnboarding} disabled={completing}
