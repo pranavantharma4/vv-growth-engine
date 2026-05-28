@@ -43,7 +43,7 @@ export default function VisionDropConnect() {
           setStage('connect')
         } catch {}
       }
-      window.history.replaceState({}, '', '/vision-drop/connect')
+      window.history.replaceState({}, '', '/audit/connect')
     }
   }, [])
 
@@ -54,7 +54,7 @@ export default function VisionDropConnect() {
       if (e.data?.type === 'VISION_DROP_META_CONNECTED') {
         setConnected(true)
         // Tiny pause so the green confirm has a beat before the redirect kicks in
-        setTimeout(() => router.push('/vision-drop/analyzing'), 600)
+        setTimeout(() => router.push('/audit/analyzing'), 600)
       }
     }
     window.addEventListener('message', onMessage)
@@ -109,7 +109,7 @@ export default function VisionDropConnect() {
   return (
     <main style={{ fontFamily: SANS, color: INK, minHeight: '100vh' }}>
       <header style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${RULE}` }}>
-        <a href="/vision-drop" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <a href="/audit" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
           <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: INK, letterSpacing: 2 }}>VV</span>
           <span style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Ad Vision Drop</span>
         </a>

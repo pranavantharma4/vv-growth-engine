@@ -1,653 +1,539 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
-const SYMPTOMS = [
-  "You increased budget. ROAS dropped. Nobody knows why.",
-  "Your agency sends reports. They never say what to cut.",
-  "You're spending $15k/mo and still guessing.",
-  "Your best month was 8 months ago.",
-  "You have data. You don't have answers.",
-]
+/* ──────────────────────────────────────────────────────────────────────────
+   vngrdvisuals.com — landing page.
+   One job: make the visitor feel they're hemorrhaging ad spend right now,
+   and that the free VV Ad Vision Drop (/audit) is the thing that stops it.
+   Pure-CSS animation, lazy reveals below the fold, fully responsive.
+─────────────────────────────────────────────────────────────────────────── */
 
-const STEPS = [
-  { n: '01', title: 'Connect', body: 'Link Meta and Google Ads in one click. Read-only access — we never touch your campaigns.', detail: 'OAuth 2.0 · AES-256 encryption · No campaign modifications ever' },
-  { n: '02', title: 'Classify', body: 'Every campaign scored STRONG, WEAK, BLEEDING, or DEAD. Updated daily from live data.', detail: 'Proprietary health scoring · Real-time sync · Cross-platform view' },
-  { n: '03', title: 'Act', body: 'Every Monday — one brief, one action, your biggest leak. Plain English, zero jargon.', detail: 'Claude AI diagnosis · Weekly delivery · PDF export' },
-]
+const G = '#c9a84c'
+const RED = '#f87171'
+const GREEN = '#4ade80'
+const INK = 'rgba(245,243,239,0.95)'
+const I2 = 'rgba(245,243,239,0.6)'
+const I3 = 'rgba(245,243,239,0.3)'
+const I4 = 'rgba(245,243,239,0.12)'
+const RULE = 'rgba(255,255,255,0.08)'
+const CARD = 'rgba(255,255,255,0.025)'
+const MONO = "'DM Mono',monospace"
+const SERIF = "'Cormorant Garamond',serif"
+const SANS = "'DM Sans',sans-serif"
 
-const FAQS = [
-  { q: 'How is this different from my agency reports?', a: 'Agency reports show you what happened. VV Growth Ad Engine tells you exactly what is wrong and what to do about it — in plain English, every Monday, without a call.' },
-  { q: 'What ad platforms do you connect to?', a: 'Meta Ads (Facebook + Instagram) and Google Ads currently. TikTok Ads coming soon. You connect once via OAuth — we never store passwords or modify campaigns.' },
-  { q: 'How do I get access?', a: "VV Growth Ad Engine is invitation-only. Book a 15-minute call with the Vanguard team. We review your ad spend, confirm fit, and onboard you within 24 hours if it's the right match." },
-  { q: 'How long until I see results?', a: 'Your first intelligence brief arrives the Monday after you connect. Most clients identify their biggest budget leak within 48 hours of onboarding.' },
-  { q: 'Do I need to change agencies or ad managers?', a: 'No. VV Growth Ad Engine sits on top of your existing setup. Think of us as the intelligence layer — we tell you and your team exactly what to change and why.' },
-]
-
-const MARQUEE = [
-  { n: 'Meta Ads', l: 'Connected' },
-  { n: 'Google Ads', l: 'Connected' },
-  { n: 'STRONG', l: 'Campaigns performing' },
-  { n: 'BLEEDING', l: 'Campaigns flagged' },
-  { n: 'Monday 7AM', l: 'Weekly brief delivered' },
-  { n: 'Claude AI', l: 'Diagnosis engine' },
-]
-
-function useReveal(threshold = 0.08) {
+// ── lazy reveal on scroll ──────────────────────────────────────────────────
+function Reveal({ children, delay = 0, style = {} }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true) }, { threshold })
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } }, { threshold: 0.12 })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [threshold])
-  return { ref, visible }
-}
-
-function Reveal({ children, delay = 0, style = {} }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
-  const { ref, visible } = useReveal()
+  }, [])
   return (
-    <div ref={ref} style={{
-      opacity: visible ? 1 : 0,
-      transform: visible ? 'translateY(0)' : 'translateY(32px)',
-      transition: `opacity 0.9s ease ${delay}s, transform 1s cubic-bezier(0.16,1,0.3,1) ${delay}s`,
-      ...style
-    }}>
+    <div ref={ref} style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(28px)', transition: `opacity .8s ease ${delay}s, transform .9s cubic-bezier(.16,1,.3,1) ${delay}s`, ...style }}>
       {children}
     </div>
   )
 }
 
-export default function LandingClient() {
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle'|'loading'|'success'|'error'>('idle')
-  const [symptomIdx, setSymptomIdx] = useState(0)
-  const [showBook, setShowBook] = useState(false)
-  const [bookName, setBookName] = useState('')
-  const [bookEmail, setBookEmail] = useState('')
-  const [bookCompany, setBookCompany] = useState('')
-  const [bookSpend, setBookSpend] = useState('')
-  const [bookStatus, setBookStatus] = useState<'idle'|'loading'|'success'>('idle')
-  const [openFaq, setOpenFaq] = useState<number|null>(null)
-  const [navStuck, setNavStuck] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [introPhase, setIntroPhase] = useState(0)
-  const [introDone, setIntroDone] = useState(false)
+// ── count-up stat ──────────────────────────────────────────────────────────
+function CountUp({ target, decimals = 0, prefix = '', suffix = '', duration = 1700 }: { target: number; decimals?: number; prefix?: string; suffix?: string; duration?: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [val, setVal] = useState(0)
+  const ran = useRef(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !ran.current) {
+        ran.current = true
+        const start = performance.now()
+        const step = (now: number) => {
+          const p = Math.min((now - start) / duration, 1)
+          const eased = 1 - Math.pow(1 - p, 3)
+          setVal(target * eased)
+          if (p < 1) requestAnimationFrame(step)
+        }
+        requestAnimationFrame(step)
+      }
+    }, { threshold: 0.4 })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [target, duration])
+  return <span ref={ref}>{prefix}{val.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>
+}
 
-  // Intro timeline:
-  // 0ms   → black
-  // 80ms  → three symbols appear (↑ · ↓ · ✦) — fade in 200ms each, staggered 60ms
-  // 500ms → symbols fade out 150ms, VV fades in simultaneously
-  // 900ms → VV at full opacity, brief hold
-  // 1100ms → entire overlay fades out over 400ms
-  // 1500ms → done, homepage fully visible
+const ANALYSIS_TEXT =
+  'Root cause: audience frequency has exceeded 3.4x. Creative fatigue confirmed. This campaign has generated $0 in net profit over the last 14 days.'
+
+export default function LandingClient() {
+  const [mounted, setMounted] = useState(false)
+  const [navVisible, setNavVisible] = useState(false)
+  const [navStuck, setNavStuck] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // leak visualizer state machine: 0 bleeding card → 1 diagnosis → 2 recoverable
+  const [viz, setViz] = useState(0)
+  const [spend, setSpend] = useState(3186)
+  const [typed, setTyped] = useState('')
 
   useEffect(() => {
     setMounted(true)
-    const timers: ReturnType<typeof setTimeout>[] = []
-
-    const seen = sessionStorage.getItem('vv_intro_v2')
-    if (seen) {
-      setIntroPhase(5)
-      setIntroDone(true)
-    } else {
-      sessionStorage.setItem('vv_intro_v2', '1')
-      timers.push(setTimeout(() => setIntroPhase(1), 80))    // symbols in
-      timers.push(setTimeout(() => setIntroPhase(2), 500))   // symbols out, VV in
-      timers.push(setTimeout(() => setIntroPhase(3), 900))   // VV hold
-      timers.push(setTimeout(() => setIntroPhase(4), 1100))  // fade out begins
-      timers.push(setTimeout(() => { setIntroPhase(5); setIntroDone(true) }, 1500)) // done
+    const navTimer = setTimeout(() => setNavVisible(true), 2000)
+    const onScroll = () => {
+      setNavStuck(window.scrollY > 30)
+      if (window.scrollY > 8) setNavVisible(true)
     }
-
-    const iv1 = setInterval(() => setSymptomIdx(i => (i + 1) % SYMPTOMS.length), 3200)
-    const onScroll = () => setNavStuck(window.scrollY > 30)
     window.addEventListener('scroll', onScroll, { passive: true })
-
-    return () => {
-      timers.forEach(clearTimeout)
-      clearInterval(iv1)
-      window.removeEventListener('scroll', onScroll)
-    }
+    const vizTimer = setInterval(() => setViz((s) => (s + 1) % 3), 2800)
+    return () => { clearTimeout(navTimer); clearInterval(vizTimer); window.removeEventListener('scroll', onScroll) }
   }, [])
 
-  async function handleWaitlist() {
-    if (!email || !email.includes('@')) return
-    setStatus('loading')
-    try {
-      const res = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
-      if (res.ok) { setStatus('success'); setEmail('') } else setStatus('error')
-    } catch { setStatus('error') }
-  }
+  // bleeding spend ticks up only while the bleeding card is showing
+  useEffect(() => {
+    if (viz === 0) setSpend(3186)
+    if (viz !== 0) return
+    const id = setInterval(() => setSpend((s) => s + Math.round(Math.random() * 6 + 2)), 620)
+    return () => clearInterval(id)
+  }, [viz])
 
-  async function handleBook() {
-    if (!bookName || !bookEmail) return
-    setBookStatus('loading')
-    try { await fetch('/api/book-call', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: bookName, email: bookEmail, company: bookCompany, spend: bookSpend }) }) } catch {}
-    setBookStatus('success')
-  }
+  // diagnosis types out like a terminal while state 1 is showing
+  useEffect(() => {
+    if (viz !== 1) { setTyped(''); return }
+    let i = 0
+    const id = setInterval(() => {
+      i += 1
+      setTyped(ANALYSIS_TEXT.slice(0, i))
+      if (i >= ANALYSIS_TEXT.length) clearInterval(id)
+    }, 22)
+    return () => clearInterval(id)
+  }, [viz])
 
   if (!mounted) return null
 
-  const G = '#c9a84c'
-  const RULE = 'rgba(255,255,255,0.07)'
-  const BG2 = 'rgba(255,255,255,0.025)'
-  const INK = 'rgba(245,243,239,0.95)'
-  const I2 = 'rgba(245,243,239,0.55)'
-  const I3 = 'rgba(245,243,239,0.28)'
-  const I4 = 'rgba(245,243,239,0.11)'
-  const MONO = "'DM Mono',monospace"
-  const SERIF = "'Cormorant Garamond',serif"
-  const SANS = "'DM Sans',sans-serif"
-
-  const pillStyle = (h: string) => {
-    const map: Record<string, { bg: string; color: string; border: string }> = {
-      s: { bg: '#1a3a1a', color: '#4ade80', border: '#2a5a2a' },
-      w: { bg: '#2a2210', color: '#fbbf24', border: '#3a3218' },
-      b: { bg: '#2a1a0a', color: '#fb923c', border: '#3a2a1a' },
-      d: { bg: '#2a1010', color: '#f87171', border: '#3a1818' },
-    }
-    return map[h] || map.s
-  }
-
-  // Intro element states
-  const symVisible = introPhase === 1
-  const vvVisible = introPhase >= 2 && introPhase <= 4
-  const overlayVisible = introPhase < 4
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString()
+  const scrollTo = (id: string) => (e: React.MouseEvent) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); setMenuOpen(false) }
 
   return (
-    <div style={{ background: '#050509', color: INK, fontFamily: SANS, overflowX: 'hidden', minHeight: '100vh' }}>
+    <div style={{ background: '#050509', color: INK, fontFamily: SANS, overflowX: 'hidden', minHeight: '100vh', position: 'relative' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         html{scroll-behavior:smooth;}
-        ::-webkit-scrollbar{width:2px;}
-        ::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.25);}
+        body{background:#050509;}
+        ::-webkit-scrollbar{width:3px;height:3px;}
+        ::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.3);}
 
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.15}}
-        @keyframes marqueeL{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-        @keyframes scanMove{0%{top:0}100%{top:100vh}}
-        @keyframes noiseShift{0%{background-position:0 0}100%{background-position:200px 200px}}
-        @keyframes heroLineIn{0%{transform:translateY(110%);opacity:0}100%{transform:translateY(0);opacity:1}}
-        @keyframes heroFadeUp{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes symFade{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-        @keyframes slideUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes breathe{0%,100%{opacity:.4;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.2)}}
+        @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.2}}
+        @keyframes heroIn{0%{opacity:0;transform:translateY(26px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes redToGold{0%{color:${RED};text-shadow:0 0 30px rgba(248,113,113,.35)}45%{color:${RED};text-shadow:0 0 30px rgba(248,113,113,.35)}100%{color:${G};text-shadow:0 0 30px rgba(201,168,76,.4)}}
+        @keyframes bleedPulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.0)}50%{box-shadow:0 0 0 1px rgba(248,113,113,.25)}}
 
-        .h-line-1{overflow:hidden;display:block;}
-        .h-line-2{overflow:hidden;display:block;}
-        .h-line-3{overflow:hidden;display:block;}
-        .h-word-1{display:inline-block;animation:heroLineIn 1.1s cubic-bezier(0.16,1,0.3,1) 0.1s both;}
-        .h-word-2{display:inline-block;animation:heroLineIn 1.1s cubic-bezier(0.16,1,0.3,1) 0.28s both;}
-        .h-word-3{display:inline-block;animation:heroLineIn 1.1s cubic-bezier(0.16,1,0.3,1) 0.46s both;}
-        .hero-sub{animation:heroFadeUp 0.9s ease 0.7s both;}
-        .hero-scroll{animation:heroFadeUp 0.9s ease 1.1s both;}
-        .hero-badge{animation:heroFadeUp 0.8s ease 0.05s both;}
-        .sym-in{animation:symFade 0.4s ease both;}
+        .gold-glow{position:absolute;top:38%;left:50%;width:90vw;max-width:1100px;height:90vw;max-height:1100px;border-radius:50%;
+          background:radial-gradient(circle,rgba(201,168,76,.16) 0%,rgba(201,168,76,.05) 38%,transparent 68%);
+          filter:blur(14px);pointer-events:none;z-index:0;animation:breathe 9s ease-in-out infinite;}
 
-        .noise{position:fixed;inset:0;opacity:0.025;pointer-events:none;z-index:0;
-          background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23f)'/%3E%3C/svg%3E");
-          background-size:200px;animation:noiseShift 8s steps(4) infinite;}
-        .scanline{position:fixed;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.06),transparent);pointer-events:none;z-index:50;animation:scanMove 18s linear infinite;}
-        .atm-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.011) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.011) 1px,transparent 1px);background-size:84px 84px;pointer-events:none;z-index:0;}
+        .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:${G};color:#050509;border:none;cursor:pointer;
+          font-family:${MONO};font-weight:600;letter-spacing:1.2px;font-size:13px;text-transform:uppercase;text-decoration:none;
+          padding:17px 32px;border-radius:3px;min-height:44px;transition:transform .2s,box-shadow .2s,background .2s;}
+        .btn-primary:hover{background:#d8b659;transform:translateY(-2px);box-shadow:0 14px 36px -8px rgba(201,168,76,.55);}
+        .btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:${INK};cursor:pointer;
+          font-family:${MONO};font-weight:500;letter-spacing:1.2px;font-size:13px;text-transform:uppercase;text-decoration:none;
+          padding:17px 30px;border-radius:3px;min-height:44px;border:1px solid ${RULE};transition:border-color .2s,color .2s,background .2s;}
+        .btn-ghost:hover{border-color:rgba(201,168,76,.45);color:${G};background:rgba(201,168,76,.04);}
 
-        .btn-gold{background:${G};color:#050509;border:none;cursor:pointer;font-family:${MONO};font-weight:600;letter-spacing:1.5px;transition:all 0.22s;}
-        .btn-gold:hover{background:#b8972a;transform:translateY(-1px);box-shadow:0 8px 24px rgba(201,168,76,0.2);}
-        .nav-a{text-decoration:none;font-family:${MONO};font-size:9px;color:${I3};letter-spacing:1.5px;transition:color 0.2s;}
-        .nav-a:hover{color:${INK};}
-        .pc:hover{background:rgba(255,255,255,0.025)!important;}
-        .step:hover{background:rgba(255,255,255,0.025)!important;}
-        .tc:hover{background:rgba(255,255,255,0.025)!important;}
-        input::placeholder{color:${I4};}
-        input:focus{outline:none;border-color:rgba(201,168,76,0.4)!important;}
-        .modal-open{animation:fadeIn 0.2s ease;}
-        .modal-box{animation:slideUp 0.35s cubic-bezier(0.16,1,0.3,1);}
+        .nav-link{font-family:${MONO};font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${I3};text-decoration:none;transition:color .2s;cursor:pointer;}
+        .nav-link:hover{color:${INK};}
 
-        @media(max-width:768px){
-          .hnav{display:none!important;}
-          .hero-h1{font-size:clamp(44px,12vw,120px)!important;letter-spacing:-1.5px!important;}
-          .hero-bottom-grid{flex-direction:column!important;gap:28px!important;}
-          .hero-right{align-items:flex-start!important;}
-          .g3{grid-template-columns:1fr!important;}
-          .g2{grid-template-columns:1fr!important;}
-          .panel{padding:64px 24px!important;}
-          .vision-grid{grid-template-columns:1fr!important;}
+        .outcome-card,.price-card{transition:border-color .25s,box-shadow .25s,transform .25s,background .25s;}
+        .outcome-card:hover{border-color:rgba(201,168,76,.4)!important;box-shadow:0 0 40px -12px rgba(201,168,76,.4);transform:translateY(-3px);}
+        .price-card:hover{border-color:rgba(201,168,76,.32)!important;transform:translateY(-3px);}
+
+        .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+        .pricing-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+        .sec{padding:120px 52px;}
+        .hero-title{font-size:clamp(56px,9.5vw,110px);}
+        .hamburger{display:none;}
+
+        @media(max-width:980px){
+          .pricing-row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:14px;padding:4px 0 16px;margin:0 -8px;}
+          .pricing-row > *{flex:0 0 78%;scroll-snap-align:center;}
+        }
+        @media(max-width:860px){
+          .grid-3{grid-template-columns:1fr;}
+          .nav-links{display:none!important;}
+          .hamburger{display:flex!important;}
+          .sec{padding:84px 22px!important;}
+          .hero-pad{padding:0 22px 90px!important;}
+          .hero-title{font-size:clamp(42px,11vw,72px)!important;}
+          .cta-row{flex-direction:column!important;align-items:stretch!important;}
+          .cta-row a{width:100%;}
+          .stats-row{gap:22px!important;}
+          .demo-grid{grid-template-columns:1fr!important;}
+          .close-title{font-size:clamp(38px,9vw,64px)!important;}
+        }
+        @media(max-width:420px){
+          .stats-row{flex-direction:column;align-items:flex-start!important;}
         }
       `}</style>
 
-      {/* ─── INTRO OVERLAY ─── */}
-      {/* Timeline:
-          0–80ms   : black
-          80–500ms : three symbols ↑ · ↓ · ✦ fade in staggered
-          500–900ms: symbols fade out, VV fades in simultaneously
-          900–1100ms: VV holds
-          1100–1500ms: whole overlay fades to transparent
-          1500ms+  : done — homepage visible underneath the whole time */}
-      {!introDone && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: '#020203',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          opacity: overlayVisible ? 1 : 0,
-          transition: introPhase >= 4 ? 'opacity 0.4s cubic-bezier(0.4,0,1,1)' : 'none',
-          pointerEvents: introPhase >= 4 ? 'none' : 'all',
-        }}>
+      {/* ░░ NAVBAR ░░ */}
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300, padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? 'all' : 'none',
+        transform: navVisible ? 'translateY(0)' : 'translateY(-12px)',
+        transition: 'opacity .6s ease, transform .6s ease, background .4s, border-color .4s',
+        borderBottom: `1px solid ${navStuck ? RULE : 'transparent'}`, background: navStuck ? 'rgba(5,5,9,0.92)' : 'transparent', backdropFilter: navStuck ? 'blur(18px)' : 'none' }}>
+        <a href="#top" onClick={scrollTo('top')} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <span style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 600, fontStyle: 'italic', letterSpacing: 1.5, color: INK }}>VV</span>
+          <span style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2px', textTransform: 'uppercase' }}>Growth Ad Engine</span>
+        </a>
+        <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
+          <a className="nav-link" onClick={scrollTo('how')}>How It Works</a>
+          <a className="nav-link" onClick={scrollTo('pricing')}>Pricing</a>
+          <a className="nav-link" href="/login">Sign In</a>
+          <a className="btn-primary" href="/audit" style={{ padding: '10px 20px', fontSize: 10 }}>Free Audit →</a>
+        </div>
+        <button className="hamburger" onClick={() => setMenuOpen((m) => !m)} aria-label="Menu" style={{ background: 'transparent', border: `1px solid ${RULE}`, borderRadius: 4, width: 44, height: 44, cursor: 'pointer', flexDirection: 'column', gap: 5, alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: 18, height: 1.5, background: INK, transition: 'transform .25s', transform: menuOpen ? 'translateY(6.5px) rotate(45deg)' : 'none' }} />
+          <span style={{ width: 18, height: 1.5, background: INK, opacity: menuOpen ? 0 : 1, transition: 'opacity .2s' }} />
+          <span style={{ width: 18, height: 1.5, background: INK, transition: 'transform .25s', transform: menuOpen ? 'translateY(-6.5px) rotate(-45deg)' : 'none' }} />
+        </button>
+      </nav>
 
-          {/* Symbol row — ↑ · ↓ · ✦ */}
-          {/* Appears at phase 1, disappears at phase 2 */}
-          <div style={{
-            position: 'absolute',
-            display: 'flex', alignItems: 'center', gap: 28,
-            opacity: symVisible ? 1 : 0,
-            transition: symVisible
-              ? 'opacity 0.2s ease'
-              : 'opacity 0.15s ease',
-          }}>
-            {[
-              { symbol: '↑', color: 'rgba(74,222,128,0.7)', delay: '0ms' },
-              { symbol: '·', color: 'rgba(245,243,239,0.15)', delay: '60ms' },
-              { symbol: '↓', color: 'rgba(248,113,113,0.7)', delay: '120ms' },
-            ].map((s, i) => (
-              <span key={i} style={{
-                fontFamily: MONO,
-                fontSize: 13,
-                color: s.color,
-                letterSpacing: 0,
-                opacity: symVisible ? 1 : 0,
-                transform: symVisible ? 'none' : 'translateY(3px)',
-                transition: `opacity 0.2s ease ${s.delay}, transform 0.2s ease ${s.delay}`,
-              }}>{s.symbol}</span>
-            ))}
-          </div>
-
-          {/* VV mark — appears as symbols leave */}
-          <div style={{
-            position: 'absolute',
-            fontFamily: SERIF,
-            fontSize: 'clamp(72px,16vw,160px)',
-            fontWeight: 300,
-            fontStyle: 'italic',
-            color: INK,
-            letterSpacing: '1px',
-            lineHeight: 1,
-            userSelect: 'none',
-            opacity: vvVisible ? 1 : 0,
-            transform: vvVisible ? 'none' : 'scale(0.98)',
-            transition: vvVisible
-              ? 'opacity 0.35s cubic-bezier(0.16,1,0.3,1), transform 0.4s cubic-bezier(0.16,1,0.3,1)'
-              : 'opacity 0.2s ease, transform 0.2s ease',
-          }}>VV</div>
+      {/* ░░ MOBILE MENU ░░ */}
+      {menuOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 290, background: 'rgba(5,5,9,0.97)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 30, padding: 32 }}>
+          <a className="nav-link" style={{ fontSize: 15 }} onClick={scrollTo('how')}>How It Works</a>
+          <a className="nav-link" style={{ fontSize: 15 }} onClick={scrollTo('pricing')}>Pricing</a>
+          <a className="nav-link" style={{ fontSize: 15 }} href="/login">Sign In</a>
+          <a className="btn-primary" href="/audit" style={{ marginTop: 8 }}>Free Audit →</a>
         </div>
       )}
 
-      <div className="noise" />
-      <div className="scanline" />
-      <div className="atm-grid" />
-      <div style={{ position: 'fixed', top: '-30%', left: '50%', transform: 'translateX(-50%)', width: '100vw', height: '80vh', background: 'radial-gradient(ellipse,rgba(80,82,200,0.065) 0%,rgba(40,80,200,0.025) 50%,transparent 72%)', pointerEvents: 'none', zIndex: 0 }} />
+      {/* ════════ SECTION 1 — HERO ════════ */}
+      <section id="top" className="hero-pad" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '120px 52px 90px', position: 'relative', overflow: 'hidden' }}>
+        <div className="gold-glow" />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 50% at 50% 40%,rgba(30,26,14,0.5) 0%,transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
-
-        {/* NAV */}
-        <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200, padding: '20px 52px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.5s,border-color 0.5s', borderBottom: `1px solid ${navStuck ? RULE : 'transparent'}`, background: navStuck ? 'rgba(5,5,9,0.95)' : 'transparent', backdropFilter: navStuck ? 'blur(20px)' : 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 600, fontStyle: 'italic', letterSpacing: 2, color: INK }}>VV</span>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Vanguard Visuals</div>
-              <div style={{ fontFamily: MONO, fontSize: 7, color: I4, letterSpacing: '2px', textTransform: 'uppercase' }}>Growth Ad Engine</div>
-            </div>
-          </div>
-          <div className="hnav" style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-            {[['how','How it works'],['results','Results'],['team','The Team'],['vision','VV Ad Vision'],['faq','FAQ']].map(([id, label]) => (
-              <a key={id} href={`#${id}`} className="nav-a">{label}</a>
-            ))}
-            <button onClick={() => setShowBook(true)} className="btn-gold" style={{ padding: '8px 18px', borderRadius: 2, fontSize: 9 }}>Apply for Access</button>
-            <a href="/login" className="nav-a" style={{ padding: '8px 14px', border: `1px solid ${RULE}`, borderRadius: 2 }}>Sign In →</a>
-          </div>
-        </nav>
-
-        {/* ─── HERO ─── */}
-        <div className="panel" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 52px 72px', position: 'relative', overflow: 'hidden', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 80% 60% at 70% 30%,rgba(40,35,20,0.45) 0%,transparent 70%),radial-gradient(ellipse 60% 80% at 20% 80%,rgba(20,15,30,0.35) 0%,transparent 70%),linear-gradient(160deg,#0a0810 0%,#050509 50%,#080608 100%)', pointerEvents: 'none' }} />
-
-          <div className="hero-badge" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: G, display: 'inline-block', animation: 'pulse 2.5s ease infinite' }} />
-            <span style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.45)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>Invitation Only · Ad Intelligence Platform · vngrdvisuals.com</span>
-            <div style={{ flex: 1, height: 1, background: `linear-gradient(to right,rgba(201,168,76,0.18),transparent)`, maxWidth: 100 }} />
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 1180, margin: '0 auto', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 30, animation: 'heroIn .8s ease both' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: RED, display: 'inline-block', animation: 'pulseDot 1.8s ease infinite' }} />
+            <span style={{ fontFamily: MONO, fontSize: 9, color: 'rgba(201,168,76,0.55)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>Live Meta Ads Intelligence · vngrdvisuals.com</span>
           </div>
 
-          <h1 className="hero-h1" style={{ fontFamily: SERIF, fontSize: 'clamp(64px,10vw,120px)', fontWeight: 300, lineHeight: 0.92, letterSpacing: '-3px', marginBottom: 0 }}>
-            <span className="h-line-1"><span className="h-word-1">Your ad spend</span></span>
-            <span className="h-line-2"><span className="h-word-2" style={{ color: 'rgba(245,243,239,0.1)', fontStyle: 'italic' }}>is bleeding.</span></span>
-            <span className="h-line-3"><span className="h-word-3">We find the leak.</span></span>
+          <h1 className="hero-title" style={{ fontFamily: SERIF, fontWeight: 300, lineHeight: 0.94, letterSpacing: '-2.5px', margin: 0, animation: 'heroIn .9s ease .08s both' }}>
+            <span style={{ display: 'block', fontStyle: 'italic' }}>Your ads are</span>
+            <span style={{ display: 'block', fontStyle: 'italic', color: G }}>bleeding money.</span>
+            <span style={{ display: 'block', fontWeight: 300, color: 'rgba(245,243,239,0.5)' }}>Right now.</span>
           </h1>
 
-          <div className="hero-sub" style={{ marginTop: 52 }}>
-            <div className="hero-bottom-grid" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 32, flexWrap: 'wrap' }}>
-              <p style={{ fontSize: 15, color: I2, lineHeight: 1.88, maxWidth: 420, fontWeight: 300 }}>
-                VV Growth Ad Engine connects to your Meta and Google campaigns, classifies every campaign as{' '}
-                <strong style={{ color: 'rgba(245,243,239,0.85)', fontWeight: 400 }}>STRONG, WEAK, BLEEDING,</strong> or{' '}
-                <strong style={{ color: 'rgba(245,243,239,0.85)', fontWeight: 400 }}>DEAD</strong>, and delivers your single biggest budget leak — in plain English, every Monday morning.
-              </p>
-              <div className="hero-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 18px', background: 'rgba(201,76,76,0.05)', border: '1px solid rgba(201,76,76,0.09)', borderRadius: 2 }}>
-                  <span style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,76,76,0.45)', letterSpacing: '2px' }}>SOUND FAMILIAR?</span>
-                  <span key={symptomIdx} className="sym-in" style={{ fontFamily: MONO, fontSize: 9, color: I2 }}>{SYMPTOMS[symptomIdx]}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setShowBook(true)} className="btn-gold" style={{ padding: '13px 28px', borderRadius: 2, fontSize: 10 }}>Apply for Access →</button>
-                  <div style={{ display: 'flex', borderRadius: 2, overflow: 'hidden', border: `1px solid rgba(255,255,255,0.09)` }}>
-                    <input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleWaitlist()} disabled={status === 'success'}
-                      style={{ background: 'rgba(255,255,255,0.04)', border: 'none', padding: '13px 14px', color: INK, fontFamily: MONO, fontSize: 9, width: 180 }} />
-                    <button onClick={handleWaitlist} disabled={status === 'loading' || status === 'success'} className="btn-gold" style={{ padding: '13px 14px', fontSize: 9, borderRadius: 0 }}>
-                      {status === 'loading' ? '...' : status === 'success' ? '✓' : 'Join Waitlist'}
-                    </button>
-                  </div>
-                </div>
-                {status === 'success' && <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.6)', letterSpacing: 1 }}>You're on the list. We'll be in touch.</div>}
-                <div style={{ fontFamily: MONO, fontSize: 8, color: I4, letterSpacing: 1 }}>Invitation only · No card required</div>
-              </div>
-            </div>
+          <p style={{ fontFamily: MONO, fontSize: 'clamp(11px,1.5vw,13px)', color: I2, letterSpacing: '0.5px', lineHeight: 1.8, maxWidth: 620, marginTop: 34, textTransform: 'uppercase', animation: 'heroIn .9s ease .2s both' }}>
+            Most Meta accounts waste 23–41% of monthly ad spend on campaigns that will never convert. VAI finds yours in 60 seconds.
+          </p>
+
+          <div className="cta-row" style={{ display: 'flex', gap: 14, marginTop: 40, flexWrap: 'wrap', animation: 'heroIn .9s ease .32s both' }}>
+            <a className="btn-primary" href="/audit">Find My Leak — Free →</a>
+            <a className="btn-ghost" href="#demo" onClick={scrollTo('demo')}>See How It Works ↓</a>
           </div>
 
-          <div className="hero-scroll" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 52 }}>
-            <div style={{ width: 32, height: 1, background: 'rgba(201,168,76,0.35)' }} />
-            <span style={{ fontFamily: MONO, fontSize: 7, color: I3, letterSpacing: '2px', textTransform: 'uppercase' }}>Scroll</span>
-          </div>
-        </div>
-
-        {/* INV STRIP */}
-        <div style={{ borderTop: '1px solid rgba(201,168,76,0.08)', borderBottom: '1px solid rgba(201,168,76,0.08)', padding: '9px 0', textAlign: 'center', background: 'rgba(201,168,76,0.02)' }}>
-          <span style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.32)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>◆ &nbsp; Invitation Only &nbsp;·&nbsp; No Public Pricing &nbsp;·&nbsp; intelligence@vngrdvisuals.com &nbsp; ◆</span>
-        </div>
-
-        {/* MARQUEE */}
-        <div style={{ borderBottom: `1px solid ${RULE}`, padding: '11px 0', overflow: 'hidden', background: 'rgba(201,168,76,0.015)' }}>
-          <div style={{ display: 'flex', animation: 'marqueeL 22s linear infinite', whiteSpace: 'nowrap' }}>
-            {[...MARQUEE, ...MARQUEE].map((m, i) => (
-              <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '0 24px' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 300, color: G }}>{m.n}</span>
-                <span style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2px', textTransform: 'uppercase' }}>{m.l}</span>
-                <div style={{ width: 1, height: 12, background: RULE }} />
+          <div className="stats-row" style={{ display: 'flex', gap: 52, marginTop: 64, flexWrap: 'wrap', alignItems: 'flex-end', animation: 'heroIn 1s ease .44s both' }}>
+            {[
+              { node: <CountUp prefix="$" target={2.3} decimals={1} suffix="M+" />, label: 'Wasted spend identified' },
+              { node: <CountUp target={847} />, label: 'Campaigns analyzed' },
+              { node: <CountUp target={60} suffix=" sec" />, label: 'Average audit time' },
+            ].map((s, i) => (
+              <div key={i}>
+                <div style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5vw,52px)', fontWeight: 300, color: G, lineHeight: 1 }}>{s.node}</div>
+                <div style={{ fontFamily: MONO, fontSize: 8.5, color: I3, letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 8 }}>{s.label}</div>
               </div>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* ─── THE PROBLEM ─── */}
-        <div id="results" className="panel" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>The Problem</div></Reveal>
-            <Reveal delay={0.08}>
-              <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(40px,6vw,72px)', fontWeight: 300, color: INK, lineHeight: 0.96, letterSpacing: '-1.5px', marginBottom: 52 }}>
-                Most brands are bleeding<br />30–40% of their budget.<br /><em style={{ color: 'rgba(245,243,239,0.12)', fontStyle: 'italic' }}>Right now.</em>
-              </h2>
-            </Reveal>
-            <Reveal delay={0.16}>
-              <div className="g3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: RULE, border: `1px solid ${RULE}`, borderRadius: 4, overflow: 'hidden', marginBottom: 48 }}>
-                {[
-                  { icon: '◈', title: 'No visibility', body: 'You see spend and ROAS but not which campaigns are actively destroying your returns day by day.' },
-                  { icon: '◫', title: 'Agency opacity', body: "Agencies report what looked good. Nobody tells you what to kill. That's not an accident — it's a conflict of interest." },
-                  { icon: '◉', title: 'Data without action', body: 'Dashboards show you what happened. Nobody tells you what it means or what to do Monday morning.' },
-                ].map((c, i) => (
-                  <div key={i} className="pc" style={{ background: '#050509', padding: '36px 30px', transition: 'background 0.3s' }}>
-                    <div style={{ fontFamily: MONO, fontSize: 12, color: G, marginBottom: 18 }}>{c.icon}</div>
-                    <div style={{ fontFamily: SERIF, fontSize: 24, color: INK, marginBottom: 12 }}>{c.title}</div>
-                    <div style={{ fontSize: 13, color: I2, lineHeight: 1.8 }}>{c.body}</div>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-            <Reveal delay={0.22}>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '32px 0', borderTop: `1px solid ${RULE}`, flexWrap: 'wrap', gap: 20 }}>
-                <div style={{ flex: 1, minWidth: 260 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2px', marginBottom: 8 }}>THE SOLUTION</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, lineHeight: 1.3 }}>Weekly AI intelligence that tells you exactly which campaign to cut, and why — before you waste another dollar.</div>
-                </div>
-                <button onClick={() => setShowBook(true)} className="btn-gold" style={{ padding: '13px 26px', borderRadius: 2, fontSize: 9, flexShrink: 0 }}>See How It Works →</button>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-
-        {/* ─── HOW IT WORKS ─── */}
-        <div id="how" className="panel" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>How it works</div></Reveal>
-            <Reveal delay={0.08}>
-              <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(40px,6vw,72px)', fontWeight: 300, color: INK, lineHeight: 0.96, letterSpacing: '-1.5px', marginBottom: 52 }}>
-                From connection to intelligence<br />in under 48 hours.
-              </h2>
-            </Reveal>
-            <Reveal delay={0.16}>
-              <div className="g3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: RULE, border: `1px solid ${RULE}`, borderRadius: 4, overflow: 'hidden', marginBottom: 48 }}>
-                {STEPS.map((s, i) => (
-                  <div key={i} className="step" style={{ background: '#050509', padding: '40px 32px', transition: 'background 0.3s' }}>
-                    <div style={{ fontFamily: MONO, fontSize: 9, color: 'rgba(201,168,76,0.25)', letterSpacing: '2px', marginBottom: 24 }}>{s.n}</div>
-                    <div style={{ fontFamily: SERIF, fontSize: 28, color: INK, marginBottom: 14 }}>{s.title}</div>
-                    <div style={{ fontSize: 13, color: I2, lineHeight: 1.8, marginBottom: 18 }}>{s.body}</div>
-                    <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '.5px', paddingTop: 16, borderTop: `1px solid ${RULE}` }}>{s.detail}</div>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-            <Reveal delay={0.22}>
-              <div style={{ border: `1px solid ${RULE}`, borderRadius: 4, padding: '32px 36px', background: BG2 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 20 }}>Campaign Classification System</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: RULE, borderRadius: 3, overflow: 'hidden', marginBottom: 24 }}>
-                  {[
-                    { label: 'STRONG', desc: 'Performing — leave it running', h: 's' },
-                    { label: 'WEAK', desc: 'Under-performing — needs attention', h: 'w' },
-                    { label: 'BLEEDING', desc: 'Wasting budget — act within 48h', h: 'b' },
-                    { label: 'DEAD', desc: 'No return — pause immediately', h: 'd' },
-                  ].map((p) => {
-                    const ps = pillStyle(p.h)
-                    return (
-                      <div key={p.label} style={{ background: '#050509', padding: '20px 18px' }}>
-                        <span style={{ fontFamily: MONO, fontWeight: 500, letterSpacing: '2px', fontSize: 9, padding: '3px 9px', borderRadius: 2, background: ps.bg, color: ps.color, border: `1px solid ${ps.border}`, display: 'inline-block', marginBottom: 10 }}>{p.label}</span>
-                        <div style={{ fontSize: 12, color: I3, lineHeight: 1.6 }}>{p.desc}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div style={{ border: `1px solid ${RULE}`, borderLeft: '3px solid rgba(201,76,76,0.38)', borderRadius: '0 4px 4px 0', padding: '18px 22px', background: 'rgba(255,255,255,0.018)' }}>
-                  <div style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,76,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 7 }}>Weekly Intelligence Brief — Every Monday 7AM</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 18, color: INK, marginBottom: 5 }}>Your biggest budget leak identified. One action to take. Plain English.</div>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: 1 }}>Delivered to your inbox from intelligence@vngrdvisuals.com</div>
-                </div>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-
-        {/* ─── TEAM ─── */}
-        <div id="team" className="panel" style={{ padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ maxWidth: 1000, margin: '0 auto', width: '100%' }}>
-            <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>Who You're Dealing With</div></Reveal>
-            <Reveal delay={0.08}>
-              <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(40px,6vw,68px)', fontWeight: 300, color: INK, lineHeight: 0.96, letterSpacing: '-1.5px', marginBottom: 48 }}>
-                Built by people who've seen<br />the bleed firsthand.
-              </h2>
-            </Reveal>
-            <Reveal delay={0.16}>
-              <div className="g2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: RULE, border: `1px solid ${RULE}`, borderRadius: 4, overflow: 'hidden', marginBottom: 16 }}>
-                {[
-                  { name: 'Pranavan T.', role: 'Co-Founder · Product & Technology', bio: 'Built VV Growth Ad Engine from the ground up — the entire platform, AI integration, and intelligence system. Every feature was built to solve a real problem seen firsthand in ad accounts bleeding budget.', tag: 'BUILDER' },
-                  { name: 'Bardy', role: 'Co-Founder · Sales & Strategy', bio: 'One of the strongest sales operators in his generation. Chamber of Commerce network, enterprise background. Closes high-ticket deals with precision. Your main point of contact — he speaks your language and knows your problems before you do.', tag: 'CLOSER' },
-                ].map((p, i) => (
-                  <div key={i} className="tc" style={{ background: '#050509', padding: '36px 32px', transition: 'background 0.3s' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                      <div>
-                        <div style={{ fontFamily: SERIF, fontSize: 26, color: INK, marginBottom: 4 }}>{p.name}</div>
-                        <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: 1 }}>{p.role}</div>
-                      </div>
-                      <span style={{ fontFamily: MONO, fontSize: 7, color: G, background: 'rgba(201,168,76,0.06)', padding: '4px 9px', borderRadius: 2, border: '1px solid rgba(201,168,76,0.14)', letterSpacing: '2px' }}>{p.tag}</span>
-                    </div>
-                    <div style={{ fontSize: 13, color: I2, lineHeight: 1.8 }}>{p.bio}</div>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-            <Reveal delay={0.22}>
-              <div style={{ border: `1px solid ${RULE}`, borderRadius: 4, padding: '24px 32px', background: BG2 }}>
-                <div style={{ fontFamily: MONO, fontSize: 7, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Vanguard Visuals</div>
-                <div style={{ fontSize: 13, color: I2, lineHeight: 1.8 }}>Growth intelligence agency and the company behind VV Growth Ad Engine. We use this system ourselves — every recommendation we make is one we'd stake our own budget on.</div>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-
-        {/* ─── FAQ ─── */}
-        <div id="faq" className="panel" style={{ padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ maxWidth: 760, margin: '0 auto', width: '100%' }}>
-            <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>FAQ</div></Reveal>
-            <Reveal delay={0.08}>
-              <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(40px,6vw,68px)', fontWeight: 300, color: INK, lineHeight: 0.96, letterSpacing: '-1.5px', marginBottom: 48 }}>
-                Everything you<br />need to know.
-              </h2>
-            </Reveal>
-            <Reveal delay={0.14}>
-              <div>
-                {FAQS.map((f, i) => (
-                  <div key={i} style={{ borderBottom: `1px solid ${RULE}` }}>
-                    <button onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', padding: '22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, textAlign: 'left' }}>
-                      <span style={{ fontFamily: SERIF, fontSize: 19, color: INK, fontWeight: 400, lineHeight: 1.3 }}>{f.q}</span>
-                      <span style={{ fontFamily: MONO, fontSize: 18, color: G, flexShrink: 0, transition: 'transform 0.35s cubic-bezier(0.16,1,0.3,1)', display: 'inline-block', transform: openFaq === i ? 'rotate(45deg)' : 'none' }}>+</span>
-                    </button>
-                    <div style={{ maxHeight: openFaq === i ? '300px' : '0', opacity: openFaq === i ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.4s cubic-bezier(0.16,1,0.3,1),opacity 0.35s ease', paddingBottom: openFaq === i ? 20 : 0 }}>
-                      <div style={{ fontSize: 13, color: I2, lineHeight: 1.85 }}>{f.a}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-        </div>
-
-        {/* ─── VV AD VISION ─── */}
-        <div id="vision" className="panel" style={{ padding: '96px 52px', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <Reveal>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Coming Soon</div>
-                <div style={{ height: 1, flex: 1, background: RULE, maxWidth: 60 }} />
-                <span style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,168,76,0.5)', letterSpacing: '2px', padding: '4px 9px', border: '1px solid rgba(201,168,76,0.15)', borderRadius: 2, whiteSpace: 'nowrap' }}>FREE</span>
-              </div>
-            </Reveal>
-            <div className="vision-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}>
-              <Reveal delay={0.08}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 16 }}>VV Ad Vision Drop</div>
-                <h3 style={{ fontFamily: SERIF, fontSize: 'clamp(36px,5vw,58px)', fontWeight: 300, color: INK, lineHeight: 1.02, letterSpacing: '-1px', marginBottom: 20 }}>See where your<br />budget goes. Free.</h3>
-                <p style={{ fontSize: 14, color: I2, lineHeight: 1.85, marginBottom: 24 }}>A free diagnostic snapshot — connect your ad account and instantly see your campaign health, wasted budget, and your single biggest leak. No commitment. No card required.</p>
-                <p style={{ fontFamily: MONO, fontSize: 9, color: I3, lineHeight: 1.7, marginBottom: 24 }}>The free entry point to the full VV Growth Ad Engine. See the intelligence before you commit.</p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {['Free snapshot', 'No credit card', 'Instant results', 'Meta + Google'].map(t => (
-                    <span key={t} style={{ fontFamily: MONO, fontSize: 8, color: I3, padding: '4px 10px', border: `1px solid ${RULE}`, borderRadius: 2 }}>{t}</span>
-                  ))}
-                </div>
-              </Reveal>
-              <Reveal delay={0.16}>
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid rgba(255,255,255,0.07)`, borderRadius: 4, padding: '32px', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg,transparent,rgba(201,168,76,0.25),transparent)` }} />
-                  <div style={{ fontFamily: MONO, fontSize: 7, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 24 }}>What you'll see</div>
-                  {[
-                    { label: 'Campaign Health Overview', desc: 'Every campaign classified STRONG, WEAK, BLEEDING, or DEAD' },
-                    { label: 'Wasted Spend Identified', desc: 'Exact dollar amount being lost to underperforming campaigns' },
-                    { label: 'Biggest Leak', desc: 'The one campaign you should act on first' },
-                    { label: 'Recovery Estimate', desc: 'How much you could recover by taking action' },
-                  ].map((r, i) => (
-                    <div key={i} style={{ padding: '14px 0', borderBottom: i < 3 ? `1px solid rgba(255,255,255,0.05)` : 'none' }}>
-                      <div style={{ fontFamily: MONO, fontSize: 8, color: G, letterSpacing: '1px', marginBottom: 4 }}>{r.label}</div>
-                      <div style={{ fontSize: 13, color: I2 }}>{r.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </Reveal>
-            </div>
-          </div>
-        </div>
-
-        {/* ─── FINAL CTA ─── */}
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '96px 52px', position: 'relative', overflow: 'hidden', borderBottom: `1px solid ${RULE}` }}>
-          <div style={{ position: 'absolute', bottom: '-10%', left: '50%', transform: 'translateX(-50%)', width: '80vw', height: '50vh', background: 'radial-gradient(ellipse,rgba(201,168,76,0.05) 0%,transparent 72%)', pointerEvents: 'none' }} />
-          <Reveal><div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>Invitation Only</div></Reveal>
-          <Reveal delay={0.1}>
-            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(56px,10vw,112px)', fontWeight: 300, color: INK, lineHeight: 0.92, letterSpacing: '-3px', marginBottom: 22 }}>
-              Stop the bleed.<br />Start knowing.
+      {/* ════════ SECTION 2 — THE LEAK VISUALIZER ════════ */}
+      <section id="demo" className="sec" style={{ borderTop: `1px solid ${RULE}`, position: 'relative' }}>
+        <div style={{ maxWidth: 920, margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>◧ The Leak</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5.5vw,62px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-1.5px', marginBottom: 44 }}>
+              What's happening in your<br />account <em style={{ color: G, fontStyle: 'italic' }}>right now</em>.
             </h2>
           </Reveal>
-          <Reveal delay={0.18}>
-            <p style={{ fontSize: 15, color: I2, marginBottom: 48, lineHeight: 1.85, maxWidth: 500, fontWeight: 300 }}>
-              Book a 15-minute call. We pull up your live ad data, show you your biggest leak using your own numbers, and tell you exactly what we'd do. No pitch deck. Real numbers only.
-            </p>
-          </Reveal>
-          <Reveal delay={0.26}>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-              <button onClick={() => setShowBook(true)} className="btn-gold" style={{ padding: '15px 40px', borderRadius: 2, fontSize: 10 }}>Apply for Access →</button>
-              <div style={{ display: 'flex', borderRadius: 2, overflow: 'hidden', border: `1px solid rgba(255,255,255,0.09)` }}>
-                <input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleWaitlist()} disabled={status === 'success'}
-                  style={{ background: 'rgba(255,255,255,0.03)', border: 'none', padding: '15px 14px', color: INK, fontFamily: MONO, fontSize: 10, width: 200 }} />
-                <button onClick={handleWaitlist} disabled={status === 'loading' || status === 'success'} className="btn-gold" style={{ padding: '15px 16px', fontSize: 9, borderRadius: 0 }}>
-                  {status === 'success' ? '✓' : 'Join List'}
-                </button>
+
+          <Reveal delay={0.1}>
+            <div style={{ position: 'relative', background: '#0b0a0f', border: `1px solid ${RULE}`, borderRadius: 10, padding: 'clamp(20px,4vw,40px)', overflow: 'hidden', minHeight: 320 }}>
+              {/* window chrome */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 26 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'rgba(248,113,113,0.5)' }} />
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'rgba(251,191,36,0.5)' }} />
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'rgba(74,222,128,0.5)' }} />
+                <span style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2px', marginLeft: 10, textTransform: 'uppercase' }}>VAI · live account scan</span>
+              </div>
+
+              {/* STATE 0 — bleeding campaign card */}
+              {viz === 0 && (
+                <div style={{ animation: 'heroIn .5s ease both' }}>
+                  <div style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.22)', borderLeft: `3px solid ${RED}`, borderRadius: '0 8px 8px 0', padding: '22px 26px', animation: 'bleedPulse 1.6s ease-in-out infinite' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <span style={{ fontFamily: MONO, fontSize: 8, color: RED, letterSpacing: '2px', padding: '3px 9px', border: '1px solid rgba(248,113,113,0.35)', borderRadius: 3 }}>● BLEEDING</span>
+                        <div style={{ fontFamily: SERIF, fontSize: 24, color: INK, marginTop: 14 }}>Summer Sale — Retargeting</div>
+                        <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '1px', marginTop: 6 }}>META · PURCHASE · ACTIVE 14 DAYS</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: SERIF, fontSize: 'clamp(30px,6vw,44px)', fontWeight: 300, color: RED, lineHeight: 1 }}>{fmt(spend)}<span style={{ fontFamily: MONO, fontSize: 11, color: I3, letterSpacing: 1 }}>/mo</span></div>
+                        <div style={{ fontFamily: MONO, fontSize: 10, color: I2, letterSpacing: '1px', marginTop: 8 }}>1.8x ROAS · ▲ spend rising</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '1px', marginTop: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: RED }}>▮</span> Spend climbing in real time — return is not.
+                  </div>
+                </div>
+              )}
+
+              {/* STATE 1 — VAI diagnosis types out */}
+              {viz === 1 && (
+                <div style={{ animation: 'heroIn .5s ease both' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: G, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 16 }}>▸ VAI diagnosis</div>
+                  <div style={{ fontFamily: MONO, fontSize: 'clamp(13px,2.1vw,16px)', color: INK, lineHeight: 1.9, minHeight: 150 }}>
+                    <span style={{ color: GREEN }}>$ </span>{typed}
+                    <span style={{ display: 'inline-block', width: 8, height: 16, background: G, marginLeft: 2, verticalAlign: 'middle', animation: 'blink 1s step-end infinite' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* STATE 2 — recoverable banner red→gold */}
+              {viz === 2 && (
+                <div style={{ animation: 'heroIn .5s ease both', textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 20 }}>Recoverable this month</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 'clamp(46px,11vw,92px)', fontWeight: 300, lineHeight: 1, animation: 'redToGold 2.4s ease forwards' }}>$13,200</div>
+                  <div style={{ fontFamily: MONO, fontSize: 'clamp(10px,1.6vw,12px)', color: I2, letterSpacing: '1px', marginTop: 22, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.8 }}>
+                    Redirect this into your <span style={{ color: G }}>profitable</span> campaigns and that's an extra ~7,300 reach-qualified prospects every month.
+                  </div>
+                </div>
+              )}
+
+              {/* progress dots */}
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 28 }}>
+                {[0, 1, 2].map((i) => (
+                  <span key={i} style={{ width: viz === i ? 22 : 6, height: 4, borderRadius: 2, background: viz === i ? G : RULE, transition: 'all .4s ease' }} />
+                ))}
               </div>
             </div>
-            <div style={{ fontFamily: MONO, fontSize: 8, color: I4, letterSpacing: 1 }}>No obligation · Onboarding in under 1 hour · Cancel anytime</div>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'wrap', marginTop: 32 }}>
+              <p style={{ fontSize: 14, color: I2, lineHeight: 1.7, maxWidth: 520, fontWeight: 300 }}>
+                This is what VAI found on a real <strong style={{ color: INK, fontWeight: 400 }}>$28,900/month</strong> account. Connect yours and see your number.
+              </p>
+              <a className="btn-primary" href="/audit">Get My Free Audit →</a>
+            </div>
           </Reveal>
         </div>
+      </section>
 
-        {/* FOOTER */}
-        <footer style={{ borderTop: `1px solid ${RULE}`, padding: '22px 52px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: 1 }}>© 2026 Vanguard Visuals · Growth Ad Engine · intelligence@vngrdvisuals.com</div>
-          <div style={{ display: 'flex', gap: 22 }}>
-            <a href="/privacy" style={{ fontFamily: MONO, fontSize: 8, color: I3, textDecoration: 'none', letterSpacing: 1 }}>Privacy</a>
-            <a href="/terms" style={{ fontFamily: MONO, fontSize: 8, color: I3, textDecoration: 'none', letterSpacing: 1 }}>Terms</a>
-            <button onClick={() => setShowBook(true)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: 1, padding: 0 }}>Book a Call</button>
-          </div>
-        </footer>
-
-      </div>
-
-      {/* ─── MODAL ─── */}
-      {showBook && (
-        <div className="modal-open" onClick={e => { if (e.target === e.currentTarget) setShowBook(false) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(14px)' }}>
-          <div className="modal-box" style={{ background: '#0c0b0f', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '44px', maxWidth: 480, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-            <button onClick={() => setShowBook(false)} style={{ position: 'absolute', top: 16, right: 18, background: 'transparent', border: 'none', cursor: 'pointer', color: I3, fontSize: 20, lineHeight: 1 }}>×</button>
-            {bookStatus === 'success' ? (
-              <div style={{ textAlign: 'center', padding: '28px 0' }}>
-                <div style={{ fontFamily: SERIF, fontSize: 56, color: G, lineHeight: 1, marginBottom: 18 }}>✓</div>
-                <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 300, color: INK, marginBottom: 12 }}>Request received.</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '.5px', lineHeight: 1.8 }}>We'll reach out within 24 hours to confirm your call.<br />Check your inbox at {bookEmail}.</div>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 8 }}>Apply for Access</div>
-                <div style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 300, color: INK, marginBottom: 6 }}>Talk to Vanguard</div>
-                <div style={{ fontSize: 13, color: I2, lineHeight: 1.75, marginBottom: 30 }}>15 minutes. We pull up your live ad data, show you your biggest leak, and tell you exactly what we'd do. No pitch deck. Real numbers only.</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {[
-                    { label: 'Full Name *', ph: 'Your name', val: bookName, set: setBookName },
-                    { label: 'Email *', ph: 'your@company.com', val: bookEmail, set: setBookEmail },
-                    { label: 'Company / Brand', ph: 'Your brand or company', val: bookCompany, set: setBookCompany },
-                    { label: 'Monthly Ad Spend', ph: 'e.g. $10,000/mo', val: bookSpend, set: setBookSpend },
-                  ].map(f => (
-                    <div key={f.label}>
-                      <div style={{ fontFamily: MONO, fontSize: 7, color: I3, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>{f.label}</div>
-                      <input type="text" placeholder={f.ph} value={f.val} onChange={e => f.set(e.target.value)}
-                        style={{ width: '100%', padding: '11px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 3, color: INK, fontFamily: SANS, fontSize: 13 }} />
-                    </div>
-                  ))}
-                  <button onClick={handleBook} disabled={bookStatus === 'loading' || !bookName || !bookEmail} className="btn-gold"
-                    style={{ marginTop: 8, padding: '13px', borderRadius: 3, fontSize: 10, opacity: (!bookName || !bookEmail) ? 0.35 : 1, cursor: (!bookName || !bookEmail) ? 'not-allowed' : 'pointer' }}>
-                    {bookStatus === 'loading' ? 'Submitting...' : 'Request Call →'}
-                  </button>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: I4, textAlign: 'center', letterSpacing: 1 }}>We follow up within 24 hours to confirm your time.</div>
+      {/* ════════ SECTION 3 — THREE OUTCOMES ════════ */}
+      <section className="sec" style={{ borderTop: `1px solid ${RULE}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>◧ Who it's for</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5.5vw,62px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-1.5px', marginBottom: 48 }}>
+              Built for the people<br />spending the money.
+            </h2>
+          </Reveal>
+          <div className="grid-3">
+            {[
+              { tag: 'DTC Brand Owner', body: 'Stop paying for campaigns that are killing your ROAS. VAI finds the exact campaigns destroying your blended return — and tells you exactly what to do in the next 48 hours.' },
+              { tag: 'Marketing Agency', body: 'Deliver intelligence your clients have never seen before. White-labelled briefs. Automated. Under your agency name. Every Monday morning.' },
+              { tag: 'Media Buyer', body: 'Stop guessing which campaigns to scale. VAI reads the data, finds the pattern, and tells you exactly where to move budget before you lose another week.' },
+            ].map((c, i) => (
+              <Reveal key={i} delay={0.08 * i}>
+                <div className="outcome-card" style={{ background: CARD, border: `1px solid ${RULE}`, borderRadius: 8, padding: '34px 30px', height: '100%' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: G, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 18 }}>{`0${i + 1}`}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 26, color: INK, marginBottom: 16, lineHeight: 1.15 }}>{c.tag}</div>
+                  <div style={{ fontSize: 14, color: I2, lineHeight: 1.85 }}>{c.body}</div>
                 </div>
-              </>
-            )}
+              </Reveal>
+            ))}
           </div>
         </div>
-      )}
+      </section>
+
+      {/* ════════ SECTION 4 — HOW IT WORKS ════════ */}
+      <section id="how" className="sec" style={{ borderTop: `1px solid ${RULE}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>◧ How it works</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5.5vw,62px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-1.5px', marginBottom: 52 }}>
+              Sixty seconds from<br />connect to clarity.
+            </h2>
+          </Reveal>
+          <div className="grid-3">
+            {[
+              { n: '1', title: 'Connect your Meta Ads account', body: 'One-click OAuth. Read-only access — VAI never touches or runs your campaigns.' },
+              { n: '2', title: 'VAI analyzes every campaign', body: '60 seconds. Full portfolio context. Root-cause diagnosis on every active campaign.' },
+              { n: '3', title: 'See exactly what to fix', body: 'Wasted spend identified, the exact actions to take, and a 30-day optimization blueprint.' },
+            ].map((s, i) => (
+              <Reveal key={i} delay={0.08 * i}>
+                <div style={{ padding: '8px 4px', height: '100%' }}>
+                  <div style={{ fontFamily: SERIF, fontSize: 'clamp(56px,8vw,88px)', fontWeight: 300, color: G, lineHeight: 0.9, marginBottom: 18 }}>{s.n}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 23, color: INK, marginBottom: 12, lineHeight: 1.25 }}>{s.title}</div>
+                  <div style={{ fontSize: 14, color: I2, lineHeight: 1.85 }}>{s.body}</div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════ SECTION 5 — SAMPLE OUTPUT ════════ */}
+      <section className="sec" style={{ borderTop: `1px solid ${RULE}` }}>
+        <div style={{ maxWidth: 920, margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>◧ The deliverable</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5.5vw,62px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-1.5px', marginBottom: 44 }}>
+              This is what <em style={{ color: G, fontStyle: 'italic' }}>VAI</em> produces.
+            </h2>
+          </Reveal>
+
+          <Reveal delay={0.1}>
+            <div style={{ position: 'relative', background: '#0b0a0f', border: `1px solid ${RULE}`, borderRadius: 10, padding: 'clamp(24px,4vw,42px)', overflow: 'hidden' }}>
+              {/* watermark */}
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) rotate(-24deg)', fontFamily: MONO, fontSize: 'clamp(34px,8vw,72px)', fontWeight: 500, color: 'rgba(255,255,255,0.03)', letterSpacing: '6px', whiteSpace: 'nowrap', pointerEvents: 'none', textTransform: 'uppercase' }}>Sample Output</div>
+
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, paddingBottom: 18, borderBottom: `1px solid ${RULE}`, marginBottom: 26 }}>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: G, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>VV Demo Client · Meridian Fitness</div>
+                    <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, fontStyle: 'italic', fontWeight: 300 }}>Ad Vision Drop — Account Audit</div>
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '1px', textAlign: 'right', lineHeight: 1.7 }}>LAST 30 DAYS<br />$28,900 SPEND · 2.1x ROAS</div>
+                </div>
+
+                {/* What's happening */}
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>What's happening</div>
+                  <div style={{ fontSize: 14, color: I2, lineHeight: 1.85 }}>Your retargeting budget is concentrated in a single fatigued campaign. Spend is steady but conversions have flatlined over the past two weeks — the account is quietly leaking margin.</div>
+                </div>
+
+                {/* bleeding campaign */}
+                <div style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.22)', borderLeft: `3px solid ${RED}`, borderRadius: '0 6px 6px 0', padding: '18px 22px', marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <span style={{ fontFamily: MONO, fontSize: 8, color: RED, letterSpacing: '2px', padding: '2px 8px', border: '1px solid rgba(248,113,113,0.35)', borderRadius: 3 }}>BLEEDING</span>
+                    <div style={{ fontFamily: SERIF, fontSize: 20, color: INK, marginTop: 10 }}>Summer Sale — Retargeting</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 300, color: RED, lineHeight: 1 }}>$3,200<span style={{ fontFamily: MONO, fontSize: 10, color: I3 }}>/mo</span></div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: I2, marginTop: 6 }}>1.8x ROAS</div>
+                  </div>
+                </div>
+
+                {/* root cause */}
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Root cause diagnosis</div>
+                  <div style={{ fontSize: 14, color: I2, lineHeight: 1.85 }}>Audience frequency has climbed to <strong style={{ color: INK, fontWeight: 400 }}>3.4x</strong> — well past saturation for warm retargeting. Creative hasn't been refreshed in 38 days. This campaign has generated <strong style={{ color: RED, fontWeight: 400 }}>$0 in net new profit</strong> over the last 14 days.</div>
+                </div>
+
+                {/* immediate action */}
+                <div style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)', borderLeft: `3px solid ${G}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: G, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>→ Immediate action required</div>
+                  <div style={{ fontSize: 14, color: INK, lineHeight: 1.85 }}>Pause Summer Sale — Retargeting today. Reallocate its $3,200/mo into your top prospecting campaign and launch two fresh creative variants within 72 hours.</div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <div style={{ textAlign: 'center', marginTop: 36 }}>
+              <a className="btn-primary" href="/audit">Get this on your account — Free →</a>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ════════ SECTION 6 — PRICING ════════ */}
+      <section id="pricing" className="sec" style={{ borderTop: `1px solid ${RULE}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>◧ Pricing</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 'clamp(34px,5.5vw,62px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-1.5px', marginBottom: 48 }}>
+              Priced against<br />what you'll recover.
+            </h2>
+          </Reveal>
+
+          <Reveal delay={0.08}>
+            <div className="pricing-row">
+              {[
+                { name: 'Starter', price: '497', who: 'Brands spending $2k–$10k/mo', popular: false, points: ['Weekly VAI intelligence brief', 'Every campaign health-scored', 'Your biggest leak + 1 action / week', 'Email support'] },
+                { name: 'Managed', price: '997', who: 'Brands spending $10k–$30k/mo', popular: true, points: ['Everything in Starter', 'Full 30-day optimization blueprint', 'Budget reallocation map', 'Priority support + monthly strategy call'] },
+                { name: 'Embedded', price: '2,497', who: 'Brands spending $30k+/mo', popular: false, points: ['Everything in Managed', 'Dedicated growth strategist', 'Creative direction + testing roadmap', 'Slack access + weekly syncs'] },
+                { name: 'Agency', price: '1,997', who: 'Agencies managing multiple brands', popular: false, points: ['White-labelled briefs under your brand', 'Unlimited client accounts', 'Automated Monday delivery', 'Agency dashboard + API access'] },
+              ].map((t) => (
+                <div key={t.name} className="price-card" style={{ background: t.popular ? 'rgba(201,168,76,0.05)' : CARD, border: `1px solid ${t.popular ? 'rgba(201,168,76,0.4)' : RULE}`, borderRadius: 8, padding: '30px 26px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                  {t.popular && <div style={{ position: 'absolute', top: -10, left: 26, fontFamily: MONO, fontSize: 8, color: '#050509', background: G, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 3 }}>Most Popular</div>}
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: G, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>{t.name}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 44, fontWeight: 300, color: INK, lineHeight: 1 }}>${t.price}<span style={{ fontFamily: MONO, fontSize: 11, color: I3, letterSpacing: 1 }}>/mo</span></div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '0.5px', marginTop: 10, marginBottom: 22, lineHeight: 1.5 }}>{t.who}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 26 }}>
+                    {t.points.map((p) => (
+                      <div key={p} style={{ display: 'flex', gap: 9, fontSize: 12.5, color: I2, lineHeight: 1.5 }}>
+                        <span style={{ color: G, flexShrink: 0 }}>✓</span><span>{p}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <a className={t.popular ? 'btn-primary' : 'btn-ghost'} href="/audit" style={{ marginTop: 'auto', width: '100%', padding: '13px', fontSize: 11 }}>Start Free →</a>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.14}>
+            <div style={{ textAlign: 'center', marginTop: 36, fontFamily: MONO, fontSize: 10, color: I2, letterSpacing: '1px' }}>
+              Every plan starts with a free audit. No credit card required.
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ════════ SECTION 7 — THE CLOSE ════════ */}
+      <section style={{ position: 'relative', overflow: 'hidden', padding: '140px 32px', textAlign: 'center', borderTop: `1px solid ${RULE}` }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 90% at 50% 100%,rgba(201,168,76,0.16) 0%,rgba(201,168,76,0.04) 40%,transparent 72%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 820, margin: '0 auto' }}>
+          <Reveal>
+            <h2 className="close-title" style={{ fontFamily: SERIF, fontSize: 'clamp(40px,7vw,84px)', fontWeight: 300, lineHeight: 1.02, letterSpacing: '-2px', marginBottom: 26 }}>
+              Every day you wait is another day the <em style={{ color: G, fontStyle: 'italic' }}>wrong campaigns</em> run.
+            </h2>
+          </Reveal>
+          <Reveal delay={0.1}>
+            <p style={{ fontSize: 16, color: I2, lineHeight: 1.8, maxWidth: 560, margin: '0 auto 42px', fontWeight: 300 }}>
+              Your Meta account is either making you money or losing it. VAI tells you which campaigns are doing which — in 60 seconds, for free.
+            </p>
+          </Reveal>
+          <Reveal delay={0.18}>
+            <a className="btn-primary" href="/audit" style={{ padding: '20px 44px', fontSize: 14 }}>Find Out Now — It's Free →</a>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: I3, letterSpacing: '1px', marginTop: 24, textTransform: 'uppercase' }}>
+              Read-only access · No credit card · Results in 60 seconds · Disconnect anytime
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ borderTop: `1px solid ${RULE}`, padding: '26px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ fontFamily: MONO, fontSize: 8, color: I3, letterSpacing: 1 }}>© 2026 Vanguard Visuals · Growth Ad Engine · team@vngrdvisuals.com</div>
+        <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
+          <a href="/audit" style={{ fontFamily: MONO, fontSize: 8, color: I3, textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase' }}>Free Audit</a>
+          <a href="/login" style={{ fontFamily: MONO, fontSize: 8, color: I3, textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase' }}>Sign In</a>
+        </div>
+      </footer>
     </div>
   )
 }

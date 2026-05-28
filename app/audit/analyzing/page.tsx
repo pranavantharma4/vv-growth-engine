@@ -41,18 +41,18 @@ export default function AnalyzingPage() {
 
     const remembered = sessionStorage.getItem('vd_lead')
     if (!remembered) {
-      router.replace('/vision-drop/connect')
+      router.replace('/audit/connect')
       return
     }
     let email = ''
     try {
       email = (JSON.parse(remembered).email || '').toLowerCase()
     } catch {
-      router.replace('/vision-drop/connect')
+      router.replace('/audit/connect')
       return
     }
     if (!email) {
-      router.replace('/vision-drop/connect')
+      router.replace('/audit/connect')
       return
     }
 
@@ -70,7 +70,7 @@ export default function AnalyzingPage() {
         if (!res.ok) throw new Error(json.error || 'Analysis failed')
         // Stash results so the results page renders instantly without re-fetching
         sessionStorage.setItem('vd_report', JSON.stringify(json))
-        router.replace('/vision-drop/results')
+        router.replace('/audit/results')
       } catch (e: any) {
         setErr(e.message || 'Something went wrong')
       }
@@ -125,7 +125,7 @@ export default function AnalyzingPage() {
             <div style={{ marginTop: 32, padding: '14px 16px', background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.22)', borderRadius: 4, fontFamily: MONO, fontSize: 10, color: '#fca5a5' }}>
               ✕ {err}
               <div style={{ marginTop: 10 }}>
-                <a href="/vision-drop/connect" style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                <a href="/audit/connect" style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                   ← Try reconnecting
                 </a>
               </div>

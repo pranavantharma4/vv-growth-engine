@@ -92,7 +92,7 @@ export default function VisionDropLanding() {
 
         <div className="fu fu-4">
           <Link
-            href="/vision-drop/connect"
+            href="/audit/connect"
             className="cta"
             style={{
               display: 'inline-flex',
@@ -182,7 +182,7 @@ export default function VisionDropLanding() {
         {/* Second CTA */}
         <div style={{ textAlign: 'center', marginTop: 56 }}>
           <Link
-            href="/vision-drop/connect"
+            href="/audit/connect"
             className="cta"
             style={{
               display: 'inline-flex',

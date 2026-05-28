@@ -14,10 +14,10 @@ const INK3 = 'rgba(250,248,245,0.32)'
 const RULE = 'rgba(250,248,245,0.08)'
 
 // External Calendly URL — drop your real link here when ready. Until then this
-// still routes the prospect to /vision-drop/booked so we capture the conversion
+// still routes the prospect to /audit/booked so we capture the conversion
 // + send the teaser email + ping agency. Swap to a Calendly URL when live.
 const CALENDLY_URL =
-  process.env.NEXT_PUBLIC_VISION_DROP_CALENDLY_URL || '/vision-drop/booked'
+  process.env.NEXT_PUBLIC_VISION_DROP_CALENDLY_URL || '/audit/booked'
 
 type Findings = {
   biggest_leak: { campaign_name: string; monthly_waste: number; why: string }
@@ -45,14 +45,14 @@ export default function ResultsPage() {
     const raw = sessionStorage.getItem('vd_report')
     const leadRaw = sessionStorage.getItem('vd_lead')
     if (!raw || !leadRaw) {
-      router.replace('/vision-drop/connect')
+      router.replace('/audit/connect')
       return
     }
     try {
       setReport(JSON.parse(raw))
       setEmail((JSON.parse(leadRaw).email || '').toLowerCase())
     } catch {
-      router.replace('/vision-drop/connect')
+      router.replace('/audit/connect')
     }
   }, [router])
 
@@ -60,7 +60,7 @@ export default function ResultsPage() {
     // Mark the booking + fire emails before sending the user out to Calendly.
     // We don't await — if Calendly opens we'd rather not block the click.
     if (email) {
-      fetch('/api/vision-drop/booked', {
+      fetch('/api/audit/booked', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -68,7 +68,7 @@ export default function ResultsPage() {
     }
     if (CALENDLY_URL.startsWith('http')) {
       window.open(CALENDLY_URL, '_blank', 'noopener')
-      router.push('/vision-drop/booked')
+      router.push('/audit/booked')
     } else {
       router.push(CALENDLY_URL)
     }
@@ -78,7 +78,7 @@ export default function ResultsPage() {
     if (!email || emailSending || emailSent) return
     setEmailSending(true)
     try {
-      await fetch('/api/vision-drop/booked', {
+      await fetch('/api/audit/booked', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

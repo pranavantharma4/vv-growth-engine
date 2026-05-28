@@ -4,9 +4,9 @@ import { useEffect } from 'react'
 
 // Popup bridge for the Vision Drop OAuth flow. The Meta callback edge function
 // redirects the popup here after a successful save into vision_drop_leads. We
-// postMessage the opener (the /vision-drop/connect page) and close ourselves.
+// postMessage the opener (the /audit/connect page) and close ourselves.
 // If we weren't opened as a popup (popup blocked → same-tab redirect), we
-// recover by navigating straight to /vision-drop/analyzing.
+// recover by navigating straight to /audit/analyzing.
 export default function VisionDropOAuthBridge() {
   useEffect(() => {
     try {
@@ -20,7 +20,7 @@ export default function VisionDropOAuthBridge() {
 
     window.close()
     const t = setTimeout(() => {
-      window.location.replace('/vision-drop/analyzing')
+      window.location.replace('/audit/analyzing')
     }, 600)
     return () => clearTimeout(t)
   }, [])
