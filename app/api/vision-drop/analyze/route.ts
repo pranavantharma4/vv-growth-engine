@@ -60,13 +60,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Meta token expired — reconnect required' }, { status: 401 })
     }
 
-    // 2. Pull campaign-level insights for the last 30 days
-    const since = new Date(Date.now() - 30 * 86400_000).toISOString().split('T')[0]
-    const until = new Date().toISOString().split('T')[0]
+    // 2. Pull campaign-level insights for the last 7 days. A 30-day window
+    //    returns $0 for accounts where the campaign only launched recently,
+    //    so we favour the shorter preset to surface real numbers fast.
     const insightsUrl =
       `https://graph.facebook.com/v19.0/act_${lead.meta_account_id}/insights` +
       `?level=campaign` +
-      `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
+      `&date_preset=last_7d` +
       `&fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas` +
       `&limit=200` +
       `&access_token=${lead.meta_access_token}`
@@ -137,17 +137,17 @@ export async function POST(req: Request) {
         model: 'claude-sonnet-4-6',
         max_tokens: 2200,
         system:
-          'You are a senior performance marketing analyst auditing a Meta Ads account for a prospect. Be specific, candid, and quantitative. Reference real dollar amounts and ROAS figures pulled from the data. Never invent campaign names.',
+          'You are a senior performance marketing analyst auditing a Meta Ads account for a prospect. Be specific, candid, and quantitative. Reference real dollar amounts and ROAS figures pulled from the data. Never invent campaign names. Every finding must be actionable regardless of account size — single-campaign accounts get their own framing, not "n/a".',
         messages: [
           {
             role: 'user',
             content:
-              `Account 30-day summary:\n` +
+              `Account snapshot — last 7 days:\n` +
               `Total spend: $${Math.round(totalSpend).toLocaleString()}\n` +
               `Total revenue: $${Math.round(totalRevenue).toLocaleString()}\n` +
               `Blended ROAS: ${blendedRoas.toFixed(2)}x\n` +
               `Campaign count: ${campaigns.length}\n\n` +
-              `Campaigns (top 25 by spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n\n` +
+              `Campaigns (top 25 by 7-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n\n` +
               `Return ONLY a single valid JSON object — no prose, no markdown fences. Shape:\n` +
               `{\n` +
               `  "biggest_leak": { "campaign_name": "...", "monthly_waste": <number USD>, "why": "<1 sentence>" },\n` +
@@ -156,10 +156,13 @@ export async function POST(req: Request) {
               `  "full_analysis": "<3-4 paragraphs of plain-English analysis of the account, no markdown>"\n` +
               `}\n\n` +
               `Rules:\n` +
-              `- biggest_leak: pick the campaign losing the most money (low ROAS × spend). monthly_waste = spend the prospect could likely recover.\n` +
-              `- best_performer: pick the strongest ROAS campaign with meaningful spend (>$50 in 30d).\n` +
-              `- immediate_action: name the campaign and the exact change (pause / cut budget by X% / refresh creative / etc).\n` +
-              `- If only one campaign exists, biggest_leak and best_performer can both refer to it with different angles.`,
+              `- monthly_waste is a MONTHLY-equivalent USD figure. The data above is 7 days — multiply 7-day waste by ~4.3 to project monthly. Always return a number, never null.\n` +
+              `- biggest_leak: pick the campaign losing the most money (low ROAS × spend). If every campaign is healthy, return the SLOWEST grower with a why like "Not bleeding, but underdelivering vs. its potential."\n` +
+              `- best_performer: pick the strongest ROAS campaign with meaningful spend. Always populate this — never say "no best performer".\n` +
+              `- SINGLE-CAMPAIGN ACCOUNTS (campaign_count == 1): best_performer = that one campaign, with why like "Your only active campaign — focus all optimization energy here before launching new ones." biggest_leak = the SAME campaign, framed as the largest opportunity to improve (e.g. "It's also your only leak — every dollar lost here is the entire account's loss"). The two findings must be different angles, not duplicate copy.\n` +
+              `- TWO-CAMPAIGN ACCOUNTS: pick the better as best_performer and the weaker as biggest_leak even if both look healthy — frame the weaker one as "underperforming relative to your other campaign by X%".\n` +
+              `- immediate_action: always name a specific campaign and an exact change (pause / cut budget by X% / scale by X% / refresh creative / test new audience / etc). For a single healthy campaign: scale or test a creative variant. For a single struggling one: the cleanest single intervention.\n` +
+              `- full_analysis: write as if this is a real account brief — even if there's only one campaign or one week of data, give them 3-4 paragraphs they could act on tomorrow. Acknowledge data limits without hedging the recommendation.`,
           },
         ],
       })
@@ -178,33 +181,64 @@ export async function POST(req: Request) {
       }
     }
 
-    // Fallback if Claude failed or account is empty — surface something useful
+    // Fallback if Claude failed or account is empty — surface something useful.
+    // Mirrors the prompt rules so single-/two-campaign accounts get a real
+    // finding instead of a "—" placeholder.
     if (!findings) {
       const sorted = campaigns.slice().sort((a, b) => b.spend - a.spend)
-      const worst = sorted.find((c) => c.roas < 1.5 && c.spend > 50) || sorted[0]
-      const best = sorted.slice().sort((a, b) => b.roas - a.roas)[0]
-      findings = {
-        biggest_leak: worst
-          ? {
-              campaign_name: worst.name,
-              monthly_waste: Math.round(worst.spend * (worst.roas < 1 ? 1 : 0.5)),
-              why: `Spending $${Math.round(worst.spend).toLocaleString()}/mo at ${worst.roas.toFixed(2)}x ROAS — well under break-even.`,
-            }
-          : { campaign_name: '—', monthly_waste: 0, why: 'Not enough data in the last 30 days to flag a leak.' },
-        best_performer: best
-          ? {
-              campaign_name: best.name,
-              roas: Number(best.roas.toFixed(2)),
-              why: `Highest ROAS in the account at ${best.roas.toFixed(2)}x on $${Math.round(best.spend).toLocaleString()} spend.`,
-            }
-          : { campaign_name: '—', roas: 0, why: 'No campaign with meaningful spend in the last 30 days.' },
-        immediate_action: worst
-          ? `Pause or cut "${worst.name}" by 50% in the next 24 hours and reallocate to your top-ROAS campaign.`
-          : 'Add fresh creative to your top campaign and watch CTR over the next 7 days.',
+      const byRoas = sorted.slice().sort((a, b) => b.roas - a.roas)
+      const monthlyMultiplier = 30 / 7 // 7-day spend → monthly equivalent
+      const single = campaigns.length === 1 ? campaigns[0] : null
+
+      if (single) {
+        const monthlyWaste = Math.round(
+          single.spend * monthlyMultiplier * (single.roas < 1 ? 1 : single.roas < 2 ? 0.4 : 0.15),
+        )
+        findings = {
+          biggest_leak: {
+            campaign_name: single.name,
+            monthly_waste: monthlyWaste,
+            why: `It's also your only active campaign — every dollar lost here is the entire account's loss. Current ROAS: ${single.roas.toFixed(2)}x.`,
+          },
+          best_performer: {
+            campaign_name: single.name,
+            roas: Number(single.roas.toFixed(2)),
+            why: 'Your only active campaign — focus all optimization energy here before launching new ones.',
+          },
+          immediate_action:
+            single.roas >= 2
+              ? `Scale "${single.name}" by 20% over the next 48 hours and watch CPA daily — you've earned the right to feed it more budget.`
+              : `Pause "${single.name}" for 24 hours, refresh the creative, then relaunch with a tightened audience. It's your only signal source — make sure it's clean.`,
+        }
+      } else {
+        const worst = sorted.find((c) => c.roas < 1.5 && c.spend > 25) || sorted[sorted.length - 1] || sorted[0]
+        const best = byRoas[0]
+        findings = {
+          biggest_leak: worst
+            ? {
+                campaign_name: worst.name,
+                monthly_waste: Math.round(
+                  worst.spend * monthlyMultiplier * (worst.roas < 1 ? 1 : 0.5),
+                ),
+                why: `Spending $${Math.round(worst.spend * monthlyMultiplier).toLocaleString()}/mo at ${worst.roas.toFixed(2)}x ROAS — well under break-even.`,
+              }
+            : { campaign_name: '—', monthly_waste: 0, why: 'Not enough recent activity to flag a leak.' },
+          best_performer: best
+            ? {
+                campaign_name: best.name,
+                roas: Number(best.roas.toFixed(2)),
+                why: `Highest ROAS in the account at ${best.roas.toFixed(2)}x on $${Math.round(best.spend * monthlyMultiplier).toLocaleString()}/mo equivalent spend.`,
+              }
+            : { campaign_name: '—', roas: 0, why: 'No campaign with meaningful spend this week.' },
+          immediate_action: worst && best && worst.name !== best.name
+            ? `Cut "${worst.name}" by 50% in the next 24 hours and reallocate to "${best.name}".`
+            : 'Add a fresh creative variant to your top campaign and watch CTR over the next 7 days.',
+        }
       }
+
       fullAnalysis =
         fullAnalysis ||
-        `Your account ran $${Math.round(totalSpend).toLocaleString()} in spend over the last 30 days at a blended ${blendedRoas.toFixed(2)}x ROAS across ${campaigns.length} campaign${campaigns.length === 1 ? '' : 's'}. Full structural analysis available on the call.`
+        `Your account ran $${Math.round(totalSpend).toLocaleString()} in spend over the last 7 days at a blended ${blendedRoas.toFixed(2)}x ROAS across ${campaigns.length} campaign${campaigns.length === 1 ? '' : 's'}. Full structural analysis available on the call.`
     }
 
     // 4. Save the report + flip the flag on the lead

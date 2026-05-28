@@ -138,7 +138,7 @@ export default function ResultsPage() {
         {report.total_spend !== undefined && (
           <div className="fu fu-3" style={{ textAlign: 'center', marginBottom: 40 }}>
             <span style={{ fontFamily: MONO, fontSize: 10, color: INK2, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-              30-day account: {fmt(report.total_spend)} spend · {Number(report.blended_roas || 0).toFixed(2)}x ROAS · {report.campaign_count || 0} campaigns
+              Last 7 days: {fmt(report.total_spend)} spend · {Number(report.blended_roas || 0).toFixed(2)}x ROAS · {report.campaign_count || 0} campaigns
             </span>
           </div>
         )}
