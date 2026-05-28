@@ -70,7 +70,6 @@ const ANALYSIS_TEXT =
   'Root cause: audience frequency has exceeded 3.4x. Creative fatigue confirmed. This campaign has generated $0 in net profit over the last 14 days.'
 
 export default function LandingClient() {
-  const [mounted, setMounted] = useState(false)
   const [navVisible, setNavVisible] = useState(false)
   const [navStuck, setNavStuck] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -81,7 +80,6 @@ export default function LandingClient() {
   const [typed, setTyped] = useState('')
 
   useEffect(() => {
-    setMounted(true)
     const navTimer = setTimeout(() => setNavVisible(true), 2000)
     const onScroll = () => {
       setNavStuck(window.scrollY > 30)
@@ -111,8 +109,6 @@ export default function LandingClient() {
     }, 22)
     return () => clearInterval(id)
   }, [viz])
-
-  if (!mounted) return null
 
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString()
   const scrollTo = (id: string) => (e: React.MouseEvent) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); setMenuOpen(false) }
