@@ -25,10 +25,69 @@ type Findings = {
   immediate_action: string
 }
 
+// Pull campaign-level insights for a given window. Returns mapped per-campaign
+// metrics + account totals, or { error } if the Meta API rejected the call.
+async function fetchCampaignMetrics(
+  accountId: string,
+  accessToken: string,
+  datePreset: 'last_7d' | 'last_30d',
+): Promise<
+  | { error: { message: string } }
+  | { campaigns: CampaignMetric[]; totalSpend: number; totalRevenue: number; blendedRoas: number }
+> {
+  const insightsUrl =
+    `https://graph.facebook.com/v19.0/act_${accountId}/insights` +
+    `?level=campaign` +
+    `&date_preset=${datePreset}` +
+    `&fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas` +
+    `&limit=200` +
+    `&access_token=${accessToken}`
+
+  const res = await fetch(insightsUrl)
+  const data = await res.json()
+  if (data.error) return { error: data.error }
+
+  const rows: any[] = data.data || []
+  const campaigns: CampaignMetric[] = rows.map((r) => {
+    const spend = Number(r.spend || 0)
+    const purchases = (r.actions || []).find((a: any) => a.action_type === 'purchase')
+    const conversions = purchases ? Number(purchases.value) : 0
+    const purchaseValue = (r.action_values || []).find((a: any) => a.action_type === 'purchase')
+    let revenue = purchaseValue ? Number(purchaseValue.value) : 0
+    let roas =
+      Array.isArray(r.purchase_roas) && r.purchase_roas[0]
+        ? Number(r.purchase_roas[0].value)
+        : spend > 0 ? revenue / spend : 0
+    // If we got purchase_roas but no action_values revenue, back-fill revenue
+    if (revenue === 0 && roas > 0 && spend > 0) revenue = roas * spend
+
+    return {
+      id: r.campaign_id,
+      name: r.campaign_name || 'Untitled campaign',
+      status: 'active',
+      spend,
+      revenue,
+      roas,
+      conversions,
+      impressions: Number(r.impressions || 0),
+      clicks: Number(r.clicks || 0),
+      ctr: Number(r.ctr || 0),
+      cpc: Number(r.cpc || 0),
+    }
+  })
+
+  const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0)
+  const totalRevenue = campaigns.reduce((s, c) => s + c.revenue, 0)
+  const blendedRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0
+  return { campaigns, totalSpend, totalRevenue, blendedRoas }
+}
+
 // POST /api/vision-drop/analyze — pulls the lead's connected Meta account,
-// computes per-campaign metrics for the last 30 days, then asks Claude to
-// distill the 3 must-see findings + a longer analysis. Saves to
-// vision_drop_reports and flips report_generated=true on the lead.
+// computes per-campaign metrics (7-day window, falling back to 30-day if the
+// 7-day window is empty), then asks Claude to distill the 3 must-see findings
+// + a longer analysis. If both windows are empty the account has no recent
+// activity and we bail without inventing data. Saves to vision_drop_reports
+// and flips report_generated=true on the lead.
 export async function POST(req: Request) {
   try {
     const { email } = await req.json()
@@ -60,59 +119,57 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Meta token expired — reconnect required' }, { status: 401 })
     }
 
-    // 2. Pull campaign-level insights for the last 7 days. A 30-day window
-    //    returns $0 for accounts where the campaign only launched recently,
-    //    so we favour the shorter preset to surface real numbers fast.
-    const insightsUrl =
-      `https://graph.facebook.com/v19.0/act_${lead.meta_account_id}/insights` +
-      `?level=campaign` +
-      `&date_preset=last_7d` +
-      `&fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas` +
-      `&limit=200` +
-      `&access_token=${lead.meta_access_token}`
+    // 2. Pull campaign-level insights. Start with a 7-day window so recently
+    //    launched accounts surface real numbers fast. If 7 days shows no
+    //    campaigns or $0 spend, retry with a 30-day window. If 30 days is also
+    //    empty, the account has no recent activity — bail without inventing data.
+    const windows = [
+      { preset: 'last_7d' as const, days: 7 },
+      { preset: 'last_30d' as const, days: 30 },
+    ]
 
-    const insightsRes = await fetch(insightsUrl)
-    const insightsData = await insightsRes.json()
-    if (insightsData.error) {
-      console.error('Meta insights error:', insightsData.error)
+    let campaigns: CampaignMetric[] = []
+    let totalSpend = 0
+    let totalRevenue = 0
+    let blendedRoas = 0
+    let windowDays = 7
+
+    for (const w of windows) {
+      const result = await fetchCampaignMetrics(
+        lead.meta_account_id,
+        lead.meta_access_token,
+        w.preset,
+      )
+      if ('error' in result) {
+        console.error('Meta insights error:', result.error)
+        return NextResponse.json(
+          { error: `Meta API: ${result.error.message}` },
+          { status: 502 },
+        )
+      }
+      if (result.campaigns.length > 0 && result.totalSpend > 0) {
+        campaigns = result.campaigns
+        totalSpend = result.totalSpend
+        totalRevenue = result.totalRevenue
+        blendedRoas = result.blendedRoas
+        windowDays = w.days
+        break
+      }
+    }
+
+    // No spend in either window — do not generate findings on empty data.
+    if (campaigns.length === 0 || totalSpend === 0) {
       return NextResponse.json(
-        { error: `Meta API: ${insightsData.error.message}` },
-        { status: 502 },
+        {
+          error:
+            'Your account has no recent campaign activity in the last 30 days. Connect an account with active campaigns to see your VAI audit.',
+          empty: true,
+        },
+        { status: 422 },
       )
     }
 
-    const rows: any[] = insightsData.data || []
-    const campaigns: CampaignMetric[] = rows.map((r) => {
-      const spend = Number(r.spend || 0)
-      const purchases = (r.actions || []).find((a: any) => a.action_type === 'purchase')
-      const conversions = purchases ? Number(purchases.value) : 0
-      const purchaseValue = (r.action_values || []).find((a: any) => a.action_type === 'purchase')
-      let revenue = purchaseValue ? Number(purchaseValue.value) : 0
-      let roas =
-        Array.isArray(r.purchase_roas) && r.purchase_roas[0]
-          ? Number(r.purchase_roas[0].value)
-          : spend > 0 ? revenue / spend : 0
-      // If we got purchase_roas but no action_values revenue, back-fill revenue
-      if (revenue === 0 && roas > 0 && spend > 0) revenue = roas * spend
-
-      return {
-        id: r.campaign_id,
-        name: r.campaign_name || 'Untitled campaign',
-        status: 'active',
-        spend,
-        revenue,
-        roas,
-        conversions,
-        impressions: Number(r.impressions || 0),
-        clicks: Number(r.clicks || 0),
-        ctr: Number(r.ctr || 0),
-        cpc: Number(r.cpc || 0),
-      }
-    })
-
-    const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0)
-    const totalRevenue = campaigns.reduce((s, c) => s + c.revenue, 0)
-    const blendedRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0
+    const windowLabel = windowDays === 7 ? 'last 7 days' : 'last 30 days'
 
     // 3. Ask Claude for the 3 findings + full analysis as JSON
     const compactCampaigns = campaigns
@@ -142,12 +199,12 @@ export async function POST(req: Request) {
           {
             role: 'user',
             content:
-              `Account snapshot — last 7 days:\n` +
+              `Account snapshot — ${windowLabel}:\n` +
               `Total spend: $${Math.round(totalSpend).toLocaleString()}\n` +
               `Total revenue: $${Math.round(totalRevenue).toLocaleString()}\n` +
               `Blended ROAS: ${blendedRoas.toFixed(2)}x\n` +
               `Campaign count: ${campaigns.length}\n\n` +
-              `Campaigns (top 25 by 7-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n\n` +
+              `Campaigns (top 25 by ${windowDays}-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n\n` +
               `Return ONLY a single valid JSON object — no prose, no markdown fences. Shape:\n` +
               `{\n` +
               `  "biggest_leak": { "campaign_name": "...", "monthly_waste": <number USD>, "why": "<1 sentence>" },\n` +
@@ -156,7 +213,9 @@ export async function POST(req: Request) {
               `  "full_analysis": "<3-4 paragraphs of plain-English analysis of the account, no markdown>"\n` +
               `}\n\n` +
               `Rules:\n` +
-              `- monthly_waste is a MONTHLY-equivalent USD figure. The data above is 7 days — multiply 7-day waste by ~4.3 to project monthly. Always return a number, never null.\n` +
+              (windowDays === 7
+                ? `- monthly_waste is a MONTHLY-equivalent USD figure. The data above is 7 days — multiply 7-day waste by ~4.3 to project monthly. Always return a number, never null.\n`
+                : `- monthly_waste is a MONTHLY USD figure. The data above already covers ~30 days — use it directly as the monthly figure, do not multiply. Always return a number, never null.\n`) +
               `- biggest_leak: pick the campaign losing the most money (low ROAS × spend). If every campaign is healthy, return the SLOWEST grower with a why like "Not bleeding, but underdelivering vs. its potential."\n` +
               `- best_performer: pick the strongest ROAS campaign with meaningful spend. Always populate this — never say "no best performer".\n` +
               `- SINGLE-CAMPAIGN ACCOUNTS (campaign_count == 1): best_performer = that one campaign, with why like "Your only active campaign — focus all optimization energy here before launching new ones." biggest_leak = the SAME campaign, framed as the largest opportunity to improve (e.g. "It's also your only leak — every dollar lost here is the entire account's loss"). The two findings must be different angles, not duplicate copy.\n` +
@@ -187,7 +246,7 @@ export async function POST(req: Request) {
     if (!findings) {
       const sorted = campaigns.slice().sort((a, b) => b.spend - a.spend)
       const byRoas = sorted.slice().sort((a, b) => b.roas - a.roas)
-      const monthlyMultiplier = 30 / 7 // 7-day spend → monthly equivalent
+      const monthlyMultiplier = 30 / windowDays // window spend → monthly equivalent
       const single = campaigns.length === 1 ? campaigns[0] : null
 
       if (single) {
@@ -238,7 +297,7 @@ export async function POST(req: Request) {
 
       fullAnalysis =
         fullAnalysis ||
-        `Your account ran $${Math.round(totalSpend).toLocaleString()} in spend over the last 7 days at a blended ${blendedRoas.toFixed(2)}x ROAS across ${campaigns.length} campaign${campaigns.length === 1 ? '' : 's'}. Full structural analysis available on the call.`
+        `Your account ran $${Math.round(totalSpend).toLocaleString()} in spend over the ${windowLabel} at a blended ${blendedRoas.toFixed(2)}x ROAS across ${campaigns.length} campaign${campaigns.length === 1 ? '' : 's'}. Full structural analysis available on the call.`
     }
 
     // 4. Save the report + flip the flag on the lead
@@ -266,6 +325,7 @@ export async function POST(req: Request) {
       total_revenue: totalRevenue,
       blended_roas: blendedRoas,
       campaign_count: campaigns.length,
+      window_days: windowDays,
     })
   } catch (e: any) {
     console.error('vision-drop analyze error:', e)

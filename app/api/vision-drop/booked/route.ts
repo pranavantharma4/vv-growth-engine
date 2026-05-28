@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     const { data: report } = await supabase
       .from('vision_drop_reports')
-      .select('findings, full_analysis, total_spend, total_revenue, blended_roas')
+      .select('findings, total_spend, total_revenue, blended_roas')
       .eq('lead_email', normalizedEmail)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -77,9 +77,9 @@ export async function POST(req: Request) {
     </div>
   </td></tr>
   <tr><td style="padding:24px 40px 36px;border-top:1px solid rgba(255,255,255,0.06);">
-    <div style="font-size:8px;color:rgba(250,248,245,0.32);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:10px;">Preview · Full VAI Analysis</div>
-    <div style="font-size:13px;color:rgba(250,248,245,0.72);line-height:1.85;">${(report.full_analysis || '').slice(0, 600)}…</div>
-    <div style="font-size:10px;color:rgba(250,248,245,0.32);letter-spacing:0.6px;margin-top:14px;">The full blueprint — including 30-day strategic moves and per-campaign actions — will be delivered on your call.</div>
+    <div style="font-size:8px;color:#c9a84c;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:10px;">◉ Locked · Full VAI Analysis</div>
+    <div style="font-size:13px;color:rgba(250,248,245,0.72);line-height:1.85;">Your full VAI Analysis covers campaign-level diagnosis, exact budget reallocation recommendations, creative direction, and a 30-day optimization sequence — all based on your real account data.</div>
+    <div style="font-size:10px;color:rgba(250,248,245,0.32);letter-spacing:0.6px;margin-top:14px;">The full blueprint will be delivered on your call.</div>
   </td></tr>
   <tr><td style="padding:16px 40px;border-top:1px solid rgba(255,255,255,0.06);">
     <div style="font-size:10px;color:rgba(250,248,245,0.22);letter-spacing:0.8px;">Vanguard Visuals · VAI Intelligence · team@vngrdvisuals.com</div>

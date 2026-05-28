@@ -31,6 +31,7 @@ type Report = {
   total_revenue?: number
   blended_roas?: number
   campaign_count?: number
+  window_days?: number
 }
 
 export default function ResultsPage() {
@@ -111,7 +112,6 @@ export default function ResultsPage() {
         .fu-3 { animation-delay: 0.3s; }
         .fu-4 { animation-delay: 0.42s; }
         .fu-5 { animation-delay: 0.55s; }
-        .blur-mask { filter: blur(7px); user-select: none; }
         .cta { transition: transform 0.18s ease, box-shadow 0.18s ease; }
         .cta:hover { transform: translateY(-1px); box-shadow: 0 8px 28px -6px rgba(201,168,76,0.5); }
         .cta-secondary { transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
@@ -138,7 +138,7 @@ export default function ResultsPage() {
         {report.total_spend !== undefined && (
           <div className="fu fu-3" style={{ textAlign: 'center', marginBottom: 40 }}>
             <span style={{ fontFamily: MONO, fontSize: 10, color: INK2, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-              Last 7 days: {fmt(report.total_spend)} spend · {Number(report.blended_roas || 0).toFixed(2)}x ROAS · {report.campaign_count || 0} campaigns
+              Last {report.window_days ?? 7} days: {fmt(report.total_spend)} spend · {Number(report.blended_roas || 0).toFixed(2)}x ROAS · {report.campaign_count || 0} campaigns
             </span>
           </div>
         )}
@@ -203,14 +203,12 @@ export default function ResultsPage() {
             <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '1.5px' }}>UNLOCK ON CALL</div>
           </div>
 
-          <div className="blur-mask" style={{ fontSize: 13, color: INK2, lineHeight: 1.85 }}>
-            Your account has three structural inefficiencies that compound over time. The first is creative — three of your top historical campaigns are now showing fatigue patterns: CTR declining 22-38% over the past 14 days while CPM climbs. The second is audience saturation in your prospecting lookalike layer, frequency is past 3.0 which is the point of diminishing returns for cold traffic. The third is your bid strategy mismatch on your retargeting campaigns — you're using lowest cost when cost cap would compound your already-strong ROAS. The full 30-day blueprint covers each of these with the exact reallocation percentages, creative directions, and a week-by-week sequencing plan.
+          <div style={{ fontSize: 14, color: INK2, lineHeight: 1.85 }}>
+            Your full VAI Analysis covers campaign-level diagnosis, exact budget reallocation recommendations, creative direction, and a 30-day optimization sequence — all based on your real account data.
           </div>
 
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%', background: 'linear-gradient(to top, #0c0b0f 25%, transparent 100%)', pointerEvents: 'none' }} />
-
-          <div style={{ position: 'relative', textAlign: 'center', marginTop: 18, padding: 18 }}>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>
+          <div style={{ textAlign: 'center', marginTop: 22, paddingTop: 18, borderTop: `1px solid ${RULE}` }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '2px', textTransform: 'uppercase' }}>
               ◧ Unlock the full blueprint on your strategy call
             </div>
           </div>
