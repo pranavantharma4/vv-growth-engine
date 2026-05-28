@@ -13,26 +13,38 @@ Deno.serve(async (req: Request) => {
   const error = url.searchParams.get('error')
   const errorDesc = url.searchParams.get('error_description')
 
-  // Parse return_url from state
+  // Parse return_url and routing keys from state
   let returnUrl = `${SITE_URL}/dashboard/connect?connected=meta`
   let clientId: string | null = null
+  let source: string | null = null
+  let leadEmail: string | null = null
 
   if (stateRaw) {
     try {
       const state = JSON.parse(decodeURIComponent(stateRaw))
       clientId = state.client_id || null
+      source = state.source || null
+      leadEmail = state.lead_email || null
       if (state.return_url) returnUrl = state.return_url
     } catch (_) {}
   }
 
+  const isVisionDrop = source === 'vision_drop'
+  const errorReturnBase = isVisionDrop
+    ? `${SITE_URL}/vision-drop/connect`
+    : `${SITE_URL}/dashboard/connect`
+
   // Handle OAuth errors from Facebook
   if (error) {
-    const errorUrl = `${SITE_URL}/dashboard/connect?error=${encodeURIComponent(errorDesc || error)}`
-    return Response.redirect(errorUrl, 302)
+    return Response.redirect(`${errorReturnBase}?error=${encodeURIComponent(errorDesc || error)}`, 302)
   }
 
-  if (!code || !clientId) {
-    return Response.redirect(`${SITE_URL}/dashboard/connect?error=Missing+code+or+client+id`, 302)
+  if (!code) {
+    return Response.redirect(`${errorReturnBase}?error=Missing+authorization+code`, 302)
+  }
+
+  if (isVisionDrop ? !leadEmail : !clientId) {
+    return Response.redirect(`${errorReturnBase}?error=Missing+lead+or+client+identifier`, 302)
   }
 
   try {
@@ -75,6 +87,34 @@ Deno.serve(async (req: Request) => {
     )
     const accountsData = await accountsRes.json()
     const accounts = accountsData.data || []
+
+    // ── Vision Drop branch: save token onto the lead row, then redirect back
+    //    to the prospect flow. No client / ad_connections involvement. ──
+    if (isVisionDrop && leadEmail) {
+      const firstAccount = accounts.find((a: any) => a.account_status === 1) || accounts[0]
+      const acctId = firstAccount ? String(firstAccount.id).replace('act_', '') : null
+      const acctName = firstAccount?.name || (accounts.length === 0 ? 'No ad accounts found' : null)
+
+      const { error: vdErr } = await supabase
+        .from('vision_drop_leads')
+        .update({
+          meta_connected: true,
+          meta_access_token: accessToken,
+          meta_account_id: acctId,
+          meta_account_name: acctName,
+          meta_token_expires_at: expiresAt,
+        })
+        .eq('email', leadEmail.toLowerCase())
+
+      if (vdErr) {
+        console.error('vision_drop update error:', JSON.stringify(vdErr))
+        return Response.redirect(`${SITE_URL}/vision-drop/connect?error=Database+error`, 302)
+      }
+      if (accounts.length === 0) {
+        return Response.redirect(`${SITE_URL}/vision-drop/connect?error=No+ad+accounts+found+on+this+Facebook+account`, 302)
+      }
+      return Response.redirect(returnUrl, 302)
+    }
 
     if (accounts.length === 0) {
       // Still save the connection — user may not have ad accounts yet
