@@ -124,6 +124,7 @@ function Navbar() {
       </a>
       <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
         <a href="#how" className="nav-how" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: I2, textDecoration: 'none' }}>How It Works</a>
+        <a href="/login" className="nav-signin" style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', textDecoration: 'none', minHeight: 44, display: 'inline-flex', alignItems: 'center', padding: '0 2px' }}>Sign In</a>
         <a href={AUDIT} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0a0806', background: G, textDecoration: 'none', padding: '10px 16px', borderRadius: 3, minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>Free Audit →</a>
       </div>
     </nav>
@@ -445,6 +446,7 @@ const CSS = `
 .cta-ghost { transition: border-color .25s ease, color .25s ease; }
 .cta-ghost:hover { border-color: rgba(201,168,76,0.45); color: #c9a84c; }
 .nav-how:hover { color: rgba(250,248,245,0.95); }
+.nav-signin:hover { color: rgba(250,248,245,0.95); }
 
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 
