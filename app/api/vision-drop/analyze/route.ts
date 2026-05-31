@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
+import { STRICT_SYSTEM_RULES, buildGranularBlock, type Granular, type Segment } from '../../../../lib/vai-granular'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -17,6 +18,75 @@ type CampaignMetric = {
   clicks: number
   ctr: number
   cpc: number
+  frequency: number
+}
+
+const VD_GRAPH = 'https://graph.facebook.com/v19.0'
+const isPurchaseVD = (t: string) => t === 'purchase' || t === 'offsite_conversion.fb_pixel_purchase'
+
+// Account-wide granular breakdowns (age/gender, placement, 14-day daily trend)
+// aggregated across all campaigns — feeds the free audit so it cites exact
+// demographic, placement, frequency and trend numbers. Degrades to empty.
+async function fetchAccountGranular(
+  accountId: string,
+  token: string,
+  datePreset: 'last_7d' | 'last_30d',
+): Promise<Granular> {
+  const today = new Date()
+  const trendSince = new Date(today.getTime() - 14 * 86400000).toISOString().split('T')[0]
+  const until = today.toISOString().split('T')[0]
+  const get = async (qs: Record<string, string>) => {
+    try {
+      const res = await fetch(`${VD_GRAPH}/act_${accountId}/insights?` + new URLSearchParams(qs))
+      const j = await res.json()
+      return j?.data ?? []
+    } catch { return [] }
+  }
+  const perf = (r: any) => {
+    const spend = Number(r.spend || 0)
+    const conv = (r.actions || []).find((a: any) => isPurchaseVD(a.action_type))
+    const conversions = conv ? Number(conv.value) : 0
+    const val = (r.action_values || []).find((a: any) => isPurchaseVD(a.action_type))
+    let revenue = val ? Number(val.value) : 0
+    let roas = Array.isArray(r.purchase_roas) && r.purchase_roas[0]
+      ? Number(r.purchase_roas[0].value) : (spend > 0 ? revenue / spend : 0)
+    if (revenue === 0 && roas > 0 && spend > 0) revenue = roas * spend
+    return { spend, conversions, roas }
+  }
+  const agg = (rows: any[], keys: string[]): Segment[] => {
+    const m: Record<string, { spend: number; rev: number; conv: number }> = {}
+    for (const r of rows) {
+      const label = keys.map((k) => r[k] ?? 'unknown').join(' / ')
+      const p = perf(r)
+      const e = m[label] ||= { spend: 0, rev: 0, conv: 0 }
+      e.spend += p.spend; e.rev += p.roas * p.spend; e.conv += p.conversions
+    }
+    return Object.entries(m)
+      .map(([segment, e]) => ({ segment, spend: Math.round(e.spend), roas: e.spend > 0 ? Math.round((e.rev / e.spend) * 100) / 100 : 0, conversions: e.conv }))
+      .sort((a, b) => b.spend - a.spend)
+  }
+
+  const [demoRows, placeRows, trendRows, acctRows] = await Promise.all([
+    get({ level: 'campaign', breakdowns: 'age,gender', date_preset: datePreset, fields: 'spend,impressions,actions,action_values,purchase_roas', limit: '2000', access_token: token }),
+    get({ level: 'campaign', breakdowns: 'publisher_platform,platform_position', date_preset: datePreset, fields: 'spend,impressions,actions,action_values,purchase_roas', limit: '2000', access_token: token }),
+    get({ level: 'account', time_increment: '1', time_range: `{"since":"${trendSince}","until":"${until}"}`, fields: 'spend,actions,action_values,purchase_roas', limit: '60', access_token: token }),
+    get({ level: 'account', date_preset: datePreset, fields: 'frequency,cpm,reach', limit: '1', access_token: token }),
+  ])
+
+  const trend = (trendRows || []).map((r: any) => {
+    const p = perf(r)
+    return { date: r.date_start, spend: Math.round(p.spend), roas: Math.round(p.roas * 100) / 100, conversions: p.conversions }
+  }).sort((a: any, b: any) => (a.date < b.date ? -1 : 1))
+
+  const acct = acctRows?.[0] ?? {}
+  return {
+    frequency: acct.frequency ? Number(acct.frequency) : null,
+    cpm: acct.cpm ? Number(acct.cpm) : null,
+    reach: acct.reach ? Number(acct.reach) : null,
+    demographic_breakdown: agg(demoRows, ['age', 'gender']).slice(0, 10),
+    placement_breakdown: agg(placeRows, ['publisher_platform', 'platform_position']).slice(0, 8),
+    daily_trend: trend,
+  }
 }
 
 type Findings = {
@@ -39,7 +109,7 @@ async function fetchCampaignMetrics(
     `https://graph.facebook.com/v19.0/act_${accountId}/insights` +
     `?level=campaign` +
     `&date_preset=${datePreset}` +
-    `&fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas` +
+    `&fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,frequency,actions,action_values,purchase_roas` +
     `&limit=200` +
     `&access_token=${accessToken}`
 
@@ -73,6 +143,7 @@ async function fetchCampaignMetrics(
       clicks: Number(r.clicks || 0),
       ctr: Number(r.ctr || 0),
       cpc: Number(r.cpc || 0),
+      frequency: Number(r.frequency || 0),
     }
   })
 
@@ -171,6 +242,15 @@ export async function POST(req: Request) {
 
     const windowLabel = windowDays === 7 ? 'last 7 days' : 'last 30 days'
 
+    // Account-wide granular data (demographics, placements, frequency, 14-day
+    // trend) so the free audit cites exact segment/placement/frequency numbers.
+    const granular = await fetchAccountGranular(
+      lead.meta_account_id,
+      lead.meta_access_token,
+      windowDays === 7 ? 'last_7d' : 'last_30d',
+    )
+    const granularBlock = buildGranularBlock(granular)
+
     // 3. Ask Claude for the 3 findings + full analysis as JSON
     const compactCampaigns = campaigns
       .slice()
@@ -194,7 +274,8 @@ export async function POST(req: Request) {
         model: 'claude-sonnet-4-6',
         max_tokens: 2200,
         system:
-          'You are a senior performance marketing analyst auditing a Meta Ads account for a prospect. Be specific, candid, and quantitative. Reference real dollar amounts and ROAS figures pulled from the data. Never invent campaign names. Every finding must be actionable regardless of account size — single-campaign accounts get their own framing, not "n/a".',
+          'You are a senior performance marketing analyst auditing a Meta Ads account for a prospect. Be specific, candid, and quantitative. Reference real dollar amounts and ROAS figures pulled from the data. Never invent campaign names. Every finding must be actionable regardless of account size — single-campaign accounts get their own framing, not "n/a".\n\n' +
+          STRICT_SYSTEM_RULES,
         messages: [
           {
             role: 'user',
@@ -204,7 +285,9 @@ export async function POST(req: Request) {
               `Total revenue: $${Math.round(totalRevenue).toLocaleString()}\n` +
               `Blended ROAS: ${blendedRoas.toFixed(2)}x\n` +
               `Campaign count: ${campaigns.length}\n\n` +
-              `Campaigns (top 25 by ${windowDays}-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n\n` +
+              `Campaigns (top 25 by ${windowDays}-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n` +
+              `${granularBlock}\n\n` +
+              `The "immediate_action" and "full_analysis" MUST quote exact numbers from the granular data above — name the exact best/worst age-gender segment and its ROAS, the exact winning placement, the exact account frequency (flag saturation if it exceeds 3.0), and whether the 14-day trend is improving or declining with specific figures.\n\n` +
               `Return ONLY a single valid JSON object — no prose, no markdown fences. Shape:\n` +
               `{\n` +
               `  "biggest_leak": { "campaign_name": "...", "monthly_waste": <number USD>, "why": "<1 sentence>" },\n` +

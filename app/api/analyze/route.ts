@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { STRICT_SYSTEM_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,24 @@ export async function POST(req: Request) {
 
     const anthropic = new Anthropic()
 
+    // ── Pull the latest granular snapshot for this campaign (frequency,
+    //    demographics, placements, daily trend, bid strategy) so VAI can quote
+    //    exact account numbers. Prefer fields already on the passed campaign;
+    //    fall back to the freshest campaign_snapshots row by name. ──
+    let granularRow: any = campaign
+    if (!campaign?.demographic_breakdown && !campaign?.frequency) {
+      const { data: snap } = await supabase
+        .from('campaign_snapshots')
+        .select('*')
+        .eq('client_id', client_id)
+        .eq('campaign_name', campaign.campaign_name)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (snap) granularRow = { ...campaign, ...snap }
+    }
+    const granularBlock = buildGranularBlock(granularFromRow(granularRow))
+
     // ── Derived metrics ──
     const ctr    = campaign.impressions > 0 ? ((campaign.clicks / campaign.impressions) * 100).toFixed(2) : '0'
     const cpa    = campaign.conversions > 0 ? (campaign.spend / campaign.conversions).toFixed(2) : 'N/A'
@@ -76,9 +95,10 @@ PORTFOLIO CONTEXT:
 - Top performing campaigns: ${strongCampaigns.join(', ') || 'none identified'}`
     }
 
-    const systemPrompt = isAgency
+    const baseSystem = isAgency
       ? `You are a senior performance marketing analyst at ${agencyName}. Preparing a campaign analysis for ${brandName}. Write in first person plural ("we identified", "our analysis shows"). Professional, authoritative, client-facing. Never reference any third-party tool.`
       : `You are a senior performance marketing analyst with 12+ years managing paid media across Meta, Google, and TikTok for ${industry} brands. Speak directly and candidly. Reference specific numbers throughout.`
+    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}`
 
     const campaignDetails = `
 Campaign: ${campaign.campaign_name}
@@ -90,7 +110,8 @@ ROAS: ${Number(campaign.roas).toFixed(2)}x
 CTR: ${ctr}%  |  CPC: $${cpClick}  |  CPA: $${cpa}  |  AOV: $${aov}
 Conversions: ${campaign.conversions || 0}
 Impressions: ${Number(campaign.impressions || 0).toLocaleString()}  |  Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
-${portfolioContext}`
+${portfolioContext}
+${granularBlock}`
 
     // ── Generate FULL analysis + SIMPLE analysis in one call ──
     const message = await anthropic.messages.create({

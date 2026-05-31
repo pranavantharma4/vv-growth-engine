@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { STRICT_SYSTEM_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,21 @@ export async function POST(req: Request) {
 
     const anthropic = new Anthropic()
 
+    // Pull the freshest granular snapshot so the blueprint cites exact numbers.
+    let granularRow: any = campaign
+    if (client_id && !campaign?.demographic_breakdown && !campaign?.frequency) {
+      const { data: snap } = await supabase
+        .from('campaign_snapshots')
+        .select('*')
+        .eq('client_id', client_id)
+        .eq('campaign_name', campaign.campaign_name)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (snap) granularRow = { ...campaign, ...snap }
+    }
+    const granularBlock = buildGranularBlock(granularFromRow(granularRow))
+
     const ctr = campaign.impressions > 0
       ? ((campaign.clicks / campaign.impressions) * 100).toFixed(2)
       : '0'
@@ -38,9 +54,10 @@ export async function POST(req: Request) {
       ? (campaign.spend / campaign.conversions).toFixed(2)
       : '0'
 
-    const systemPrompt = agencyContext.isAgency
+    const baseSystem = agencyContext.isAgency
       ? `You are a senior paid media strategist at ${agencyContext.agencyName}. You are preparing an optimization blueprint for ${agencyContext.brandName}, a client of the agency. Write professionally and authoritatively — this will be delivered directly to the client. Use "we" for agency recommendations. Never reference any third-party tool or platform by name.`
       : `You are a senior paid media strategist with 10+ years experience managing DTC ad accounts on Meta, Google, and TikTok. Be direct, specific, and professional.`
+    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -61,6 +78,7 @@ CPA: $${cpa}
 Conversions: ${campaign.conversions || 0}
 Impressions: ${Number(campaign.impressions || 0).toLocaleString()}
 Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
+${granularBlock}
 
 Structure your response exactly like this:
 

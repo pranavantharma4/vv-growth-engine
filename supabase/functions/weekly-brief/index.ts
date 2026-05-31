@@ -8,6 +8,40 @@ const RESEND_KEY    = Deno.env.get('RESEND_API_KEY') ?? ''
 // All outbound email sends from the verified vngrdvisuals.com domain
 const FROM_EMAIL = 'Vanguard Visuals <team@vngrdvisuals.com>'
 
+// Strict grounding rules — keep in sync with lib/vai-granular.ts
+const STRICT_RULES = `You are analyzing real account data. Every single claim you make MUST reference a specific number from this account's data. Never give generic advice that could apply to any account. If you identify a problem, quote the exact metric that proves it (e.g. 'your frequency is 4.2x' not 'your frequency may be high'). If you recommend moving budget, state the exact dollar amount and the exact destination campaign. If you cite a demographic insight, name the exact age/gender segment and its exact performance. Vague advice is a failure. Generic advice is a failure. Every sentence must be grounded in this account's actual numbers.`
+
+// Render a campaign's granular columns (frequency, demographics, placements,
+// daily trend, bid strategy) into a compact block for the brief prompt.
+function granularBlock(c: any): string {
+  const arr = (v: any) => {
+    if (!v) return []
+    if (typeof v === 'string') { try { return JSON.parse(v) } catch { return [] } }
+    return v
+  }
+  const demo = arr(c.demographic_breakdown)
+  const place = arr(c.placement_breakdown)
+  const trend = arr(c.daily_trend)
+  const L: string[] = []
+  if (c.frequency != null) L.push(`  frequency ${Number(c.frequency).toFixed(2)}x`)
+  if (c.cpm != null) L.push(`CPM $${Number(c.cpm).toFixed(2)}`)
+  if (c.ctr != null) L.push(`CTR ${Number(c.ctr).toFixed(2)}%`)
+  if (c.cost_per_result != null) L.push(`cost/result $${Number(c.cost_per_result).toFixed(2)}`)
+  if (c.objective) L.push(`objective ${c.objective}`)
+  if (c.bid_strategy) L.push(`bid ${c.bid_strategy}`)
+  const head = L.length ? `  metrics: ${L.join(', ')}` : ''
+  const demoTop = [...demo].filter((d: any) => (d.spend ?? 0) > 0).sort((a: any, b: any) => (b.roas ?? 0) - (a.roas ?? 0))
+  const demoStr = demoTop.length
+    ? `  demographics — best ${demoTop[0].segment} ${(demoTop[0].roas ?? 0).toFixed(2)}x, worst ${demoTop[demoTop.length - 1].segment} ${(demoTop[demoTop.length - 1].roas ?? 0).toFixed(2)}x`
+    : ''
+  const placeTop = [...place].filter((p: any) => (p.spend ?? 0) > 0).sort((a: any, b: any) => (b.roas ?? 0) - (a.roas ?? 0))
+  const placeStr = placeTop.length ? `  best placement ${placeTop[0].segment} ${(placeTop[0].roas ?? 0).toFixed(2)}x` : ''
+  const trendStr = trend.length
+    ? `  14d trend: ${trend.map((t: any) => `${t.date}:$${Math.round(t.spend ?? 0)}/${(t.roas ?? 0).toFixed(1)}x`).join(', ')}`
+    : ''
+  return [head, demoStr, placeStr, trendStr].filter(Boolean).join('\n')
+}
+
 Deno.serve(async (req) => {
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
   const targetClientId: string | null = body.client_id ?? null
@@ -62,7 +96,21 @@ async function generateBriefForClient(supabase: any, client: any, weekRef: strin
     .filter((c: any) => c.health === 'dead' || c.health === 'bleeding')
     .sort((a: any, b: any) => Number(b.spend) - Number(a.spend))[0] ?? null
 
+  // Granular detail for the biggest leak + the top campaigns by spend.
+  const focusCampaigns = (biggestLeak ? [biggestLeak] : []).concat(
+    campaigns.filter((c: any) => c.campaign_name !== biggestLeak?.campaign_name).slice(0, 3),
+  )
+  const granularSection = focusCampaigns
+    .map((c: any) => {
+      const block = granularBlock(c)
+      return block ? `${c.campaign_name} (${Number(c.roas).toFixed(1)}x ROAS, ${c.health}):\n${block}` : ''
+    })
+    .filter(Boolean)
+    .join('\n\n')
+
   const prompt = `You are Vanguard Intelligence, an AI-powered ad performance analyst for ${client.name}.
+
+${STRICT_RULES}
 
 Generate a concise weekly intelligence brief for ${weekRef}.
 
@@ -74,13 +122,14 @@ Summary:
 - Blended ROAS: ${blendedRoas.toFixed(1)}x
 - Recoverable Waste: $${wasted.toFixed(0)}
 ${biggestLeak ? `- Biggest Leak: ${biggestLeak.campaign_name} ($${Number(biggestLeak.spend).toFixed(0)}/mo at ${Number(biggestLeak.roas).toFixed(1)}x ROAS)` : ''}
+${granularSection ? `\nGRANULAR DATA (quote these exact numbers):\n${granularSection}` : ''}
 
 Write 3 sections:
-1. WEEK SUMMARY — 2 sentences on overall account health
-2. CRITICAL ACTIONS — 2-3 bullet points, specific and actionable with exact numbers
-3. OPPORTUNITY — 1 thing they should do this week to improve ROAS
+1. WEEK SUMMARY — 2 sentences on overall account health, citing the blended ROAS and total spend figures
+2. CRITICAL ACTIONS — 2-3 bullet points. Each must quote an exact metric: the biggest leak's frequency (flag saturation if >3.0x), its best/worst age-gender segment by exact ROAS, the winning placement, or the 14-day trend direction. State exact dollar reallocations and destination campaigns.
+3. OPPORTUNITY — 1 thing this week to improve ROAS, grounded in a specific number above (a demographic, placement, or trend figure)
 
-Be direct, specific, and use exact numbers. No fluff. Write as their embedded growth strategist.`
+Be direct, specific, and use exact numbers from this account. No generic advice. Write as their embedded growth strategist.`
 
   let aiSummary = ''
   try {
