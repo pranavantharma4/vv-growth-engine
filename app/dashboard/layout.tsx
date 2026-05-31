@@ -18,6 +18,7 @@ const NAV = [
   { id: 'settings',      label: 'Settings',         icon: '◌', section: 'Account',       admin: false },
   { id: 'invite',        label: 'Invite Client',    icon: '+', section: 'Admin',         admin: true  },
   { id: 'data-tool',     label: 'Campaign Data',    icon: '✎', section: 'Admin',         admin: true  },
+  { id: 'signal',        label: 'VV Signal',        icon: '✶', section: null,            admin: true  },
 ]
 
 const TITLES: Record<string, [string, string]> = {
@@ -32,6 +33,7 @@ const TITLES: Record<string, [string, string]> = {
   settings:       ['Settings',          'Account preferences and notifications'],
   invite:         ['Invite Client',     'Create and onboard a new client account'],
   'data-tool':    ['Campaign Data',     'Update client campaign metrics'],
+  signal:         ['VV Signal',         'Daily marketing content — generated in VV voice'],
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
