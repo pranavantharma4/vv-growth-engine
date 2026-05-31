@@ -9,7 +9,7 @@ import type { Client } from '@/lib/types'
 const NAV = [
   { id: 'dashboard',     label: 'Dashboard',       icon: '◈', section: 'Overview',      admin: false },
   { id: 'campaigns',     label: 'Campaigns',        icon: '◫', section: null,            admin: false },
-  { id: 'add-campaign',  label: 'Add Campaign',     icon: '+', section: null,            admin: false },
+  { id: 'add-campaign',  label: 'Performance Calculator', icon: '⌁', section: null,       admin: false },
   { id: 'analysis',      label: 'AI Analysis',      icon: '◉', section: 'Intelligence', admin: false },
   { id: 'optimize',      label: 'Ads Optimization', icon: '◑', section: null,            admin: false },
   { id: 'brief',         label: 'Weekly Brief',     icon: '◧', section: null,            admin: false },
@@ -24,7 +24,7 @@ const NAV = [
 const TITLES: Record<string, [string, string]> = {
   dashboard:      ['Overview',          ''],
   campaigns:      ['Campaigns',         'All active campaigns across platforms'],
-  'add-campaign': ['Campaign Data',     'Add and manage your campaign numbers'],
+  'add-campaign': ['Performance Calculator', 'Run any campaign through VAI in real time'],
   analysis:       ['AI Analysis',       'Claude-powered campaign diagnostics'],
   optimize:       ['Ads Optimization',  'Build and refine campaigns from AI insights'],
   brief:          ['Weekly Brief',      'Automated intelligence summary'],
@@ -108,8 +108,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setNavTarget(path)
     if (exitTimer.current) clearTimeout(exitTimer.current)
     setPhase('exit')
-    // CSS handles the 120ms fade — we just need to push the route after it.
-    exitTimer.current = setTimeout(() => router.push(path), 120)
+    // CSS handles the 100ms fade-out — push the route exactly as it completes.
+    exitTimer.current = setTimeout(() => router.push(path), 100)
   }
 
   async function syncNow() {
@@ -293,9 +293,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         * { box-sizing: border-box; }
         body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-        .page-content { opacity: 1; transition: opacity 180ms ease; will-change: opacity; }
-        .page-content.page-exit { opacity: 0; transition: opacity 120ms ease; pointer-events: none; }
-        .page-content.page-enter { opacity: 0; transition: none; }
+        /* Premium tab transition — outgoing fades out 100ms; incoming fades in
+           with a subtle 8px rise over 220ms. min-height holds the container so
+           the remount never collapses and nothing jumps. */
+        .page-content { opacity: 1; transform: none; min-height: 70vh; will-change: opacity, transform; transition: opacity 220ms cubic-bezier(.22,.61,.36,1), transform 220ms cubic-bezier(.22,.61,.36,1); }
+        .page-content.page-exit { opacity: 0; transform: none; transition: opacity 100ms cubic-bezier(.22,.61,.36,1); pointer-events: none; }
+        .page-content.page-enter { opacity: 0; transform: translateY(8px); transition: none; }
 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
@@ -310,7 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .nav-section-label { overflow:hidden; max-height:40px; opacity:1; transition:opacity 0.35s ease,max-height 0.45s cubic-bezier(0.4,0,0.2,1),padding 0.35s ease; }
         body.minimal .nav-section-label { opacity:0 !important; max-height:0 !important; padding:0 !important; }
 
-        .main-scroll { transition:padding 0.4s cubic-bezier(0.4,0,0.2,1); padding:24px 26px; overflow-y:auto; overscroll-behavior:contain; transform:translateZ(0); }
+        .main-scroll { transition:padding 0.4s cubic-bezier(0.4,0,0.2,1); padding:24px 26px; overflow-y:auto; scrollbar-gutter:stable; overscroll-behavior:contain; transform:translateZ(0); }
         body.minimal .main-scroll { padding:14px 18px !important; }
 
         .header-sub { overflow:hidden; max-height:30px; opacity:1; transition:opacity 0.35s ease,max-height 0.45s cubic-bezier(0.4,0,0.2,1); }

@@ -1,197 +1,157 @@
 'use client'
-export const dynamic = "force-dynamic"
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useApp } from '../context'
-import { carryForwardManualCampaigns } from '@/lib/manual-campaigns'
-import AddCampaignForm from './AddCampaignForm'
-import { fmtMoney } from '@/lib/types'
+export const dynamic = 'force-dynamic'
 
-type Row = {
-  id: string
-  campaign_id: string
-  campaign_name: string
-  platform: string
-  spend: number
-  revenue: number
-  roas: number
-  conversions: number
-  impressions: number
-  clicks: number
-  health: string
-  snapshot_date: string
+import { useState } from 'react'
+import { classifyCampaign } from '../../../lib/vai-rules'
+
+const HEALTH_COLOR: Record<string, string> = {
+  strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171',
+}
+const HEALTH_LABEL: Record<string, string> = {
+  strong: 'STRONG', weak: 'WEAK', bleeding: 'BLEEDING', dead: 'DEAD',
 }
 
-const MONO = "'DM Mono',monospace"
-const SERIF = "'Cormorant Garamond',serif"
-const SANS = "'DM Sans',sans-serif"
+function num(v: string): number {
+  const n = parseFloat(v.replace(/[^0-9.]/g, ''))
+  return Number.isFinite(n) ? n : 0
+}
 
-const healthColor = (h: string) =>
-  ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' } as Record<string, string>)[h] || 'var(--ink3)'
-const healthBg = (h: string) =>
-  ({ strong: 'rgba(74,222,128,0.08)', weak: 'rgba(251,191,36,0.08)', bleeding: 'rgba(251,146,60,0.08)', dead: 'rgba(248,113,113,0.08)' } as Record<string, string>)[h] || 'transparent'
-const platColor: Record<string, string> = { meta: '#1877f2', google: '#ea4335', tiktok: '#00f2ea', other: '#888' }
-const platLabel: Record<string, string> = { meta: 'Meta', google: 'Google', tiktok: 'TikTok', other: 'Other' }
-
-export default function AddCampaignPage() {
-  const supabase = createClientComponentClient()
-  const router = useRouter()
-  const { client, toast } = useApp()
-
-  const [campaigns, setCampaigns] = useState<Row[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-
-  useEffect(() => { if (client) load() }, [client])
-
-  async function load() {
-    if (!client) return
-    setLoading(true)
-    await carryForwardManualCampaigns(supabase, client.id)
-    const today = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('campaign_snapshots')
-      .select('id, campaign_id, campaign_name, platform, spend, revenue, roas, conversions, impressions, clicks, health, snapshot_date')
-      .eq('client_id', client.id)
-      .eq('snapshot_date', today)
-      .like('campaign_id', 'manual_%')
-      .order('spend', { ascending: false })
-    setCampaigns((data as Row[]) || [])
-    setLoading(false)
-    setShowForm((data?.length || 0) === 0)
+// Estimated monthly recoverable waste for bleeding/dead campaigns.
+function wastedEstimate(spend: number, roas: number, health: string): number {
+  if (health === 'dead') return Math.round(spend)
+  if (health === 'bleeding') {
+    const mult = roas < 0.5 ? 0.9 : roas < 1 ? 0.6 : 0.35
+    return Math.round(spend * mult)
   }
+  return 0
+}
 
-  async function deleteCampaign(row: Row) {
-    if (!client) return
-    if (!confirm(`Delete "${row.campaign_name}"? This removes all historical snapshots for this campaign.`)) return
-    await supabase
-      .from('campaign_snapshots')
-      .delete()
-      .eq('client_id', client.id)
-      .eq('campaign_id', row.campaign_id)
-    toast('Campaign removed', `${row.campaign_name} deleted.`)
-    load()
-  }
+function vaiInsight(health: string, roas: number, spend: number, wasted: number): string {
+  const r = roas.toFixed(2)
+  if (health === 'strong')
+    return `At ${r}x this is your most efficient dollar — scale budget here before touching anything else. VAI would model the safe scaling ceiling.`
+  if (health === 'weak')
+    return `Profitable but soft at ${r}x — under the 2.5x bar. Tighten the audience or refresh creative; VAI would pinpoint which lever moves it first.`
+  if (health === 'bleeding')
+    return `Losing money after margin at ${r}x. Restructure or cut within 48 hours — roughly $${wasted.toLocaleString()}/mo is recoverable here.`
+  return `Near-zero return on $${spend.toLocaleString()}/mo. Pause now and reallocate to a STRONG campaign — VAI would tell you exactly where.`
+}
 
-  function onAdded() {
-    toast('Campaign added', 'It will appear on your dashboard right away.')
-    setShowForm(false)
-    load()
-  }
+export default function CalculatorPage() {
+  const [spend, setSpend] = useState('3200')
+  const [revenue, setRevenue] = useState('5760')
+  const [conversions, setConversions] = useState('48')
+  const [impressions, setImpressions] = useState('')
+  const [clicks, setClicks] = useState('')
+  const [frequency, setFrequency] = useState('')
 
-  const fmt = (n: number) => (Number(n) >= 1000 ? `$${(Number(n) / 1000).toFixed(1)}k` : `$${Number(n).toLocaleString()}`)
+  const s = num(spend), rev = num(revenue), conv = num(conversions)
+  const impr = num(impressions), clk = num(clicks), freq = num(frequency)
+
+  const roas = s > 0 ? rev / s : 0
+  const cpa = conv > 0 ? s / conv : 0
+  const ctr = impr > 0 ? (clk / impr) * 100 : 0
+
+  const hasInput = s > 0 || rev > 0 || conv > 0
+
+  const cls = classifyCampaign({
+    spend: s, conversions: conv, roas,
+    impressions: impr || undefined,
+    clicks: clk || undefined,
+    ctr: impr > 0 ? ctr : undefined,
+    frequency: freq || undefined,
+  })
+  const health = cls.health
+  const color = HEALTH_COLOR[health]
+  const wasted = wastedEstimate(s, roas, health)
+  const insight = vaiInsight(health, roas, s, wasted)
+
+  const field = (label: string, val: string, set: (v: string) => void, ph: string, opt = false) => (
+    <div>
+      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>
+        {label}{opt && <span style={{ color: 'var(--ink4,rgba(255,255,255,.2))' }}> · optional</span>}
+      </div>
+      <input value={val} onChange={e => set(e.target.value)} placeholder={ph} inputMode="decimal"
+        style={{ width: '100%', padding: '11px 13px', borderRadius: 5, fontSize: 14, fontFamily: "'DM Sans',sans-serif" }} />
+    </div>
+  )
+
+  const stat = (label: string, value: string, accent?: string) => (
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 8, padding: '14px 16px' }}>
+      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 7 }}>{label}</div>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 400, lineHeight: 1, color: accent || 'var(--ink)' }}>{value}</div>
+    </div>
+  )
 
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto' }}>
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>
-          Campaign Data
-        </div>
-        <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 6 }}>
-          Add &amp; manage your campaigns
-        </div>
-        <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px', lineHeight: 1.7 }}>
-          Enter your campaign numbers here. Updates appear on your dashboard immediately and feed every VAI analysis &amp; weekly brief.
-        </div>
+    <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Powered by VAI</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Performance Calculator</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Enter any campaign&rsquo;s numbers — VAI classifies it live against its exact thresholds</div>
       </div>
 
-      {showForm && client && (
-        <div style={{ marginBottom: 24 }}>
-          <AddCampaignForm
-            clientId={client.id}
-            onSuccess={onAdded}
-            onCancel={campaigns.length > 0 ? () => setShowForm(false) : undefined}
-          />
-        </div>
-      )}
-
-      {!showForm && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>
-            Your Campaigns ({campaigns.length})
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px) 1fr', gap: 20, alignItems: 'start' }} className="calc-grid">
+        {/* Inputs */}
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 10, padding: '22px 22px' }}>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 16, paddingBottom: 10, borderBottom: '1px solid var(--rule)' }}>Campaign Inputs</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {field('Monthly Spend ($)', spend, setSpend, '3200')}
+            {field('Monthly Revenue ($)', revenue, setRevenue, '5760')}
+            {field('Conversions', conversions, setConversions, '48')}
+            {field('Impressions', impressions, setImpressions, '210000', true)}
+            {field('Clicks', clicks, setClicks, '1700', true)}
+            {field('Frequency', frequency, setFrequency, '2.8', true)}
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '9px 18px', borderRadius: 4, cursor: 'pointer' }}
-          >
-            + Add Campaign
-          </button>
         </div>
-      )}
 
-      {loading ? (
-        <div style={{ padding: 24, fontFamily: MONO, fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Loading...</div>
-      ) : campaigns.length === 0 && !showForm ? (
-        <div style={{ padding: '40px 24px', textAlign: 'center', background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6 }}>
-          <div style={{ fontFamily: SERIF, fontSize: 18, color: 'var(--ink)', marginBottom: 8 }}>No campaigns yet</div>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--ink3)' }}>Click + Add Campaign above to enter your first one.</div>
-        </div>
-      ) : campaigns.length > 0 ? (
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 100px 80px 90px 90px 40px', background: 'rgba(255,255,255,0.025)', borderBottom: '1px solid var(--rule2)' }}>
-            {['Campaign', 'Platform', 'Spend/mo', 'ROAS', 'Conversions', 'Health', ''].map(h => (
-              <div key={h} style={{ fontFamily: MONO, fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', padding: '10px 12px' }}>
-                {h}
-              </div>
-            ))}
+        {/* Live results */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Derived stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+            {stat('ROAS', `${roas.toFixed(2)}x`, roas >= 2.5 ? '#4ade80' : roas >= 1.5 ? '#fbbf24' : '#f87171')}
+            {stat('CPA', conv > 0 ? `$${cpa.toFixed(2)}` : '—')}
+            {stat('CTR', impr > 0 ? `${ctr.toFixed(2)}%` : '—')}
           </div>
-          {campaigns.map((c, i) => (
-            <div
-              key={c.id}
-              style={{ display: 'grid', gridTemplateColumns: '2fr 90px 100px 80px 90px 90px 40px', alignItems: 'center', borderBottom: i < campaigns.length - 1 ? '1px solid var(--rule)' : 'none' }}
-            >
-              <div style={{ padding: '12px 12px', fontFamily: SANS, fontSize: 12, color: 'var(--ink)' }}>{c.campaign_name}</div>
-              <div style={{ padding: '12px 12px' }}>
-                <span style={{ fontFamily: MONO, fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[c.platform] || '#444', padding: '2px 6px', borderRadius: 2, letterSpacing: '1px' }}>
-                  {(platLabel[c.platform] || c.platform).toUpperCase()}
-                </span>
-              </div>
-              <div style={{ padding: '12px 12px', fontFamily: MONO, fontSize: 10, color: 'var(--ink2)' }}>{fmt(c.spend)}</div>
-              <div style={{ padding: '12px 12px', fontFamily: SERIF, fontSize: 15, color: healthColor(c.health) }}>{Number(c.roas).toFixed(2)}x</div>
-              <div style={{ padding: '12px 12px', fontFamily: MONO, fontSize: 10, color: 'var(--ink2)' }}>{c.conversions}</div>
-              <div style={{ padding: '12px 12px' }}>
-                <span style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthColor(c.health)}33`, padding: '2px 6px', borderRadius: 2 }}>
-                  {c.health}
-                </span>
-              </div>
-              <div style={{ padding: '12px 8px', textAlign: 'center' }}>
-                <button
-                  onClick={() => deleteCampaign(c)}
-                  title="Delete campaign"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink3)', fontSize: 12, padding: 4 }}
-                >
-                  ✕
-                </button>
-              </div>
+
+          {/* Classification */}
+          <div style={{ background: 'var(--bg2)', border: `1px solid ${hasInput ? color + '55' : 'var(--rule)'}`, borderLeft: `3px solid ${hasInput ? color : 'var(--rule2)'}`, borderRadius: 8, padding: '20px 22px', transition: 'border-color .2s ease' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, letterSpacing: '2px', color }}>{HEALTH_LABEL[health]}</span>
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '1px', textTransform: 'uppercase' }}>VAI Classification</span>
             </div>
-          ))}
-          <div style={{ padding: '10px 14px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '0.5px' }}>
-            <span>Total spend: {fmtMoney(campaigns.reduce((s, c) => s + Number(c.spend), 0))}</span>
-            <span>{campaigns.length} campaign{campaigns.length === 1 ? '' : 's'}</span>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 17, fontWeight: 400, lineHeight: 1.5, color: 'var(--ink)' }}>
+              {hasInput ? cls.primaryReason.charAt(0).toUpperCase() + cls.primaryReason.slice(1) + '.' : 'Enter your numbers to see the classification.'}
+            </div>
+            {cls.reasons.length > 1 && hasInput && (
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink2)', marginTop: 8, lineHeight: 1.6 }}>
+                Also flagged: {cls.reasons.slice(1).join('; ')}.
+              </div>
+            )}
           </div>
-        </div>
-      ) : null}
 
-      <div style={{ marginTop: 22, padding: '18px 20px', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>
-            Skip the manual entry
-          </div>
-          <div style={{ fontFamily: SANS, fontSize: 14, color: 'var(--ink)', marginBottom: 4, fontWeight: 500 }}>
-            Connect your Meta Ads account directly
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--ink3)', letterSpacing: '0.5px', lineHeight: 1.7 }}>
-            One-click read-only OAuth pulls every Facebook &amp; Instagram campaign automatically and keeps numbers fresh.
-          </div>
+          {/* Wasted spend */}
+          {hasInput && wasted > 0 && (
+            <div style={{ background: 'var(--redpaper,rgba(248,113,113,.08))', border: '1px solid var(--redborder,rgba(248,113,113,.25))', borderRadius: 8, padding: '18px 22px' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: '#f87171', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>Estimated Recoverable / Month</div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 36, fontWeight: 300, color: '#f87171', lineHeight: 1 }}>${wasted.toLocaleString()}</div>
+            </div>
+          )}
+
+          {/* VAI insight */}
+          {hasInput && (
+            <div style={{ background: 'var(--goldpaper,rgba(201,168,76,.08))', border: '1px solid var(--goldborder,rgba(201,168,76,.22))', borderRadius: 8, padding: '18px 22px' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 8 }}>VAI Insight</div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, fontWeight: 400, lineHeight: 1.6, color: 'var(--ink)' }}>{insight}</div>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => router.push('/dashboard/connect')}
-          style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#fff', background: '#1877f2', border: 'none', padding: '11px 22px', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
-        >
-          Connect Meta Ads →
-        </button>
       </div>
+
+      <style>{`
+        @media (max-width:760px){ .calc-grid{ grid-template-columns:1fr !important; } }
+      `}</style>
     </div>
   )
 }
