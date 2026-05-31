@@ -260,7 +260,6 @@ serve(async (req: Request) => {
         const frequency = insights?.frequency ? parseFloat(insights.frequency) : null;
         const cpm = insights?.cpm ? parseFloat(insights.cpm) : null;
         const cpc = insights?.cpc ? parseFloat(insights.cpc) : null;
-        const ctr = insights?.ctr ? parseFloat(insights.ctr) : null;
 
         // cost per result — prefer Meta's purchase cost, else derive from spend/conv
         const cprRow = (insights?.cost_per_action_type ?? []).find((a: any) => isPurchase(a.action_type));
@@ -284,9 +283,10 @@ serve(async (req: Request) => {
           conversions,
           revenue: Math.round(revenue * 100) / 100,
           roas: Math.round(roas * 100) / 100,
-          ctr: ctr != null ? Math.round(ctr * 100) / 100 : null,
+          // NOTE: ctr and cpa are GENERATED columns in campaign_snapshots —
+          // never write them; Postgres computes them. We persist cpc (plain
+          // column) and cost_per_result (plain) instead.
           cpc: cpc != null ? Math.round(cpc * 100) / 100 : null,
-          cpa: cost_per_result,
           reach,
           frequency: frequency != null ? Math.round(frequency * 100) / 100 : null,
           cpm: cpm != null ? Math.round(cpm * 100) / 100 : null,
