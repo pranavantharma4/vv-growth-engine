@@ -19,6 +19,7 @@ export default function ConnectPage() {
   const [connection, setConnection] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     if (client) load()
@@ -49,14 +50,39 @@ export default function ConnectPage() {
   async function load() {
     if (!client) return
     setLoading(true)
+    // Detect the ACTIVE Meta connection. Filter is_active and take the most
+    // recent — using .maybeSingle() without is_active broke detection whenever
+    // an inactive/duplicate row existed (it returned null → showed "Connect"
+    // even though the account was connected).
     const { data } = await supabase
       .from('ad_connections')
       .select('*')
       .eq('client_id', client.id)
       .eq('platform', 'meta')
-      .maybeSingle()
-    setConnection(data)
+      .eq('is_active', true)
+      .order('connected_at', { ascending: false })
+      .limit(1)
+    setConnection((data && data[0]) || null)
     setLoading(false)
+  }
+
+  async function syncNow() {
+    if (!client || syncing) return
+    setSyncing(true)
+    try {
+      const { error } = await supabase.functions.invoke('sync-meta-campaigns', { body: { client_id: client.id } })
+      if (error) {
+        const msg = (error as any)?.context?.error || (error as any)?.message || 'Sync failed'
+        toast('Sync failed', String(msg))
+      } else {
+        toast('Sync complete', 'Latest Meta campaign data pulled into your dashboard.')
+        load()
+      }
+    } catch (e: any) {
+      toast('Sync failed', e?.message || 'Unknown error')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   function connectMeta() {
@@ -185,6 +211,10 @@ export default function ConnectPage() {
             </button>
           ) : (
             <>
+              <button onClick={syncNow} disabled={syncing}
+                style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '10px 20px', borderRadius: 4, cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.6 : 1 }}>
+                {syncing ? 'Syncing…' : 'Sync Now →'}
+              </button>
               <button onClick={connectMeta}
                 style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: 'var(--gold)', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', padding: '10px 18px', borderRadius: 4, cursor: 'pointer' }}>
                 Reconnect
