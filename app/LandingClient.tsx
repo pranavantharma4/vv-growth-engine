@@ -52,6 +52,67 @@ export default function LandingClient() {
     return () => { document.body.style.overflow = '' }
   }, [menuOpen])
 
+  // VAI card sequenced reveal — plays once the card enters view, like a live report
+  useEffect(() => {
+    const card = document.querySelector('.vai-card')
+    if (!card) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add('play')
+            io.unobserve(e.target)
+          }
+        })
+      },
+      { threshold: 0.2 }
+    )
+    io.observe(card)
+    return () => io.disconnect()
+  }, [])
+
+  // Count-up for stats — fast (<800ms), eased, fires when each number enters view
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const els = Array.from(document.querySelectorAll<HTMLElement>('.count'))
+    if (!els.length) return
+    const fmt = (el: HTMLElement, val: number) => {
+      const dec = Number(el.dataset.dec || 0)
+      const pre = el.dataset.prefix || ''
+      const suf = el.dataset.suffix || ''
+      const n = dec === 0
+        ? Math.round(val).toLocaleString('en-US')
+        : val.toFixed(dec)
+      return pre + n + suf
+    }
+    els.forEach((el) => { el.textContent = fmt(el, 0) }) // start at zero (hidden until revealed)
+    const run = (el: HTMLElement) => {
+      const to = parseFloat(el.dataset.to || '0')
+      const dur = 750
+      let t0: number | null = null
+      const step = (t: number) => {
+        if (t0 === null) t0 = t
+        const p = Math.min((t - t0) / dur, 1)
+        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
+        el.textContent = fmt(el, to * e)
+        if (p < 1) requestAnimationFrame(step)
+        else el.textContent = fmt(el, to)
+      }
+      requestAnimationFrame(step)
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) { run(e.target as HTMLElement); io.unobserve(e.target) }
+        })
+      },
+      { threshold: 0.4 }
+    )
+    els.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [])
+
   return (
     <div className="lp">
       <style>{CSS}</style>
@@ -92,28 +153,28 @@ export default function LandingClient() {
         <div className="hero-inner">
           <p className="eyebrow reveal">META ADS INTELLIGENCE · POWERED BY VAI</p>
 
-          <h1 className="hero-h1 reveal">
+          <h1 className="hero-h1 reveal" style={{ transitionDelay: '90ms' }}>
             The intelligence layer<br />
             your Meta campaigns<br />
             have been missing.
           </h1>
 
-          <p className="hero-lede reveal">
+          <p className="hero-lede reveal" style={{ transitionDelay: '180ms' }}>
             VAI connects to your Meta Ads account, reads every campaign, and tells you in
             plain English what&rsquo;s working, what&rsquo;s bleeding money, and exactly what
             to do next — every Monday morning at 7AM.
           </p>
 
-          <div className="hero-ctas reveal">
+          <div className="hero-ctas reveal" style={{ transitionDelay: '270ms' }}>
             <a href={AUDIT} className="btn-gold">GET FREE AUDIT →</a>
             <a href={CALENDLY} className="btn-ghost">REQUEST ACCESS</a>
           </div>
 
-          <p className="hero-fine reveal">Read-only access · No credit card required · Results in 60 seconds</p>
+          <p className="hero-fine reveal" style={{ transitionDelay: '340ms' }}>Read-only access · No credit card required · Results in 60 seconds</p>
 
-          {/* THE VAI CARD — hero visual */}
-          <div className="vai-card reveal">
-            <div className="vai-top">
+          {/* THE VAI CARD — hero visual. Frame visible; children sequence in like a live report. */}
+          <div className="vai-card">
+            <div className="vai-top vstep" style={{ animationDelay: '150ms' }}>
               <div className="vai-top-l">
                 <span className="vai-name">SUMMER SALE — RETARGETING</span>
                 <span className="badge badge-meta">META</span>
@@ -127,25 +188,25 @@ export default function LandingClient() {
 
             <div className="divider" />
 
-            <div className="vai-diag-row">
+            <div className="vai-diag-row vstep" style={{ animationDelay: '450ms' }}>
               <span className="vai-diag-label">VAI DIAGNOSIS</span>
               <span className="vai-diag-date">Monday, May 26, 2026 · 7:04 AM</span>
             </div>
 
-            <p className="vai-diag-body">
+            <p className="vai-diag-body vstep" style={{ animationDelay: '620ms' }}>
               This retargeting campaign is hemorrhaging budget against warm audiences that have
               clearly stopped responding. You are spending $178 to acquire a customer on a $320
               AOV — every single conversion costs more than it returns.
             </p>
 
-            <p className="vai-action-label">IMMEDIATE ACTION</p>
-            <p className="vai-action">Pause this campaign. Reallocate the $3,200 to Lookalike — Past Purchasers immediately.</p>
+            <p className="vai-action-label vstep" style={{ animationDelay: '900ms' }}>IMMEDIATE ACTION</p>
+            <p className="vai-action vstep" style={{ animationDelay: '1000ms' }}>Pause this campaign. Reallocate the $3,200 to Lookalike — Past Purchasers immediately.</p>
 
-            <div className="vai-locked">
+            <div className="vai-locked vstep" style={{ animationDelay: '1250ms' }}>
               <span>Full root cause · 30-day blueprint · exact reallocation percentages</span>
             </div>
 
-            <div className="vai-foot">
+            <div className="vai-foot vstep" style={{ animationDelay: '1450ms' }}>
               <span>Every client receives this report. Every Monday. 7AM.</span>
               <a href={AUDIT} className="gold-link">Get this on your account →</a>
             </div>
@@ -156,17 +217,30 @@ export default function LandingClient() {
       {/* ───────────────────────── SECTION 2 · CAMPAIGN INTELLIGENCE ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">CAMPAIGN INTELLIGENCE</p>
-        <h2 className="s-head reveal">Every campaign, classified.</h2>
-        <p className="s-sub reveal">VAI reads your entire Meta account and sorts every campaign into one of four states — automatically, every week.</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Every campaign, classified.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>VAI reads your entire Meta account and sorts every campaign into one of four states — automatically, every week.</p>
 
-        <div className="class-grid reveal">
-          {CLASSES.map((c) => (
-            <div className="class-card" key={c.label}>
+        <div className="class-grid">
+          {CLASSES.map((c, i) => (
+            <div className="class-card reveal" key={c.label} style={{ transitionDelay: `${i * 100}ms` }}>
               <div className="class-tag">
                 <span className="dot" style={{ background: c.color }} />
                 <span style={{ color: c.color }}>{c.label}</span>
               </div>
-              <div className="class-stat" style={{ color: c.color }}>{c.stat}</div>
+              {c.count ? (
+                <div
+                  className="class-stat count"
+                  style={{ color: c.color }}
+                  data-to={c.count.to}
+                  data-dec={c.count.dec}
+                  data-prefix={c.count.prefix || ''}
+                  data-suffix={c.count.suffix || ''}
+                >
+                  {c.stat}
+                </div>
+              ) : (
+                <div className="class-stat" style={{ color: c.color }}>{c.stat}</div>
+              )}
               <div className="class-unit">{c.unit}</div>
               <p className="class-desc">{c.desc}</p>
             </div>
@@ -179,11 +253,11 @@ export default function LandingClient() {
       {/* ───────────────────────── SECTION 3 · HOW IT WORKS ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">HOW IT WORKS</p>
-        <h2 className="s-head reveal">Three steps. One Monday morning.</h2>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Three steps. One Monday morning.</h2>
 
         <div className="how">
           {/* Row 1 — Connect */}
-          <div className="how-row reveal">
+          <div className="how-row reveal r-left">
             <div className="how-visual">
               <div className="mini-card connect-card">
                 <span className="meta-mark">f</span>
@@ -199,7 +273,7 @@ export default function LandingClient() {
           </div>
 
           {/* Row 2 — Analyze (reversed) */}
-          <div className="how-row reverse reveal">
+          <div className="how-row reverse reveal r-right">
             <div className="how-visual">
               <div className="mini-card stack-card">
                 {ANALYZE_ROWS.map((r) => (
@@ -219,7 +293,7 @@ export default function LandingClient() {
           </div>
 
           {/* Row 3 — Deliver */}
-          <div className="how-row reveal">
+          <div className="how-row reveal r-left">
             <div className="how-visual">
               <div className="mini-card inbox-card">
                 <div className="inbox-top">
@@ -243,11 +317,11 @@ export default function LandingClient() {
       {/* ───────────────────────── SECTION 4 · WHO IT IS FOR ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">BUILT FOR</p>
-        <h2 className="s-head reveal">Serious ad spenders.</h2>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Serious ad spenders.</h2>
 
-        <div className="who-grid reveal">
-          {WHO.map((w) => (
-            <div className="who-col" key={w.name}>
+        <div className="who-grid">
+          {WHO.map((w, i) => (
+            <div className="who-col reveal" key={w.name} style={{ transitionDelay: `${i * 100}ms` }}>
               <h3 className="who-name">{w.name}</h3>
               <p className="who-desc">{w.desc}</p>
             </div>
@@ -258,8 +332,8 @@ export default function LandingClient() {
       {/* ───────────────────────── SECTION 5 · THE MONDAY BRIEF ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">THE MONDAY BRIEF</p>
-        <h2 className="s-head reveal">What your inbox looks like.</h2>
-        <p className="s-sub reveal">Every Monday at 7AM. Plain English. Exact actions.</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>What your inbox looks like.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>Every Monday at 7AM. Plain English. Exact actions.</p>
 
         <div className="brief reveal">
           <div className="brief-top">
@@ -297,12 +371,12 @@ export default function LandingClient() {
       {/* ───────────────────────── SECTION 6 · ACCESS ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">ACCESS</p>
-        <h2 className="s-head reveal">By application only.</h2>
-        <p className="s-sub reveal">VV Growth Ad Engine is not a self-serve tool. Every account is set up by our team to ensure VAI is configured correctly for your specific account structure.</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>By application only.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>VV Growth Ad Engine is not a self-serve tool. Every account is set up by our team to ensure VAI is configured correctly for your specific account structure.</p>
 
-        <div className="access reveal">
-          {ACCESS.map((a) => (
-            <div className="access-step" key={a.n}>
+        <div className="access">
+          {ACCESS.map((a, i) => (
+            <div className="access-step reveal" key={a.n} style={{ transitionDelay: `${i * 100}ms` }}>
               <span className="access-num">{a.n}</span>
               <div>
                 <h3 className="access-h">{a.title}</h3>
@@ -352,10 +426,15 @@ export default function LandingClient() {
 
 /* ───────────────────────── DATA ───────────────────────── */
 
-const CLASSES = [
-  { label: 'STRONG',   color: '#4ade80', stat: '6.2x',   unit: 'ROAS',      desc: 'Scaling candidate. VAI tells you exactly how much more budget to put here.' },
-  { label: 'WEAK',     color: '#fbbf24', stat: '1.8x',   unit: 'ROAS',      desc: 'Needs diagnosis before it bleeds. VAI identifies the root cause.' },
-  { label: 'BLEEDING', color: '#fb923c', stat: '$3,200', unit: 'WASTED/MO', desc: 'Actively losing money. Fix required within 48 hours.' },
+type ClassCard = {
+  label: string; color: string; stat: string; unit: string; desc: string
+  count?: { to: number; dec: number; prefix?: string; suffix?: string }
+}
+
+const CLASSES: ClassCard[] = [
+  { label: 'STRONG',   color: '#4ade80', stat: '6.2x',   unit: 'ROAS',      desc: 'Scaling candidate. VAI tells you exactly how much more budget to put here.', count: { to: 6.2, dec: 1, suffix: 'x' } },
+  { label: 'WEAK',     color: '#fbbf24', stat: '1.8x',   unit: 'ROAS',      desc: 'Needs diagnosis before it bleeds. VAI identifies the root cause.',           count: { to: 1.8, dec: 1, suffix: 'x' } },
+  { label: 'BLEEDING', color: '#fb923c', stat: '$3,200', unit: 'WASTED/MO', desc: 'Actively losing money. Fix required within 48 hours.',                       count: { to: 3200, dec: 0, prefix: '$' } },
   { label: 'DEAD',     color: '#f87171', stat: '0.0x',   unit: 'ROAS',      desc: 'Zero return. Pause immediately. VAI tells you where to move the budget.' },
 ]
 
@@ -391,10 +470,24 @@ const CSS = `
 .lp ::selection{background:rgba(201,168,76,.28);}
 .lp a{color:inherit;text-decoration:none;}
 
-/* reveal */
-.lp .reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease;}
+/* reveal — fade up + slight scale, premium ease-out */
+.lp .reveal{opacity:0;transform:translateY(24px) scale(.985);
+  transition:opacity .7s cubic-bezier(.22,.61,.36,1),transform .7s cubic-bezier(.22,.61,.36,1);will-change:opacity,transform;}
 .lp .reveal.in{opacity:1;transform:none;}
-@media (prefers-reduced-motion:reduce){.lp .reveal{opacity:1;transform:none;transition:none;}}
+/* slide variants for How-It-Works rows — alternating sides */
+.lp .reveal.r-left{transform:translateX(-44px);}
+.lp .reveal.r-right{transform:translateX(44px);}
+.lp .reveal.r-left.in,.lp .reveal.r-right.in{transform:none;}
+
+/* VAI card sequenced reveal — children generate in like a live report */
+.lp .vstep{opacity:0;}
+.lp .vai-card.play .vstep{animation:lpStep .55s cubic-bezier(.22,.61,.36,1) forwards;}
+@keyframes lpStep{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+
+@media (prefers-reduced-motion:reduce){
+  .lp .reveal,.lp .reveal.r-left,.lp .reveal.r-right{opacity:1;transform:none;transition:none;}
+  .lp .vstep{opacity:1;animation:none;}
+}
 
 /* ── NAVBAR ── */
 .lp .nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
