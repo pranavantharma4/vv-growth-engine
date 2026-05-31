@@ -131,7 +131,12 @@ Write 3 sections:
 
 Be direct, specific, and use exact numbers from this account. No generic advice. Write as their embedded growth strategist.`
 
+  // Generate the AI summary. Fail LOUDLY — never persist or email a blank brief.
+  if (!ANTHROPIC_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set for the weekly-brief edge function — set it via `supabase secrets set`.')
+  }
   let aiSummary = ''
+  let aiError = ''
   try {
     const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -147,9 +152,22 @@ Be direct, specific, and use exact numbers from this account. No generic advice.
       })
     })
     const aiData = await aiRes.json()
-    aiSummary = aiData.content?.[0]?.text ?? ''
-  } catch (_) {
-    aiSummary = 'AI analysis unavailable this week. Your VV manager will follow up.'
+    if (!aiRes.ok || aiData?.error) {
+      // Anthropic returns 200-with-error rarely, but 4xx/5xx carry { error: { message } }.
+      aiError = `Anthropic API error (HTTP ${aiRes.status}): ${aiData?.error?.message ?? JSON.stringify(aiData).slice(0, 300)}`
+    } else {
+      aiSummary = aiData.content?.[0]?.text ?? ''
+      if (!aiSummary.trim()) aiError = 'Anthropic returned a 200 with no text content'
+    }
+  } catch (e: any) {
+    aiError = `Anthropic request failed: ${e?.message ?? String(e)}`
+  }
+
+  // A blank/failed summary must not be saved or emailed — surface it to the caller
+  // (the per-client catch in the handler records it as status:"error").
+  if (aiError || !aiSummary.trim()) {
+    console.error(`weekly-brief: ${aiError || 'empty summary'} for client ${client.name} (${client.id})`)
+    throw new Error(aiError || 'Anthropic returned an empty summary — brief not sent.')
   }
 
   const campaignSummary = campaigns.map((c: any) => ({
