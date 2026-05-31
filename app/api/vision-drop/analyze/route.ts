@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { STRICT_SYSTEM_RULES, buildGranularBlock, type Granular, type Segment } from '../../../../lib/vai-granular'
+import { classifyCampaign, fatigueForecast } from '../../../../lib/vai-rules'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -69,13 +70,23 @@ async function fetchAccountGranular(
   const [demoRows, placeRows, trendRows, acctRows] = await Promise.all([
     get({ level: 'campaign', breakdowns: 'age,gender', date_preset: datePreset, fields: 'spend,impressions,actions,action_values,purchase_roas', limit: '2000', access_token: token }),
     get({ level: 'campaign', breakdowns: 'publisher_platform,platform_position', date_preset: datePreset, fields: 'spend,impressions,actions,action_values,purchase_roas', limit: '2000', access_token: token }),
-    get({ level: 'account', time_increment: '1', time_range: `{"since":"${trendSince}","until":"${until}"}`, fields: 'spend,actions,action_values,purchase_roas', limit: '60', access_token: token }),
+    get({ level: 'account', time_increment: '1', time_range: `{"since":"${trendSince}","until":"${until}"}`, fields: 'spend,impressions,clicks,actions,action_values,purchase_roas,frequency,cpm,ctr', limit: '60', access_token: token }),
     get({ level: 'account', date_preset: datePreset, fields: 'frequency,cpm,reach', limit: '1', access_token: token }),
   ])
 
   const trend = (trendRows || []).map((r: any) => {
     const p = perf(r)
-    return { date: r.date_start, spend: Math.round(p.spend), roas: Math.round(p.roas * 100) / 100, conversions: p.conversions }
+    return {
+      date: r.date_start,
+      spend: Math.round(p.spend),
+      roas: Math.round(p.roas * 100) / 100,
+      conversions: p.conversions,
+      impressions: Number(r.impressions || 0),
+      clicks: Number(r.clicks || 0),
+      ctr: r.ctr != null ? Number(r.ctr) : null,
+      cpm: r.cpm != null ? Number(r.cpm) : null,
+      frequency: r.frequency != null ? Number(r.frequency) : null,
+    }
   }).sort((a: any, b: any) => (a.date < b.date ? -1 : 1))
 
   const acct = acctRows?.[0] ?? {}
@@ -250,20 +261,30 @@ export async function POST(req: Request) {
       windowDays === 7 ? 'last_7d' : 'last_30d',
     )
     const granularBlock = buildGranularBlock(granular)
+    const accountFatigue = fatigueForecast(granular.daily_trend)
 
     // 3. Ask Claude for the 3 findings + full analysis as JSON
     const compactCampaigns = campaigns
       .slice()
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 25)
-      .map((c) => ({
-        name: c.name,
-        spend: Math.round(c.spend),
-        revenue: Math.round(c.revenue),
-        roas: Number(c.roas.toFixed(2)),
-        conversions: c.conversions,
-        ctr: Number(c.ctr.toFixed(2)),
-      }))
+      .map((c) => {
+        const cls = classifyCampaign({
+          spend: c.spend, conversions: c.conversions, roas: c.roas,
+          impressions: c.impressions, clicks: c.clicks, ctr: c.ctr, frequency: c.frequency,
+        })
+        return {
+          name: c.name,
+          spend: Math.round(c.spend),
+          revenue: Math.round(c.revenue),
+          roas: Number(c.roas.toFixed(2)),
+          conversions: c.conversions,
+          ctr: Number(c.ctr.toFixed(2)),
+          frequency: Number(c.frequency.toFixed(2)),
+          vai_health: cls.health,
+          vai_why: cls.primaryReason,
+        }
+      })
 
     const anthropic = new Anthropic()
     let findings: Findings | null = null
@@ -285,9 +306,11 @@ export async function POST(req: Request) {
               `Total revenue: $${Math.round(totalRevenue).toLocaleString()}\n` +
               `Blended ROAS: ${blendedRoas.toFixed(2)}x\n` +
               `Campaign count: ${campaigns.length}\n\n` +
-              `Campaigns (top 25 by ${windowDays}-day spend):\n${JSON.stringify(compactCampaigns, null, 2)}\n` +
+              `Campaigns (top 25 by ${windowDays}-day spend; each carries the VAI classification + why):\n${JSON.stringify(compactCampaigns, null, 2)}\n` +
               `${granularBlock}\n\n` +
-              `The "immediate_action" and "full_analysis" MUST quote exact numbers from the granular data above — name the exact best/worst age-gender segment and its ROAS, the exact winning placement, the exact account frequency (flag saturation if it exceeds 3.0), and whether the 14-day trend is improving or declining with specific figures.\n\n` +
+              `VAI THRESHOLDS — DEAD: spend>$100 & 0 conv, OR ROAS<0.5x & spend>$200, OR CTR<0.4% after 2,000+ impr & 0 conv. BLEEDING: ROAS 0.5x–1.5x, OR frequency>3.5 & ROAS declining (14d), OR cost-per-result up >30% (14d) while conversions flat/declining. WEAK: ROAS 1.5x–2.5x, OR frequency 2.5–3.5, OR CTR 0.4%–0.8%, OR <50 conversions with meaningful spend. STRONG: ROAS>2.5x AND frequency<2.5 AND stable/improving 14-day trend.\n` +
+              `ACCOUNT FATIGUE FORECAST (computed from the real 14-day daily trend — quote verbatim, never invent a day count): ${accountFatigue.text}\n\n` +
+              `The "immediate_action" and "full_analysis" MUST quote exact numbers from the data above: name the exact best/worst age-gender segment and its ROAS, the exact winning placement, the exact account frequency (flag saturation if it exceeds 3.0), whether the 14-day trend is improving or declining with specific figures, WHY the biggest leak is classified the way it is using the exact threshold (e.g. "BLEEDING because ROAS is 1.8x"), and the fatigue forecast above verbatim.\n\n` +
               `Return ONLY a single valid JSON object — no prose, no markdown fences. Shape:\n` +
               `{\n` +
               `  "biggest_leak": { "campaign_name": "...", "monthly_waste": <number USD>, "why": "<1 sentence>" },\n` +

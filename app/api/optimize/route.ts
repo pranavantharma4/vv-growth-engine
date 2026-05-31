@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { STRICT_SYSTEM_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
+import { buildVaiRulesBlock } from '../../../lib/vai-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,18 @@ export async function POST(req: Request) {
       if (snap) granularRow = { ...campaign, ...snap }
     }
     const granularBlock = buildGranularBlock(granularFromRow(granularRow))
+    const rulesBlock = buildVaiRulesBlock({
+      spend: Number(granularRow.spend ?? campaign.spend),
+      conversions: Number(granularRow.conversions ?? campaign.conversions),
+      roas: Number(granularRow.roas ?? campaign.roas),
+      impressions: Number(granularRow.impressions ?? campaign.impressions),
+      clicks: Number(granularRow.clicks ?? campaign.clicks),
+      ctr: granularRow.ctr ?? null,
+      cpm: granularRow.cpm ?? null,
+      frequency: granularRow.frequency ?? null,
+      cost_per_result: granularRow.cost_per_result ?? granularRow.cpa ?? null,
+      daily_trend: granularRow.daily_trend ?? null,
+    })
 
     const ctr = campaign.impressions > 0
       ? ((campaign.clicks / campaign.impressions) * 100).toFixed(2)
@@ -79,6 +92,7 @@ Conversions: ${campaign.conversions || 0}
 Impressions: ${Number(campaign.impressions || 0).toLocaleString()}
 Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
 ${granularBlock}
+${rulesBlock}
 
 Structure your response exactly like this:
 

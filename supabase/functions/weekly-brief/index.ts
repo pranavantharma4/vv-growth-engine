@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { classifyCampaign, fatigueForecast } from './vai-rules.ts'
 
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const SUPABASE_URL  = Deno.env.get('SUPABASE_URL') ?? ''
@@ -102,10 +103,20 @@ async function generateBriefForClient(supabase: any, client: any, weekRef: strin
   )
   const granularSection = focusCampaigns
     .map((c: any) => {
+      const cls = classifyCampaign({
+        spend: Number(c.spend), conversions: Number(c.conversions), roas: Number(c.roas),
+        impressions: Number(c.impressions), clicks: Number(c.clicks),
+        ctr: c.ctr, cpm: c.cpm, frequency: c.frequency, cost_per_result: c.cost_per_result,
+        daily_trend: c.daily_trend,
+      })
+      const fc = fatigueForecast(c.daily_trend, { frequency: c.frequency, ctr: c.ctr })
       const block = granularBlock(c)
-      return block ? `${c.campaign_name} (${Number(c.roas).toFixed(1)}x ROAS, ${c.health}):\n${block}` : ''
+      return [
+        `${c.campaign_name} — ${cls.health.toUpperCase()}: ${cls.primaryReason}`,
+        block,
+        `  fatigue forecast: ${fc.text}`,
+      ].filter(Boolean).join('\n')
     })
-    .filter(Boolean)
     .join('\n\n')
 
   const prompt = `You are Vanguard Intelligence, an AI-powered ad performance analyst for ${client.name}.
@@ -122,11 +133,13 @@ Summary:
 - Blended ROAS: ${blendedRoas.toFixed(1)}x
 - Recoverable Waste: $${wasted.toFixed(0)}
 ${biggestLeak ? `- Biggest Leak: ${biggestLeak.campaign_name} ($${Number(biggestLeak.spend).toFixed(0)}/mo at ${Number(biggestLeak.roas).toFixed(1)}x ROAS)` : ''}
-${granularSection ? `\nGRANULAR DATA (quote these exact numbers):\n${granularSection}` : ''}
+${granularSection ? `\nGRANULAR DATA + VAI CLASSIFICATION & FATIGUE FORECAST (quote these exact numbers; reproduce the fatigue forecast verbatim — never invent a day count):\n${granularSection}` : ''}
+
+VAI THRESHOLDS — DEAD: spend>$100 & 0 conv, OR ROAS<0.5x & spend>$200, OR CTR<0.4% after 2,000+ impr & 0 conv. BLEEDING: ROAS 0.5x–1.5x, OR frequency>3.5 & ROAS declining (14d), OR cost-per-result up >30% (14d) while conversions flat/declining. WEAK: ROAS 1.5x–2.5x, OR frequency 2.5–3.5, OR CTR 0.4%–0.8%, OR <50 conversions with meaningful spend (learning). STRONG: ROAS>2.5x AND frequency<2.5 AND stable/improving 14-day trend.
 
 Write 3 sections:
 1. WEEK SUMMARY — 2 sentences on overall account health, citing the blended ROAS and total spend figures
-2. CRITICAL ACTIONS — 2-3 bullet points. Each must quote an exact metric: the biggest leak's frequency (flag saturation if >3.0x), its best/worst age-gender segment by exact ROAS, the winning placement, or the 14-day trend direction. State exact dollar reallocations and destination campaigns.
+2. CRITICAL ACTIONS — 2-3 bullet points. For the biggest leak, state WHY it is classified the way it is using the EXACT threshold and its real numbers (e.g. "BLEEDING because ROAS is 1.8x and frequency hit 3.6 while the 14-day trend shows CTR declining"). Quote exact metrics, include the fatigue forecast verbatim, and state exact dollar reallocations and destination campaigns.
 3. OPPORTUNITY — 1 thing this week to improve ROAS, grounded in a specific number above (a demographic, placement, or trend figure)
 
 Be direct, specific, and use exact numbers from this account. No generic advice. Write as their embedded growth strategist.`

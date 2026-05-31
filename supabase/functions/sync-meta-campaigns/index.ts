@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { classifyCampaign } from "./vai-rules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -10,15 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
-function classifyHealth(roas: number, spend: number, conversions: number): string {
-  if (spend === 0) return "weak";
-  if (roas >= 3 && conversions > 0) return "strong";
-  if (roas >= 1.5) return "weak";
-  if (roas > 0 && roas < 1.5 && spend > 50) return "bleeding";
-  if (conversions === 0 && spend > 100) return "dead";
-  return "weak";
-}
 
 const isPurchase = (t: string) =>
   t === "purchase" || t === "offsite_conversion.fb_pixel_purchase";
@@ -207,7 +199,7 @@ serve(async (req: Request) => {
           level: "campaign",
           time_increment: "1",
           time_range: `{"since":"${trendSince}","until":"${until}"}`,
-          fields: "campaign_id,date_start,spend,impressions,actions,action_values,purchase_roas",
+          fields: "campaign_id,date_start,spend,impressions,clicks,actions,action_values,purchase_roas,frequency,cpm,ctr,reach",
           limit: "1000",
           access_token: accessToken,
         })),
@@ -232,6 +224,11 @@ serve(async (req: Request) => {
           spend: Math.round(p.spend * 100) / 100,
           roas: Math.round(p.roas * 100) / 100,
           conversions: p.conversions,
+          impressions: parseInt(row.impressions ?? "0"),
+          clicks: parseInt(row.clicks ?? "0"),
+          ctr: row.ctr != null ? Math.round(parseFloat(row.ctr) * 100) / 100 : null,
+          cpm: row.cpm != null ? Math.round(parseFloat(row.cpm) * 100) / 100 : null,
+          frequency: row.frequency != null ? Math.round(parseFloat(row.frequency) * 100) / 100 : null,
         });
       }
       for (const cid of Object.keys(trendMap)) {
@@ -260,6 +257,7 @@ serve(async (req: Request) => {
         const frequency = insights?.frequency ? parseFloat(insights.frequency) : null;
         const cpm = insights?.cpm ? parseFloat(insights.cpm) : null;
         const cpc = insights?.cpc ? parseFloat(insights.cpc) : null;
+        const ctr = insights?.ctr ? parseFloat(insights.ctr) : null; // for classification only (ctr column is generated)
 
         // cost per result — prefer Meta's purchase cost, else derive from spend/conv
         const cprRow = (insights?.cost_per_action_type ?? []).find((a: any) => isPurchase(a.action_type));
@@ -269,7 +267,15 @@ serve(async (req: Request) => {
 
         const cid = campaign.id;
         const adset = adsetMap[cid] ?? null;
-        const health = classifyHealth(roas, spend, conversions);
+        const trend = trendMap[cid] ?? [];
+
+        // Classify by the shared VAI rules engine (worst applicable trigger),
+        // feeding the full granular picture incl. the 14-day daily trend.
+        const { health } = classifyCampaign({
+          spend, conversions, roas, impressions, clicks,
+          ctr, cpm, frequency, cost_per_result,
+          daily_trend: trend,
+        });
 
         snapshots.push({
           client_id,
