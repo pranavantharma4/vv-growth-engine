@@ -7,18 +7,18 @@ import { AppCtx } from './context'
 import type { Client } from '@/lib/types'
 
 const NAV = [
-  { id: 'dashboard',     label: 'Dashboard',       icon: '◈', section: 'Overview',      admin: false },
+  { id: 'dashboard',     label: 'Dashboard',        icon: '◈', section: 'Overview',      admin: false },
   { id: 'campaigns',     label: 'Campaigns',        icon: '◫', section: null,            admin: false },
-  { id: 'add-campaign',  label: 'Performance Calculator', icon: '⌁', section: null,       admin: false },
-  { id: 'analysis',      label: 'AI Analysis',      icon: '◉', section: 'Intelligence', admin: false },
+  { id: 'analysis',      label: 'AI Analysis',      icon: '◉', section: 'Intelligence',  admin: false },
   { id: 'optimize',      label: 'Ads Optimization', icon: '◑', section: null,            admin: false },
   { id: 'brief',         label: 'Weekly Brief',     icon: '◧', section: null,            admin: false },
   { id: 'reports',       label: 'Reports',          icon: '▣', section: null,            admin: false },
+  { id: 'add-campaign',  label: 'Performance Calculator', icon: '⌁', section: 'Tools',   admin: false },
   { id: 'admin',         label: 'Client Health',    icon: '▲', section: 'Admin',         admin: true  },
-  { id: 'settings',      label: 'Settings',         icon: '◌', section: 'Account',       admin: false },
-  { id: 'invite',        label: 'Invite Client',    icon: '+', section: 'Admin',         admin: true  },
-  { id: 'data-tool',     label: 'Campaign Data',    icon: '✎', section: 'Admin',         admin: true  },
+  { id: 'invite',        label: 'Invite Client',    icon: '+', section: null,            admin: true  },
+  { id: 'data-tool',     label: 'Campaign Data',    icon: '✎', section: null,            admin: true  },
   { id: 'signal',        label: 'VV Signal',        icon: '✶', section: null,            admin: true  },
+  { id: 'settings',      label: 'Settings',         icon: '◌', section: 'Account',       admin: false },
 ]
 
 const TITLES: Record<string, [string, string]> = {

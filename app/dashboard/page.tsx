@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from './context'
 import { carryForwardManualCampaigns } from '@/lib/manual-campaigns'
+import PageLoader from './PageLoader'
 
 type Campaign = {
   id: string
@@ -109,13 +110,7 @@ export default function DashboardPage() {
   const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>
-        Loading intelligence...
-      </div>
-    </div>
-  )
+  if (loading) return <PageLoader />
 
   if (campaigns.length === 0) return (
     <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>

@@ -176,6 +176,10 @@ export function classifyCampaign(c: CampaignInput): Classification {
   const t = analyzeTrend(c.daily_trend)
   const spend = num(c.spend)
   const conv = num(c.conversions)
+  // conversions may be genuinely unknown (e.g. the calculator before a value is
+  // typed). Treat undefined/null as UNKNOWN — never as a hard zero — so a 6x
+  // ROAS campaign isn't mislabelled DEAD/WEAK just because conversions is blank.
+  const convKnown = c.conversions !== null && c.conversions !== undefined
   const roas = num(c.roas)
   const impr = num(c.impressions)
   const ctr = c.ctr == null ? null : num(c.ctr)
@@ -189,9 +193,9 @@ export function classifyCampaign(c: CampaignInput): Classification {
 
   // DEAD
   const dead: string[] = []
-  if (spend > 100 && conv === 0) dead.push(`spend is $${fmt0(spend)} over the period with 0 conversions`)
+  if (spend > 100 && convKnown && conv === 0) dead.push(`spend is $${fmt0(spend)} over the period with 0 conversions`)
   if (roas < 0.5 && spend > 200) dead.push(`ROAS is ${roas.toFixed(2)}x on $${fmt0(spend)} spend (below the 0.5x floor)`)
-  if (ctr != null && ctr < 0.4 && impr >= 2000 && conv === 0)
+  if (ctr != null && ctr < 0.4 && impr >= 2000 && convKnown && conv === 0)
     dead.push(`CTR is ${ctr.toFixed(2)}% after ${fmt0(impr)} impressions with 0 conversions`)
   if (dead.length) return mk('dead', dead)
 
@@ -209,13 +213,15 @@ export function classifyCampaign(c: CampaignInput): Classification {
   if (roas >= 1.5 && roas <= 2.5) weak.push(`ROAS is ${roas.toFixed(2)}x (1.5x–2.5x: profitable but underperforming)`)
   if (freq != null && freq >= 2.5 && freq <= 3.5) weak.push(`frequency is ${freq.toFixed(1)} (2.5–3.5: approaching saturation)`)
   if (ctr != null && ctr >= 0.4 && ctr < 0.8) weak.push(`CTR is ${ctr.toFixed(2)}% (between 0.4% and 0.8%)`)
-  if (conv < 50 && spend >= 100) weak.push(`only ${conv} conversions on $${fmt0(spend)} spend (still in the learning phase, under 50)`)
+  if (convKnown && conv < 50 && spend >= 100) weak.push(`only ${conv} conversions on $${fmt0(spend)} spend (still in the learning phase, under 50)`)
   if (weak.length) return mk('weak', weak)
 
-  // STRONG (all conditions)
-  if (roas > 2.5 && freq != null && freq < 2.5 && !t.roasDeclining) {
+  // STRONG — ROAS over 2.5x, frequency under 2.5 (or unknown), trend not
+  // declining. Frequency unknown must NOT block STRONG (e.g. a 6x ROAS
+  // search/manual campaign with no frequency data is still clearly strong).
+  if (roas > 2.5 && (freq == null || freq < 2.5) && !t.roasDeclining) {
     return mk('strong', [
-      `ROAS is ${roas.toFixed(2)}x (over 2.5x), frequency is ${freq.toFixed(1)} (under 2.5), and the 14-day trend is stable or improving`,
+      `ROAS is ${roas.toFixed(2)}x (over 2.5x)${freq != null ? `, frequency is ${freq.toFixed(1)} (under 2.5)` : ''}, and the 14-day trend is stable or improving`,
     ])
   }
 
@@ -239,6 +245,39 @@ export function fatigueForecast(
 ): FatigueForecast {
   const t = analyzeTrend(trend)
 
+  // CRITICAL: anchor "now" to the SAME aggregate frequency/CTR the rest of the
+  // analysis quotes (the snapshot top-level fields passed via fallback), NOT the
+  // noisy last point of daily_trend. Otherwise the forecast contradicts the
+  // analysis (e.g. forecast said freq 4.2 / CTR 0.69% while the analysis used
+  // freq 3.8 / CTR 0.93%). Trend is used only for the slope (rate of change).
+  const freqNow = fallback?.frequency ?? t.freqNow ?? null
+  const ctrNow = fallback?.ctr ?? t.ctrNow ?? null
+
+  const freqRising = t.freqSlope != null && t.freqSlope > 0.001
+  const ctrFalling = t.ctrSlope != null && t.ctrSlope < -0.0001
+  const cpmClimbing = (t.cpmChangePct ?? 0) > 20
+  const freqSaturated = freqNow != null && freqNow > 3.5
+  const ctrDecayed = ctrNow != null && ctrNow < 0.8
+
+  // ── Fatigue ALREADY present (frequency past 3.5 or CTR below 0.8%) ──
+  // The old engine only predicted a FUTURE crossing, so an already-fatigued
+  // campaign wrongly read "no fatigue signals." Surface it, with the exact
+  // numbers, and note whether it is still accelerating.
+  if (freqSaturated || ctrDecayed) {
+    const bits: string[] = []
+    if (freqNow != null)
+      bits.push(`frequency is ${freqNow.toFixed(2)}x${freqSaturated ? ' (already past the 3.5 saturation line)' : ''}${freqRising ? `, still climbing ${t.freqSlope!.toFixed(2)}/day` : ''}`)
+    if (ctrNow != null)
+      bits.push(`CTR is ${ctrNow.toFixed(2)}%${ctrDecayed ? ' (below the 0.8% floor)' : ''}${ctrFalling ? `, decaying ${t.ctrSlope!.toFixed(2)}%/day` : ''}`)
+    if (cpmClimbing) bits.push(`CPM up ${pct(t.cpmChangePct)} over 14 days`)
+    const accel = freqRising || ctrFalling || cpmClimbing
+    return {
+      enoughData: t.enoughData,
+      daysToFatigue: 0,
+      text: `Creative fatigue is already present${accel ? ' and accelerating' : ''} — ${bits.join(' and ')}. Refresh the creative now${accel ? ' before performance decays further' : ''}.`,
+    }
+  }
+
   if (!t.enoughData) {
     return {
       enoughData: false,
@@ -247,30 +286,14 @@ export function fatigueForecast(
     }
   }
 
-  const freqNow = t.freqNow ?? (fallback?.frequency ?? null)
-  const ctrNow = t.ctrNow ?? (fallback?.ctr ?? null)
-
-  // Days until frequency crosses 3.5 (only if climbing and not already past it)
-  let freqDays: number | null = null
-  if (freqNow != null && t.freqSlope != null && t.freqSlope > 0.001 && freqNow < 3.5) {
-    freqDays = (3.5 - freqNow) / t.freqSlope
-  }
-
-  // Days until CTR decays below 0.8% (only if declining and currently above)
-  let ctrDays: number | null = null
-  if (ctrNow != null && t.ctrSlope != null && t.ctrSlope < -0.0001 && ctrNow > 0.8) {
-    ctrDays = (ctrNow - 0.8) / -t.ctrSlope
-  }
-
+  // ── Predict a FUTURE crossing (still below the thresholds, trending toward) ──
+  const freqDays = (freqNow != null && freqRising && freqNow < 3.5) ? (3.5 - freqNow) / t.freqSlope! : null
+  const ctrDays = (ctrNow != null && ctrFalling && ctrNow > 0.8) ? (ctrNow - 0.8) / -t.ctrSlope! : null
   const candidates = [freqDays, ctrDays].filter((d): d is number => d != null && d > 0 && Number.isFinite(d))
-  const cpmClimbing = (t.cpmChangePct ?? 0) > 20
 
-  // Build the "why" fragments from whichever signals are real.
   const frag: string[] = []
-  if (freqNow != null && t.freqSlope != null && t.freqSlope > 0.001)
-    frag.push(`frequency trajectory (rising ${t.freqSlope.toFixed(2)}/day, now at ${freqNow.toFixed(1)})`)
-  if (ctrNow != null && t.ctrSlope != null && t.ctrSlope < -0.0001)
-    frag.push(`CTR decay (${t.ctrSlope.toFixed(2)}%/day, now ${ctrNow.toFixed(2)}%)`)
+  if (freqNow != null && freqRising) frag.push(`frequency trajectory (rising ${t.freqSlope!.toFixed(2)}/day, now at ${freqNow.toFixed(2)}x)`)
+  if (ctrNow != null && ctrFalling) frag.push(`CTR decay (${t.ctrSlope!.toFixed(2)}%/day, now ${ctrNow.toFixed(2)}%)`)
   if (cpmClimbing) frag.push(`CPM up ${pct(t.cpmChangePct)} over 14 days`)
 
   if (candidates.length && frag.length) {
@@ -284,11 +307,10 @@ export function fatigueForecast(
     }
   }
 
-  // No decline signals — report the stable picture with real current values.
+  // No decline signals and not yet fatigued — healthy headroom.
   const stable: string[] = []
-  if (freqNow != null) stable.push(`frequency ${freqNow.toFixed(1)}`)
+  if (freqNow != null) stable.push(`frequency ${freqNow.toFixed(2)}x`)
   if (ctrNow != null) stable.push(`CTR ${ctrNow.toFixed(2)}%`)
-  if (cpmClimbing) stable.push(`CPM up ${pct(t.cpmChangePct)} (watch)`)
   const detail = stable.length ? ` (${stable.join(', ')})` : ''
   return {
     enoughData: true,

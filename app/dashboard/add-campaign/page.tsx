@@ -29,12 +29,27 @@ function wastedEstimate(spend: number, roas: number, health: string): number {
 function vaiInsight(health: string, roas: number, spend: number, wasted: number): string {
   const r = roas.toFixed(2)
   if (health === 'strong')
-    return `At ${r}x this is your most efficient dollar — scale budget here before touching anything else. VAI would model the safe scaling ceiling.`
+    return `This is a scaling candidate. At ${r}x ROAS, consider increasing budget ~20% while monitoring frequency — VAI would model the safe scaling ceiling so you grow without tipping into fatigue.`
   if (health === 'weak')
     return `Profitable but soft at ${r}x — under the 2.5x bar. Tighten the audience or refresh creative; VAI would pinpoint which lever moves it first.`
   if (health === 'bleeding')
     return `Losing money after margin at ${r}x. Restructure or cut within 48 hours — roughly $${wasted.toLocaleString()}/mo is recoverable here.`
   return `Near-zero return on $${spend.toLocaleString()}/mo. Pause now and reallocate to a STRONG campaign — VAI would tell you exactly where.`
+}
+
+function FragRow({ sc, current }: { sc: { m: number; spend: number; revenue: number; profit: number }; current: boolean }) {
+  const cell: React.CSSProperties = {
+    background: current ? 'var(--goldpaper,rgba(201,168,76,.08))' : 'var(--bg2)',
+    padding: '9px 12px', fontFamily: "'DM Mono',monospace", fontSize: 11,
+  }
+  const pct = sc.m === 1 ? 'now' : `${sc.m > 1 ? '+' : '−'}${Math.round(Math.abs(sc.m - 1) * 100)}%`
+  return (
+    <>
+      <div style={{ ...cell, color: 'var(--ink)' }}>${sc.spend.toLocaleString()} <span style={{ color: 'var(--ink3)', fontSize: 8 }}>{pct}</span></div>
+      <div style={{ ...cell, color: 'var(--ink2)' }}>${sc.revenue.toLocaleString()}</div>
+      <div style={{ ...cell, color: sc.profit >= 0 ? '#4ade80' : '#f87171' }}>{sc.profit < 0 ? '−' : ''}${Math.abs(sc.profit).toLocaleString()}</div>
+    </>
+  )
 }
 
 export default function CalculatorPage() {
@@ -55,7 +70,10 @@ export default function CalculatorPage() {
   const hasInput = s > 0 || rev > 0 || conv > 0
 
   const cls = classifyCampaign({
-    spend: s, conversions: conv, roas,
+    spend: s, roas,
+    // blank conversions = unknown (not a hard zero) so high-ROAS campaigns
+    // aren't mislabelled DEAD/WEAK before a value is typed.
+    conversions: conversions.trim() === '' ? undefined : conv,
     impressions: impr || undefined,
     clicks: clk || undefined,
     ctr: impr > 0 ? ctr : undefined,
@@ -65,6 +83,16 @@ export default function CalculatorPage() {
   const color = HEALTH_COLOR[health]
   const wasted = wastedEstimate(s, roas, health)
   const insight = vaiInsight(health, roas, s, wasted)
+
+  // ── What-if (media-buyer view): gap to STRONG-tier + spend scenarios ──
+  const profit = rev - s
+  const STRONG_ROAS = 2.5
+  const revAtStrong = s * STRONG_ROAS
+  const gapToStrong = Math.max(0, Math.round(revAtStrong - rev))
+  const scenarios = [0.75, 1, 1.25, 1.5].map((m) => {
+    const sp = s * m
+    return { m, spend: Math.round(sp), revenue: Math.round(sp * roas), profit: Math.round(sp * roas - sp) }
+  })
 
   const field = (label: string, val: string, set: (v: string) => void, ph: string, opt = false) => (
     <div>
@@ -144,6 +172,49 @@ export default function CalculatorPage() {
             <div style={{ background: 'var(--goldpaper,rgba(201,168,76,.08))', border: '1px solid var(--goldborder,rgba(201,168,76,.22))', borderRadius: 8, padding: '18px 22px' }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 8 }}>VAI Insight</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, fontWeight: 400, lineHeight: 1.6, color: 'var(--ink)' }}>{insight}</div>
+            </div>
+          )}
+
+          {/* What-if — media buyer view */}
+          {hasInput && s > 0 && (
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 8, padding: '18px 22px' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>What-if · Media Buyer View</div>
+
+              {/* Current profit + gap to STRONG / scaling */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Net Profit / Month</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: profit >= 0 ? '#4ade80' : '#f87171', lineHeight: 1 }}>
+                    {profit < 0 ? '−' : ''}${Math.abs(profit).toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>
+                    {health === 'strong' ? 'Scale +20% Projection' : 'Gap to STRONG (2.5x)'}
+                  </div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: 'var(--gold)', lineHeight: 1 }}>
+                    {health === 'strong'
+                      ? `+$${Math.round(s * 0.2 * roas).toLocaleString()}`
+                      : `+$${gapToStrong.toLocaleString()}`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6, marginBottom: 16 }}>
+                {health === 'strong'
+                  ? `Adding 20% budget ($${Math.round(s * 0.2).toLocaleString()}/mo) at ${roas.toFixed(2)}x would add about $${Math.round(s * 0.2 * roas).toLocaleString()} in monthly revenue — if frequency stays under 2.5.`
+                  : `At $${Math.round(s).toLocaleString()}/mo spend, STRONG-tier efficiency (2.5x) would generate $${Math.round(revAtStrong).toLocaleString()} — that's $${gapToStrong.toLocaleString()} more revenue every month than today.`}
+              </div>
+
+              {/* Spend scenarios (ROAS held constant) */}
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>If you scale spend (at today&rsquo;s {roas.toFixed(2)}x)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: 'var(--rule)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+                {['Spend', 'Revenue', 'Profit'].map((h) => (
+                  <div key={h} style={{ background: 'var(--bg2)', padding: '7px 12px', fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{h}</div>
+                ))}
+                {scenarios.map((sc) => (
+                  <FragRow key={sc.m} sc={sc} current={sc.m === 1} />
+                ))}
+              </div>
             </div>
           )}
         </div>

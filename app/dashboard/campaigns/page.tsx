@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
+import PageLoader from '../PageLoader'
 
 type Campaign = {
   id: string
@@ -60,11 +61,7 @@ export default function CampaignsPage() {
   const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Number(n).toLocaleString()}`
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Loading campaigns...</div>
-    </div>
-  )
+  if (loading) return <PageLoader />
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>

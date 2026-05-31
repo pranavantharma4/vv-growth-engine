@@ -3,10 +3,18 @@ export const dynamic = "force-dynamic"
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
+import ConnectionsSection from '../ConnectionsSection'
 
 export default function SettingsPage() {
   const supabase = createClientComponentClient()
-  const { client, toast } = useApp()
+  const { client, toast, dark, setDark } = useApp()
+  const [minimal, setMinimal] = useState(false)
+  useEffect(() => { setMinimal(typeof document !== 'undefined' && document.body.classList.contains('minimal')) }, [])
+  function toggleMinimal(v: boolean) {
+    setMinimal(v)
+    if (v) document.body.classList.add('minimal'); else document.body.classList.remove('minimal')
+    localStorage.setItem('vv_minimal', v ? '1' : '0')
+  }
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [notifWeekly, setNotifWeekly] = useState(true)
@@ -84,6 +92,12 @@ export default function SettingsPage() {
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Profile, notifications, and account preferences</div>
       </div>
 
+      {/* Ad Account Connections */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        <Section title="Ad Account Connections" />
+        <ConnectionsSection />
+      </div>
+
       {/* Account */}
       <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
         <Section title="Account" />
@@ -128,6 +142,30 @@ export default function SettingsPage() {
             style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '10px 22px', borderRadius: 4, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
             {saving ? 'Saving...' : 'Save Preferences →'}
           </button>
+        </div>
+      </div>
+
+      {/* Display Preferences */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        <Section title="Display Preferences" />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {[{ label: 'Dark Mode', active: dark, on: () => setDark(true) }, { label: 'Light Mode', active: !dark, on: () => setDark(false) }].map(o => (
+            <button key={o.label} onClick={o.on}
+              style={{ flex: 1, minWidth: 130, padding: '11px', borderRadius: 4, cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '1px', textTransform: 'uppercase', border: `1px solid ${o.active ? 'var(--goldborder)' : 'var(--rule)'}`, background: o.active ? 'var(--goldpaper)' : 'transparent', color: o.active ? 'var(--gold)' : 'var(--ink3)' }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+          {[{ label: 'Full View', active: !minimal, on: () => toggleMinimal(false) }, { label: 'Minimal View', active: minimal, on: () => toggleMinimal(true) }].map(o => (
+            <button key={o.label} onClick={o.on}
+              style={{ flex: 1, minWidth: 130, padding: '11px', borderRadius: 4, cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '1px', textTransform: 'uppercase', border: `1px solid ${o.active ? 'var(--goldborder)' : 'var(--rule)'}`, background: o.active ? 'var(--goldpaper)' : 'transparent', color: o.active ? 'var(--gold)' : 'var(--ink3)' }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', marginTop: 12, lineHeight: 1.7 }}>
+          Minimal view hides secondary panels for a focused, board-room presentation.
         </div>
       </div>
 
