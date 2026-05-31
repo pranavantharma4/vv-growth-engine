@@ -426,6 +426,15 @@ export default function LandingClient() {
 
 /* ───────────────────────── DATA ───────────────────────── */
 
+const FAQS = [
+  { q: 'Will this touch my ad account?', a: 'Never. VAI has read-only access. It cannot create, edit, pause, or delete anything. Your campaigns stay entirely under your control.' },
+  { q: 'Is my data safe?', a: 'Connection is through Meta’s official Marketing API with read-only permissions. We never store your password and you can disconnect in one click anytime.' },
+  { q: 'How is this different from my dashboard?', a: 'Meta shows you numbers. VAI tells you what they mean and exactly what to do — in plain English, every Monday, without you asking.' },
+  { q: 'How is this different from an agency?', a: 'Agencies send you reports explaining what happened. VAI tells you what to do next — with specific actions, specific numbers, before you lose another week.' },
+  { q: 'Do I need to be technical?', a: 'No. If you can read an email, you can use VV. The Monday brief arrives in plain language with the single most important action highlighted.' },
+  { q: 'What if I have 20 campaigns?', a: 'VAI analyzes your entire account at once and ranks every campaign by health — so you see your biggest leak first, instantly, no matter how many you run.' },
+]
+
 type ClassCard = {
   label: string; color: string; stat: string; unit: string; desc: string
   count?: { to: number; dec: number; prefix?: string; suffix?: string }
@@ -575,6 +584,14 @@ const CSS = `
 .lp .s-sub{font-family:var(--sans);font-size:14px;line-height:1.7;color:rgba(255,255,255,.5);max-width:480px;margin:0 auto;}
 .lp .s-cta{margin-top:40px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;}
 .lp .s-cta.two{margin-top:32px;}
+
+/* ── before-you-ask (objections) ── */
+.lp .faq-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px 56px;margin-top:56px;text-align:left;}
+.lp .faq-q{font-family:var(--serif);font-style:italic;font-weight:300;font-size:18px;line-height:1.35;color:#fff;margin:0 0 10px;}
+.lp .faq-a{font-family:var(--sans);font-size:13px;line-height:1.7;color:rgba(255,255,255,.6);margin:0;}
+@media (max-width:680px){
+  .lp .faq-grid{grid-template-columns:1fr;gap:32px;margin-top:44px;}
+}
 
 /* ── classification grid ── */
 .lp .class-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:48px;text-align:left;}
