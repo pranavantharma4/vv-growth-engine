@@ -214,6 +214,21 @@ export default function LandingClient() {
         </div>
       </header>
 
+      {/* ───────────────────────── SECTION · BEFORE YOU ASK ───────────────────────── */}
+      <section className="section">
+        <p className="s-eyebrow reveal">BEFORE YOU ASK</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>The questions you&rsquo;re already thinking.</h2>
+
+        <div className="faq-grid">
+          {FAQS.map((f, i) => (
+            <div className="faq-pair reveal" key={f.q} style={{ transitionDelay: `${(i % 2) * 80}ms` }}>
+              <h3 className="faq-q">{f.q}</h3>
+              <p className="faq-a">{f.a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ───────────────────────── SECTION 2 · CAMPAIGN INTELLIGENCE ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">CAMPAIGN INTELLIGENCE</p>
