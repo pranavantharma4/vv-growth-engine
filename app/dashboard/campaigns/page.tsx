@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import PageLoader from '../PageLoader'
+import CampaignDetail from '../CampaignDetail'
 
 type Campaign = {
   id: string
@@ -26,18 +27,28 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
   const [platform, setPlatform] = useState<string>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => { if (client) load() }, [client])
 
   async function load() {
     if (!client) return
     setLoading(true)
-    const today = new Date().toISOString().split('T')[0]
+    // Latest available snapshot date (not strictly today) so campaigns never
+    // appear empty on a day the daily sync hasn't run yet.
+    const { data: latestRow } = await supabase
+      .from('campaign_snapshots')
+      .select('snapshot_date')
+      .eq('client_id', client.id)
+      .order('snapshot_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const day = latestRow?.snapshot_date || new Date().toISOString().split('T')[0]
     const { data } = await supabase
       .from('campaign_snapshots')
       .select('*')
       .eq('client_id', client.id)
-      .eq('snapshot_date', today)
+      .eq('snapshot_date', day)
       .order('spend', { ascending: false })
     setCampaigns(data || [])
     setLoading(false)
@@ -79,7 +90,7 @@ export default function CampaignsPage() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Overview</div>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Campaigns</div>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>All active campaigns · classified by health · sorted by spend</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>All active campaigns · click any row for full Meta-level detail + VAI</div>
       </div>
 
       {/* Filters */}
@@ -118,10 +129,14 @@ export default function CampaignsPage() {
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: 'var(--ink)', marginBottom: 8 }}>No campaigns match</div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Try changing the filter above</div>
           </div>
-        ) : filtered.map((c, i) => (
-          <div key={c.id || i} style={{ padding: '12px 18px', borderBottom: i < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8, alignItems: 'center', transition: 'background 0.1s ease' }}
+        ) : filtered.map((c, i) => {
+          const rid = c.id || String(i)
+          const open = expandedId === rid
+          return (
+          <div key={rid}>
+          <div onClick={() => setExpandedId(open ? null : rid)} style={{ padding: '12px 18px', borderBottom: i < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8, alignItems: 'center', transition: 'background 0.1s ease', cursor: 'pointer', background: open ? 'var(--bg2)' : 'transparent' }}
             onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg2)'}
-            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = open ? 'var(--bg2)' : 'transparent'}
           >
             <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.campaign_name}
@@ -139,9 +154,13 @@ export default function CampaignsPage() {
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthBorder(c.health)}`, padding: '2px 6px', borderRadius: 2 }}>
                 {c.health}
               </span>
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', marginLeft: 6 }}>{open ? '▾' : '▸'}</span>
             </div>
           </div>
-        ))}
+          {open && <CampaignDetail c={c} />}
+          </div>
+          )
+        })}
       </div>
 
       {/* Summary */}

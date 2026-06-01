@@ -70,10 +70,18 @@ export default function AnalysisPage() {
   async function load() {
     if (!client) return
     setLoading(true)
-    const today = new Date().toISOString().split('T')[0]
+    // Latest available snapshot date (not strictly today).
+    const { data: latestRow } = await supabase
+      .from('campaign_snapshots')
+      .select('snapshot_date')
+      .eq('client_id', client.id)
+      .order('snapshot_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const day = latestRow?.snapshot_date || new Date().toISOString().split('T')[0]
     const { data } = await supabase
       .from('campaign_snapshots').select('*')
-      .eq('client_id', client.id).eq('snapshot_date', today)
+      .eq('client_id', client.id).eq('snapshot_date', day)
       .order('spend', { ascending: false })
     setCampaigns(data || [])
     setLoading(false)

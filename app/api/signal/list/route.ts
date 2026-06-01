@@ -16,9 +16,9 @@ export async function GET() {
   const svc = serviceClient()
   const { data, error } = await svc
     .from('signal_content')
-    .select('id, platform, content, angle, created_at, used')
+    .select('id, platform, content, angle, created_at, used, image_prompt')
     .order('created_at', { ascending: false })
-    .limit(120)
+    .limit(300)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ items: data ?? [] })

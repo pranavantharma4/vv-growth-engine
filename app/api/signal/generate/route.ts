@@ -51,28 +51,28 @@ Generate VV's marketing content for today as a single JSON object — no prose, 
 {
   "x": [ 15 strings ],
   "linkedin": [ 5 strings ],
-  "instagram": [ 3 strings ]
+  "instagram": [ 3 objects, each { "caption": "...", "image_prompt": "..." } ]
 }
 
 X (15 posts):
-- Each under 280 characters. Hard limit.
+- Each under 280 characters TOTAL including hashtags. Hard limit.
 - A varied mix: provocative hooks about wasted ad spend; plain-English insights about Meta campaign performance; behind-the-scenes of building VV; proof-style posts.
 - Vary the form: some are single one-liners; a few are mini-threads (use "\\n\\n" line breaks within the one string to separate beats — still under 280 total).
 - 3-4 of them should end with the link vngrdvisuals.com/audit (only some — not all).
-- No hashtags on X. No emoji clutter.
+- Each post ends with 1-3 strategic, relevant hashtags (e.g. #MetaAds #PerformanceMarketing #DTC #ROAS). Tasteful, never spammy. No emoji clutter.
 
 LinkedIn (5 posts):
 - Longer, professional, story-driven. A clear narrative or insight with a point.
 - Use line breaks for readability.
-- Each ends with a SOFT call to action pointing to the free audit at vngrdvisuals.com/audit (e.g. "If you want VAI to read your account: vngrdvisuals.com/audit"). Soft, not pushy.
+- Each ends with a SOFT call to action pointing to the free audit at vngrdvisuals.com/audit, then 3-5 relevant professional hashtags (e.g. #PerformanceMarketing #PaidSocial #Ecommerce #MarketingStrategy).
 
-Instagram (3 captions):
-- Punchy, scroll-stopping, designed to pair with an AI-generated image.
-- Each ends with 5-8 relevant hashtags (e.g. #metaads #performancemarketing #dtc #adspend #roas). Keep hashtags tasteful and relevant.
+Instagram (3 posts) — each is an OBJECT with two fields:
+- "caption": punchy, scroll-stopping, designed to pair with a visual. End each caption with 8-12 relevant, reach-optimizing hashtags (mix broad + niche, e.g. #MetaAds #PerformanceMarketing #DTCbrands #EcommerceMarketing #AdSpend #ROAS #DigitalMarketing #MarketingTips #PaidAds #ScalingBrands).
+- "image_prompt": a ready-to-paste image-generation prompt the admin can paste straight into Claude or an image tool to create the matching visual. Be concrete and on-brand: dark, premium, editorial, gold accents, cinematic, the VV aesthetic; describe subject, mood, composition, palette, and any text overlay. One vivid paragraph.
 
 Return ONLY the JSON object.`
 
-  let parsed: { x?: string[]; linkedin?: string[]; instagram?: string[] } | null = null
+  let parsed: { x?: string[]; linkedin?: string[]; instagram?: any[] } | null = null
   let rawError = ''
   try {
     const message = await anthropic.messages.create({
@@ -96,7 +96,7 @@ Return ONLY the JSON object.`
   }
 
   // Flatten into rows, clamp X to 280 chars defensively.
-  const rows: { platform: string; content: string; angle: string }[] = []
+  const rows: { platform: string; content: string; angle: string; image_prompt?: string | null }[] = []
   for (const c of (parsed.x || [])) {
     const t = String(c).trim()
     if (t) rows.push({ platform: 'x', content: t.slice(0, 280), angle })
@@ -105,16 +105,19 @@ Return ONLY the JSON object.`
     const t = String(c).trim()
     if (t) rows.push({ platform: 'linkedin', content: t, angle })
   }
-  for (const c of (parsed.instagram || [])) {
-    const t = String(c).trim()
-    if (t) rows.push({ platform: 'instagram', content: t, angle })
+  for (const ig of (parsed.instagram || [])) {
+    // Instagram items are objects { caption, image_prompt }; tolerate plain strings too.
+    const caption = typeof ig === 'string' ? ig : String(ig?.caption ?? '')
+    const imgPrompt = typeof ig === 'string' ? null : (ig?.image_prompt ? String(ig.image_prompt) : null)
+    const t = caption.trim()
+    if (t) rows.push({ platform: 'instagram', content: t, angle, image_prompt: imgPrompt })
   }
 
   const svc = serviceClient()
   const { data: inserted, error: insErr } = await svc
     .from('signal_content')
     .insert(rows)
-    .select('id, platform, content, angle, created_at, used')
+    .select('id, platform, content, angle, created_at, used, image_prompt')
 
   if (insErr) {
     return NextResponse.json({ error: `Saved-to-DB failed: ${insErr.message}` }, { status: 500 })

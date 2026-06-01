@@ -51,13 +51,23 @@ export default function DashboardPage() {
     setLoading(true)
     try {
       await carryForwardManualCampaigns(supabase, client.id).catch(() => {})
-      const today = new Date().toISOString().split('T')[0]
+      // Use the LATEST available snapshot date for this client, not strictly
+      // "today" — otherwise the dashboard goes blank on any day the daily sync
+      // hasn't run yet. The admin always sees the most current data on file.
+      const { data: latestRow } = await supabase
+        .from('campaign_snapshots')
+        .select('snapshot_date')
+        .eq('client_id', client.id)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const day = latestRow?.snapshot_date || new Date().toISOString().split('T')[0]
       const [campsRes, briefRes] = await Promise.all([
         supabase
           .from('campaign_snapshots')
           .select('*')
           .eq('client_id', client.id)
-          .eq('snapshot_date', today)
+          .eq('snapshot_date', day)
           .order('spend', { ascending: false }),
         supabase
           .from('weekly_briefs')

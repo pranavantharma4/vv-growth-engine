@@ -66,23 +66,31 @@ function groupBreakdown(
   return byCampaign;
 }
 
-serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+// Resolve the list of client_ids to sync from any reasonable body shape:
+//  • Sync Now (front-end)       → { client_id: "..." }
+//  • daily pg_cron batch        → [ { client_id }, { client_id }, ... ]
+//  • explicit batch             → { client_ids: ["...", "..."] }
+function resolveClientIds(body: any): string[] {
+  const out: string[] = [];
+  const push = (v: any) => { if (v && typeof v === "string") out.push(v); };
+  if (Array.isArray(body)) {
+    for (const item of body) push(typeof item === "string" ? item : item?.client_id);
+  } else if (body && Array.isArray(body.client_ids)) {
+    for (const id of body.client_ids) push(id);
+  } else if (body && body.client_id) {
+    push(body.client_id);
   }
+  // De-dupe while preserving order.
+  return Array.from(new Set(out));
+}
 
+// Sync a single client. Never throws — returns a structured result so a batch
+// run can continue past one client's failure.
+async function syncClient(
+  supabase: any,
+  client_id: string,
+): Promise<{ client_id: string; ok: boolean; campaigns_synced?: number; error?: string }> {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { client_id } = body;
-
-    if (!client_id) {
-      return new Response(JSON.stringify({ error: "client_id required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     const { data: conn, error: connErr } = await supabase
       .from("ad_connections")
       .select("*")
@@ -92,16 +100,12 @@ serve(async (req: Request) => {
       .single();
 
     if (connErr || !conn) {
-      return new Response(JSON.stringify({ error: "No active Meta connection found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      return { client_id, ok: false, error: "No active Meta connection found" };
     }
 
     if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
       await supabase.from("ad_connections").update({ is_active: false }).eq("id", conn.id);
-      return new Response(JSON.stringify({ error: "Meta token expired. Client must reconnect." }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      return { client_id, ok: false, error: "Meta token expired. Client must reconnect." };
     }
 
     const accessToken = conn.access_token;
@@ -125,9 +129,7 @@ serve(async (req: Request) => {
         error_message: adAccountsData.error.message,
         completed_at: new Date().toISOString(),
       }).eq("id", syncLogId);
-      return new Response(JSON.stringify({ error: adAccountsData.error.message }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      return { client_id, ok: false, error: adAccountsData.error.message };
     }
 
     const adAccounts = (adAccountsData.data || []).filter(
@@ -140,9 +142,7 @@ serve(async (req: Request) => {
         error_message: "No active ad accounts found on this Meta account",
         completed_at: new Date().toISOString(),
       }).eq("id", syncLogId);
-      return new Response(JSON.stringify({ error: "No active ad accounts found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      return { client_id, ok: false, error: "No active ad accounts found" };
     }
 
     const today = new Date();
@@ -323,9 +323,7 @@ serve(async (req: Request) => {
           error_message: upsertErr.message,
           completed_at: new Date().toISOString(),
         }).eq("id", syncLogId);
-        return new Response(JSON.stringify({ error: upsertErr.message }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
+        return { client_id, ok: false, error: upsertErr.message };
       }
     }
 
@@ -339,16 +337,74 @@ serve(async (req: Request) => {
       completed_at: new Date().toISOString(),
     }).eq("id", syncLogId);
 
+    return { client_id, ok: true, campaigns_synced: totalSynced };
+
+  } catch (err) {
+    console.error(`Sync error for ${client_id}:`, err);
+    return { client_id, ok: false, error: String(err) };
+  }
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const clientIds = resolveClientIds(body);
+
+    if (clientIds.length === 0) {
+      return new Response(JSON.stringify({ error: "client_id (or client_ids[]) required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Sync each client independently and sequentially. One client failing
+    // (e.g. an expired token or the demo account) must not abort the others.
+    const results = [];
+    for (const id of clientIds) {
+      results.push(await syncClient(supabase, id));
+    }
+
+    const synced = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+    const totalCampaigns = synced.reduce((s, r) => s + (r.campaigns_synced ?? 0), 0);
+
+    // Single-client invocations (Sync Now) preserve the original status semantics
+    // so the front-end keeps working unchanged: 4xx/5xx on failure, 200 on success.
+    if (clientIds.length === 1) {
+      const r = results[0];
+      if (!r.ok) {
+        return new Response(JSON.stringify({ error: r.error }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        campaigns_synced: r.campaigns_synced ?? 0,
+        message: `Synced ${r.campaigns_synced ?? 0} campaigns from Meta Ads`,
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Batch invocation (daily cron): always 200; report the per-client outcome.
     return new Response(JSON.stringify({
-      success: true,
-      campaigns_synced: totalSynced,
-      message: `Synced ${totalSynced} campaigns from Meta Ads`,
+      success: failed.length === 0,
+      clients_total: clientIds.length,
+      clients_synced: synced.length,
+      clients_failed: failed.length,
+      campaigns_synced: totalCampaigns,
+      results,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (err) {
-    console.error("Sync error:", err);
+    console.error("Sync handler error:", err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
