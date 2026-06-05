@@ -3,7 +3,7 @@ import { requireAdmin, serviceClient } from '../../../../lib/signal-admin'
 
 export const dynamic = 'force-dynamic'
 
-// GET /api/signal/list — most recent generations (admin only).
+// GET /api/signal/list — recent structured daily docs (admin only), newest first.
 export async function GET() {
   const gate = await requireAdmin()
   if (!gate.ok) {
@@ -16,9 +16,10 @@ export async function GET() {
   const svc = serviceClient()
   const { data, error } = await svc
     .from('signal_content')
-    .select('id, platform, content, angle, created_at, used, image_prompt')
-    .order('created_at', { ascending: false })
-    .limit(300)
+    .select('id, content_date, angle, payload, posted, created_at')
+    .eq('content_type', 'daily')
+    .order('content_date', { ascending: false })
+    .limit(60)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ items: data ?? [] })
