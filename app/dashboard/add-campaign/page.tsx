@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic'
 
 import { useState } from 'react'
 import { classifyCampaign } from '../../../lib/vai-rules'
+import { useApp } from '../context'
+import { businessContextFromRow, computeBreakEvenRoas, hasBusinessContext } from '../../../lib/business-context'
 
 const HEALTH_COLOR: Record<string, string> = {
   strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171',
@@ -53,6 +55,14 @@ function FragRow({ sc, current }: { sc: { m: number; spend: number; revenue: num
 }
 
 export default function CalculatorPage() {
+  const { client } = useApp()
+  const ctx = businessContextFromRow(client)
+  const hasCtx = hasBusinessContext(ctx)
+  // Real break-even ROAS from the brand's margin (or explicit override); falls
+  // back to a generic 2.5x bar only when no economics are on file.
+  const breakEven = computeBreakEvenRoas(ctx) ?? 2.5
+  const marginFrac = ctx.grossMargin != null && ctx.grossMargin > 0 ? ctx.grossMargin / 100 : null
+
   const [spend, setSpend] = useState('3200')
   const [revenue, setRevenue] = useState('5760')
   const [conversions, setConversions] = useState('48')
@@ -84,14 +94,21 @@ export default function CalculatorPage() {
   const wasted = wastedEstimate(s, roas, health)
   const insight = vaiInsight(health, roas, s, wasted)
 
-  // ── What-if (media-buyer view): gap to STRONG-tier + spend scenarios ──
-  const profit = rev - s
-  const STRONG_ROAS = 2.5
-  const revAtStrong = s * STRONG_ROAS
-  const gapToStrong = Math.max(0, Math.round(revAtStrong - rev))
+  // ── Business-aware economics ──
+  // True profit uses the brand's real gross margin (gross profit = revenue ×
+  // margin − spend). Without a margin on file we fall back to revenue − spend.
+  const profitOf = (revenue: number, sp: number) => (marginFrac != null ? revenue * marginFrac : revenue) - sp
+  const profit = profitOf(rev, s)
+  const aboveBreakEven = roas >= breakEven
+  // Revenue this spend would need to break even (cover cost of goods).
+  const revAtBreakEven = s * breakEven
+  const gapToBreakEven = Math.max(0, Math.round(revAtBreakEven - rev))
+
+  // ── What-if (media-buyer view): break-even gap / scaling + spend scenarios ──
   const scenarios = [0.75, 1, 1.25, 1.5].map((m) => {
     const sp = s * m
-    return { m, spend: Math.round(sp), revenue: Math.round(sp * roas), profit: Math.round(sp * roas - sp) }
+    const revenue = sp * roas
+    return { m, spend: Math.round(sp), revenue: Math.round(revenue), profit: Math.round(profitOf(revenue, sp)) }
   })
 
   const field = (label: string, val: string, set: (v: string) => void, ph: string, opt = false) => (
@@ -116,7 +133,9 @@ export default function CalculatorPage() {
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Powered by VAI</div>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Performance Calculator</div>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Enter any campaign&rsquo;s numbers — VAI classifies it live against its exact thresholds</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>
+          Enter any campaign&rsquo;s numbers — VAI classifies it live and judges profit against your {hasCtx ? `${breakEven.toFixed(2)}x break-even` : 'break-even'}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,360px) 1fr', gap: 20, alignItems: 'start' }} className="calc-grid">
@@ -137,7 +156,7 @@ export default function CalculatorPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Derived stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-            {stat('ROAS', `${roas.toFixed(2)}x`, roas >= 2.5 ? '#4ade80' : roas >= 1.5 ? '#fbbf24' : '#f87171')}
+            {stat('ROAS', `${roas.toFixed(2)}x`, roas >= breakEven ? '#4ade80' : roas >= breakEven * 0.85 ? '#fbbf24' : '#f87171')}
             {stat('CPA', conv > 0 ? `$${cpa.toFixed(2)}` : '—')}
             {stat('CTR', impr > 0 ? `${ctr.toFixed(2)}%` : '—')}
           </div>
@@ -158,6 +177,39 @@ export default function CalculatorPage() {
               </div>
             )}
           </div>
+
+          {/* Business-aware profitability verdict */}
+          {hasInput && (
+            <div style={{ background: 'var(--bg2)', border: `1px solid ${aboveBreakEven ? 'rgba(74,222,128,.3)' : 'rgba(248,113,113,.3)'}`, borderLeft: `3px solid ${aboveBreakEven ? '#4ade80' : '#f87171'}`, borderRadius: 8, padding: '18px 22px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  {hasCtx ? 'Profitability vs. Your Break-Even' : 'Profitability (generic break-even)'}
+                </div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink2)', letterSpacing: '0.5px' }}>
+                  Break-even {breakEven.toFixed(2)}x
+                  {hasCtx && ctx.grossMargin != null && (ctx.breakEvenRoas == null || !(ctx.breakEvenRoas > 0)) ? ` · ${Math.round(ctx.grossMargin)}% margin` : ''}
+                </div>
+              </div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 17, fontWeight: 400, lineHeight: 1.5, color: 'var(--ink)' }}>
+                {aboveBreakEven ? (
+                  <>At {roas.toFixed(2)}x you&rsquo;re <span style={{ color: '#4ade80' }}>profitable</span> — above your {breakEven.toFixed(2)}x break-even.{' '}
+                  {marginFrac != null
+                    ? `Each $1 of revenue returns $${marginFrac.toFixed(2)} of gross profit, so this campaign nets about ${profit < 0 ? '−' : ''}$${Math.abs(Math.round(profit)).toLocaleString()}/mo after cost of goods.`
+                    : ''}</>
+                ) : (
+                  <>At {roas.toFixed(2)}x you&rsquo;re <span style={{ color: '#f87171' }}>below break-even</span> ({breakEven.toFixed(2)}x) — losing money after cost of goods.{' '}
+                  {marginFrac != null
+                    ? `Because only $${marginFrac.toFixed(2)} of each revenue dollar is gross profit, you need ${breakEven.toFixed(2)}x just to cover COGS — this campaign nets about ${profit < 0 ? '−' : ''}$${Math.abs(Math.round(profit)).toLocaleString()}/mo.`
+                    : `ROAS must clear ${breakEven.toFixed(2)}x to cover cost of goods.`}</>
+                )}
+              </div>
+              {!hasCtx && (
+                <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink3)', marginTop: 8, lineHeight: 1.6 }}>
+                  Add your gross margin in Settings → Business Profile and this verdict becomes exact: a 50% margin sets break-even at 2.0x, a 70% margin at ~1.43x.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Wasted spend */}
           {hasInput && wasted > 0 && (
@@ -190,19 +242,19 @@ export default function CalculatorPage() {
                 </div>
                 <div>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>
-                    {health === 'strong' ? 'Scale +20% Projection' : 'Gap to STRONG (2.5x)'}
+                    {aboveBreakEven ? 'Scale +20% Profit' : `Gap to Break-Even (${breakEven.toFixed(2)}x)`}
                   </div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: 'var(--gold)', lineHeight: 1 }}>
-                    {health === 'strong'
-                      ? `+$${Math.round(s * 0.2 * roas).toLocaleString()}`
-                      : `+$${gapToStrong.toLocaleString()}`}
+                    {aboveBreakEven
+                      ? `+$${Math.abs(Math.round(profitOf(s * 1.2 * roas, s * 1.2) - profit)).toLocaleString()}`
+                      : `+$${gapToBreakEven.toLocaleString()}`}
                   </div>
                 </div>
               </div>
               <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6, marginBottom: 16 }}>
-                {health === 'strong'
-                  ? `Adding 20% budget ($${Math.round(s * 0.2).toLocaleString()}/mo) at ${roas.toFixed(2)}x would add about $${Math.round(s * 0.2 * roas).toLocaleString()} in monthly revenue — if frequency stays under 2.5.`
-                  : `At $${Math.round(s).toLocaleString()}/mo spend, STRONG-tier efficiency (2.5x) would generate $${Math.round(revAtStrong).toLocaleString()} — that's $${gapToStrong.toLocaleString()} more revenue every month than today.`}
+                {aboveBreakEven
+                  ? `You clear your ${breakEven.toFixed(2)}x break-even, so added budget compounds profit, not loss. Adding 20% ($${Math.round(s * 0.2).toLocaleString()}/mo) at ${roas.toFixed(2)}x adds about $${Math.round(s * 0.2 * roas).toLocaleString()} in revenue${marginFrac != null ? ` (~$${Math.round(s * 0.2 * roas * marginFrac).toLocaleString()} gross profit)` : ''} — provided frequency stays under 2.5.`
+                  : `At $${Math.round(s).toLocaleString()}/mo spend, you need $${Math.round(revAtBreakEven).toLocaleString()} in revenue just to break even at ${breakEven.toFixed(2)}x — that's $${gapToBreakEven.toLocaleString()} more than today. Every dollar of spend below break-even loses ${marginFrac != null ? `$${(1 - roas * marginFrac).toFixed(2)}` : 'money'} after cost of goods.`}
               </div>
 
               {/* Spend scenarios (ROAS held constant) */}

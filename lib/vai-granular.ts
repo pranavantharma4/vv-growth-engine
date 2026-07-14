@@ -5,6 +5,12 @@
 
 export const STRICT_SYSTEM_RULES = `You are analyzing real account data. Every single claim you make MUST reference a specific number from this account's data. Never give generic advice that could apply to any account. If you identify a problem, quote the exact metric that proves it (e.g. 'your frequency is 4.2x' not 'your frequency may be high'). If you recommend moving budget, state the exact dollar amount and the exact destination campaign. If you cite a demographic insight, name the exact age/gender segment and its exact performance. Vague advice is a failure. Generic advice is a failure. Every sentence must be grounded in this account's actual numbers.`
 
+// Teaching layer — every diagnosis must explain the underlying mechanism so the
+// reader LEARNS the principle, not just complies with an instruction. Appended
+// to the system prompt of every analysis route (mirror this verbatim into the
+// weekly-brief edge function if you change it).
+export const TEACHING_RULES = `For every problem you identify, briefly explain WHY it happens — the mechanism behind it — so the reader understands the principle, not just the instruction. Example: don't just say 'frequency is too high,' explain 'frequency above 3.5 means the people likely to convert already have, so additional spend now reaches mostly non-buyers — that's why CPM rises while conversions fall.' The goal is that the reader finishes each analysis genuinely understanding their account better than before. Teach, don't just instruct. Keep it concise — teach the principle in one or two sentences per point, never lecture.`
+
 export type Segment = {
   segment: string
   spend?: number

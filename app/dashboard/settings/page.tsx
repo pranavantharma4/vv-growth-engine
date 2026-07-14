@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import ConnectionsSection from '../ConnectionsSection'
+import BusinessContextForm from '../BusinessContextForm'
 
 export default function SettingsPage() {
   const supabase = createClientComponentClient()
@@ -129,6 +130,12 @@ export default function SettingsPage() {
           style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'var(--gold)', border: 'none', padding: '10px 22px', borderRadius: 4, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Saving...' : 'Save Changes →'}
         </button>
+      </div>
+
+      {/* Business Profile */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
+        <Section title="Business Profile" />
+        {client && <BusinessContextForm clientId={client.id} />}
       </div>
 
       {/* Notifications */}

@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
+import { provisionAccountForUser } from '@/lib/provision'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,18 @@ export async function GET(request: Request) {
     authed = !error
   } else {
     console.error('auth/callback hit with no token_hash or code')
+  }
+
+  // Self-serve signups confirm via email and land here with no account yet.
+  // Provision it now (idempotent — invited clients and admins already have a
+  // link, so this no-ops for them). Best-effort: never block the redirect.
+  if (authed) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const name = (user.user_metadata?.name as string | undefined) ?? null
+      const result = await provisionAccountForUser(user.id, user.email ?? '', name)
+      if (!result.ok) console.error('auth/callback provision failed:', result.error)
+    }
   }
 
   return NextResponse.redirect(

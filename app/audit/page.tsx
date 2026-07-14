@@ -150,7 +150,7 @@ export default function VisionDropLanding() {
               <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 300, fontStyle: 'italic', color: INK }}>Your Account Snapshot</div>
             </div>
             <div style={{ fontFamily: MONO, fontSize: 7, color: INK3, letterSpacing: '1.5px', padding: '5px 10px', border: `1px solid ${RULE}`, borderRadius: 3 }}>
-              SAMPLE · BLURRED
+              SAMPLE
             </div>
           </div>
 
@@ -165,16 +165,16 @@ export default function VisionDropLanding() {
             ))}
           </div>
 
-          {/* Blurred full analysis preview */}
+          {/* Full analysis preview — no gate. You get the complete write-up on connect. */}
           <div style={{ marginTop: 20, padding: '20px 22px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${RULE}`, borderRadius: 6 }}>
             <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 12 }}>
-              Full VAI Analysis & Optimization Blueprint
+              Full VAI Analysis — in plain English
             </div>
-            <div className="blur-mask" style={{ fontSize: 13, color: INK2, lineHeight: 1.85 }}>
+            <div style={{ fontSize: 13, color: INK2, lineHeight: 1.85 }}>
               Your account is leaking in three structural places. The first is your prospecting top-of-funnel where the broad lookalike audience has saturated — frequency is at 3.4 and CTR has dropped 38% over the last 14 days. Reallocate that budget into your retargeting view-content audience which is showing 4.8x ROAS but is currently capped at $1,240/mo, leaving meaningful headroom. The second issue is creative — your top-performing static carousel from 60 days ago is now your bottom performer on CPM, classic creative fatigue. Test 3 new variants based on the customer-quote angle this week.
             </div>
             <div style={{ marginTop: 18, textAlign: 'center', fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '2px', textTransform: 'uppercase' }}>
-              Unlocked when you book your call
+              This is a sample. You get your real one in full — free, in 60 seconds.
             </div>
           </div>
         </div>

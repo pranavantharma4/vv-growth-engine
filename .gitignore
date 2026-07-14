@@ -5,3 +5,12 @@ node_modules/
 .DS_Store
 .vercel
 .env*.local
+
+# Secrets — never commit
+.vv-prod.env
+*.env
+
+# Lead lists / outreach data (PII) — keep out of the repo
+vv-*.csv
+vv-*.txt
+vv-abdul-email.txt

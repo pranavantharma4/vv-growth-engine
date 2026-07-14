@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import AddCampaignForm from '../add-campaign/AddCampaignForm'
+import BusinessContextForm from '../BusinessContextForm'
 
 const STEPS = [
-  { id: 'secure',  label: 'Secure' },
-  { id: 'welcome', label: 'Welcome' },
-  { id: 'data',    label: 'Add Campaigns' },
-  { id: 'confirm', label: "You're Live" },
+  { id: 'secure',   label: 'Secure' },
+  { id: 'welcome',  label: 'Welcome' },
+  { id: 'data',     label: 'Add Campaigns' },
+  { id: 'business', label: 'Business' },
+  { id: 'confirm',  label: "You're Live" },
 ]
 
 const SUPABASE_URL = 'https://ofqnhlkjazlsfctldbng.supabase.co'
@@ -377,8 +379,37 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {/* Step 3 — Confirm */}
+      {/* Step 3 — Business profile */}
       {step === 3 && (
+        <div>
+          <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Business profile</div>
+          <div style={{ fontFamily: serif, fontSize: 34, fontWeight: 300, color: ink, lineHeight: 1.1, marginBottom: 16 }}>Tell VAI your economics</div>
+          <div style={{ fontSize: 13, color: ink2, lineHeight: 1.85, marginBottom: 24, fontWeight: 300 }}>
+            This is what makes VAI brand-aware. With your margin and AOV, it judges every campaign against <em>your</em> real break-even ROAS — so a 1.8x campaign is correctly called profitable or unprofitable for <em>your</em> business, not a generic benchmark. You can edit this any time in Settings.
+          </div>
+
+          <div style={{ border: `1px solid ${rule}`, borderRadius: 6, padding: '22px 24px', marginBottom: 28, background: 'rgba(255,255,255,0.025)' }}>
+            {client && <BusinessContextForm clientId={client.id} embedded onSaved={() => toast('Business profile saved', 'VAI now uses your real margin and break-even ROAS.')} />}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => setStep(2)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
+              ← Back
+            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button onClick={() => setStep(4)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: 'none', padding: '11px 14px', cursor: 'pointer', letterSpacing: '1px' }}>
+                Skip for now
+              </button>
+              <button onClick={() => setStep(4)} style={{ fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: gold, border: 'none', padding: '13px 28px', borderRadius: 4, cursor: 'pointer' }}>
+                Continue →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4 — Confirm */}
+      {step === 4 && (
         <div>
           <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(201,168,76,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>Step 3 of 3</div>
           <div style={{ fontFamily: serif, fontSize: 34, fontWeight: 300, color: ink, lineHeight: 1.1, marginBottom: 16 }}>
@@ -413,7 +444,7 @@ export default function OnboardingPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={() => setStep(2)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
+            <button onClick={() => setStep(3)} style={{ fontFamily: mono, fontSize: 9, color: ink3, background: 'transparent', border: `1px solid ${rule}`, padding: '11px 20px', borderRadius: 4, cursor: 'pointer', letterSpacing: '1px' }}>
               ← Back
             </button>
             <button onClick={completeOnboarding} disabled={completing}

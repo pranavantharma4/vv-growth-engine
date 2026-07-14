@@ -136,6 +136,10 @@ export default function LoginPage() {
                   {loading ? 'Signing in...' : 'Enter Portal →'}
                 </button>
               </form>
+
+              <div style={{ textAlign: 'center', marginTop: 20, fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px' }}>
+                New to VV? <a href="/signup" style={{ color: gold, textDecoration: 'underline' }}>Start a free trial</a>
+              </div>
             </>
           ) : (
             <>

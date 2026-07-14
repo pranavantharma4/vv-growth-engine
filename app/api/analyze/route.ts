@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { STRICT_SYSTEM_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
+import { STRICT_SYSTEM_RULES, TEACHING_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
 import { buildVaiRulesBlock } from '../../../lib/vai-rules'
+import { buildBusinessContextBlock, businessContextFromRow } from '../../../lib/business-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     // ── Get client context ──
     const { data: clientData } = await supabase
       .from('clients')
-      .select('name, account_type, agency_name, white_label_reports, industry')
+      .select('name, account_type, agency_name, white_label_reports, industry, product_category, aov, gross_margin, primary_goal, monthly_budget, break_even_roas')
       .eq('id', client_id)
       .maybeSingle()
 
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
     const agencyName = clientData?.agency_name || 'our team'
     const brandName  = clientData?.name || 'the brand'
     const industry   = clientData?.industry || 'e-commerce'
+    const businessBlock = buildBusinessContextBlock(businessContextFromRow(clientData))
 
     const anthropic = new Anthropic()
 
@@ -113,7 +115,7 @@ PORTFOLIO CONTEXT:
     const baseSystem = isAgency
       ? `You are a senior performance marketing analyst at ${agencyName}. Preparing a campaign analysis for ${brandName}. Write in first person plural ("we identified", "our analysis shows"). Professional, authoritative, client-facing. Never reference any third-party tool.`
       : `You are a senior performance marketing analyst with 12+ years managing paid media across Meta, Google, and TikTok for ${industry} brands. Speak directly and candidly. Reference specific numbers throughout.`
-    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}`
+    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}\n\n${TEACHING_RULES}`
 
     const campaignDetails = `
 Campaign: ${campaign.campaign_name}
@@ -126,6 +128,7 @@ CTR: ${ctr}%  |  CPC: $${cpClick}  |  CPA: $${cpa}  |  AOV: $${aov}
 Conversions: ${campaign.conversions || 0}
 Impressions: ${Number(campaign.impressions || 0).toLocaleString()}  |  Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
 ${portfolioContext}
+${businessBlock}
 ${granularBlock}
 ${rulesBlock}`
 

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
-import { STRICT_SYSTEM_RULES, buildGranularBlock, type Granular, type Segment } from '../../../../lib/vai-granular'
+import { STRICT_SYSTEM_RULES, TEACHING_RULES, buildGranularBlock, type Granular, type Segment } from '../../../../lib/vai-granular'
 import { classifyCampaign, fatigueForecast } from '../../../../lib/vai-rules'
+import { buildBusinessContextBlock } from '../../../../lib/business-context'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -296,7 +297,7 @@ export async function POST(req: Request) {
         max_tokens: 2200,
         system:
           'You are a senior performance marketing analyst auditing a Meta Ads account for a prospect. Be specific, candid, and quantitative. Reference real dollar amounts and ROAS figures pulled from the data. Never invent campaign names. Every finding must be actionable regardless of account size — single-campaign accounts get their own framing, not "n/a".\n\n' +
-          STRICT_SYSTEM_RULES,
+          STRICT_SYSTEM_RULES + '\n\n' + TEACHING_RULES,
         messages: [
           {
             role: 'user',
@@ -307,7 +308,8 @@ export async function POST(req: Request) {
               `Blended ROAS: ${blendedRoas.toFixed(2)}x\n` +
               `Campaign count: ${campaigns.length}\n\n` +
               `Campaigns (top 25 by ${windowDays}-day spend; each carries the VAI classification + why):\n${JSON.stringify(compactCampaigns, null, 2)}\n` +
-              `${granularBlock}\n\n` +
+              `${granularBlock}\n` +
+              `${buildBusinessContextBlock({})}\n\n` +
               `VAI THRESHOLDS — DEAD: spend>$100 & 0 conv, OR ROAS<0.5x & spend>$200, OR CTR<0.4% after 2,000+ impr & 0 conv. BLEEDING: ROAS 0.5x–1.5x, OR frequency>3.5 & ROAS declining (14d), OR cost-per-result up >30% (14d) while conversions flat/declining. WEAK: ROAS 1.5x–2.5x, OR frequency 2.5–3.5, OR CTR 0.4%–0.8%, OR <50 conversions with meaningful spend. STRONG: ROAS>2.5x AND frequency<2.5 AND stable/improving 14-day trend.\n` +
               `ACCOUNT FATIGUE FORECAST (computed from the real 14-day daily trend — quote verbatim, never invent a day count): ${accountFatigue.text}\n\n` +
               `The "immediate_action" and "full_analysis" MUST quote exact numbers from the data above: name the exact best/worst age-gender segment and its ROAS, the exact winning placement, the exact account frequency (flag saturation if it exceeds 3.0), whether the 14-day trend is improving or declining with specific figures, WHY the biggest leak is classified the way it is using the exact threshold (e.g. "BLEEDING because ROAS is 1.8x"), and the fatigue forecast above verbatim.\n\n` +
@@ -427,6 +429,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       findings,
+      full_analysis: fullAnalysis,
       total_spend: totalSpend,
       total_revenue: totalRevenue,
       blended_roas: blendedRoas,

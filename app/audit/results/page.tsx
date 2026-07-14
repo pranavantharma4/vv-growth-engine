@@ -27,6 +27,7 @@ type Findings = {
 
 type Report = {
   findings: Findings
+  full_analysis?: string
   total_spend?: number
   total_revenue?: number
   blended_roas?: number
@@ -190,33 +191,40 @@ export default function ResultsPage() {
         </div>
       </section>
 
-      {/* LOCKED FULL ANALYSIS */}
-      <section style={{ maxWidth: 880, margin: '0 auto', padding: '24px 32px 16px' }}>
-        <div style={{ position: 'relative', background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '28px 30px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${RULE}` }}>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 8, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 4 }}>◉ Locked</div>
+      {/* FULL ANALYSIS — the complete report, shown immediately. No gate. */}
+      {report.full_analysis && (
+        <section style={{ maxWidth: 880, margin: '0 auto', padding: '24px 32px 16px' }}>
+          <div style={{ background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '28px 30px' }}>
+            <div style={{ marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${RULE}` }}>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 4 }}>◧ Full VAI Analysis</div>
               <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, fontWeight: 300, fontStyle: 'italic' }}>
-                Full VAI Analysis & Optimization Blueprint
+                What&rsquo;s happening across your account.
               </div>
             </div>
-            <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '1.5px' }}>UNLOCK ON CALL</div>
-          </div>
 
-          <div style={{ fontSize: 14, color: INK2, lineHeight: 1.85 }}>
-            Your full VAI Analysis covers campaign-level diagnosis, exact budget reallocation recommendations, creative direction, and a 30-day optimization sequence — all based on your real account data.
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: 22, paddingTop: 18, borderTop: `1px solid ${RULE}` }}>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '2px', textTransform: 'uppercase' }}>
-              ◧ Unlock the full blueprint on your strategy call
+            <div style={{ fontSize: 14.5, color: INK2, lineHeight: 1.85 }}>
+              {report.full_analysis
+                .split(/\n\n+/)
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((para, i) => (
+                  <p key={i} style={{ margin: i === 0 ? '0 0 16px' : '0 0 16px' }}>{para}</p>
+                ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* CTAs */}
-      <section style={{ maxWidth: 880, margin: '0 auto', padding: '24px 32px 60px' }}>
+      {/* CTAs — the report above is complete. The call is the next step, not a gate. */}
+      <section style={{ maxWidth: 880, margin: '0 auto', padding: '32px 32px 60px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontFamily: SERIF, fontSize: 24, color: INK, fontWeight: 300, fontStyle: 'italic', marginBottom: 8 }}>
+            Want a hand fixing it?
+          </div>
+          <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK2, lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
+            We&rsquo;re taking on 3 founding clients free-for-life. Book a 20-minute call and we&rsquo;ll walk your report together and map the fixes.
+          </div>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
           <button
             onClick={handleBook}
@@ -237,7 +245,7 @@ export default function ResultsPage() {
               boxShadow: '0 4px 20px -4px rgba(201,168,76,0.35)',
             }}
           >
-            Get Your Full Report — Book a 20-Min Call →
+            Book a 20-Min Call →
           </button>
 
           <button
@@ -263,12 +271,12 @@ export default function ResultsPage() {
               ? '✓ Sent — check your inbox'
               : emailSending
               ? 'Sending…'
-              : 'Email me the full report'}
+              : 'Email me this report'}
           </button>
         </div>
 
         <div style={{ marginTop: 28, textAlign: 'center', fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '1.5px' }}>
-          Your data is read-only. We never run ads on your behalf. Disconnect anytime in your Meta settings.
+          Read-only. Nothing changes in your account.
         </div>
       </section>
 

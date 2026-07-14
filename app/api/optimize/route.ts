@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { STRICT_SYSTEM_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
+import { STRICT_SYSTEM_RULES, TEACHING_RULES, buildGranularBlock, granularFromRow } from '../../../lib/vai-granular'
 import { buildVaiRulesBlock } from '../../../lib/vai-rules'
+import { buildBusinessContextBlock, businessContextFromRow, type BusinessContext } from '../../../lib/business-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,10 +19,11 @@ export async function POST(req: Request) {
 
     // Get client context
     let agencyContext = { isAgency: false, agencyName: '', brandName: '' }
+    let businessCtx: BusinessContext = {}
     if (client_id) {
       const { data: clientData } = await supabase
         .from('clients')
-        .select('name, account_type, agency_name, white_label_reports')
+        .select('name, account_type, agency_name, white_label_reports, product_category, aov, gross_margin, primary_goal, monthly_budget, break_even_roas')
         .eq('id', client_id)
         .maybeSingle()
       agencyContext = {
@@ -29,7 +31,9 @@ export async function POST(req: Request) {
         agencyName: clientData?.agency_name || '',
         brandName: clientData?.name || '',
       }
+      businessCtx = businessContextFromRow(clientData)
     }
+    const businessBlock = buildBusinessContextBlock(businessCtx)
 
     const anthropic = new Anthropic()
 
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
     const baseSystem = agencyContext.isAgency
       ? `You are a senior paid media strategist at ${agencyContext.agencyName}. You are preparing an optimization blueprint for ${agencyContext.brandName}, a client of the agency. Write professionally and authoritatively — this will be delivered directly to the client. Use "we" for agency recommendations. Never reference any third-party tool or platform by name.`
       : `You are a senior paid media strategist with 10+ years experience managing DTC ad accounts on Meta, Google, and TikTok. Be direct, specific, and professional.`
-    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}`
+    const systemPrompt = `${baseSystem}\n\n${STRICT_SYSTEM_RULES}\n\n${TEACHING_RULES}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -91,6 +95,7 @@ CPA: $${cpa}
 Conversions: ${campaign.conversions || 0}
 Impressions: ${Number(campaign.impressions || 0).toLocaleString()}
 Clicks: ${Number(campaign.clicks || 0).toLocaleString()}
+${businessBlock}
 ${granularBlock}
 ${rulesBlock}
 

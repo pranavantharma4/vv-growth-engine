@@ -12,6 +12,50 @@ const FROM_EMAIL = 'Vanguard Visuals <team@vngrdvisuals.com>'
 // Strict grounding rules — keep in sync with lib/vai-granular.ts
 const STRICT_RULES = `You are analyzing real account data. Every single claim you make MUST reference a specific number from this account's data. Never give generic advice that could apply to any account. If you identify a problem, quote the exact metric that proves it (e.g. 'your frequency is 4.2x' not 'your frequency may be high'). If you recommend moving budget, state the exact dollar amount and the exact destination campaign. If you cite a demographic insight, name the exact age/gender segment and its exact performance. Vague advice is a failure. Generic advice is a failure. Every sentence must be grounded in this account's actual numbers.`
 
+// Teaching layer — keep in sync with TEACHING_RULES in lib/vai-granular.ts
+const TEACHING_RULES = `For every problem you identify, briefly explain WHY it happens — the mechanism behind it — so the reader understands the principle, not just the instruction. Example: don't just say 'frequency is too high,' explain 'frequency above 3.5 means the people likely to convert already have, so additional spend now reaches mostly non-buyers — that's why CPM rises while conversions fall.' The goal is that the reader finishes each analysis genuinely understanding their account better than before. Teach, don't just instruct. Keep it concise — teach the principle in one or two sentences per point, never lecture.`
+
+const GOAL_LABELS: Record<string, string> = {
+  acquisition: 'New customer acquisition',
+  retention: 'Customer retention',
+  scaling: 'Scaling (profitable growth)',
+  lead_gen: 'Lead generation',
+}
+
+// Break-even ROAS = explicit override, else 100/gross_margin. Mirrors
+// lib/business-context.ts computeBreakEvenRoas().
+function breakEvenRoas(client: any): number | null {
+  const explicit = Number(client?.break_even_roas)
+  if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit * 100) / 100
+  const m = Number(client?.gross_margin)
+  if (Number.isFinite(m) && m > 0 && m <= 100) return Math.round((100 / m) * 100) / 100
+  return null
+}
+
+// Inline business-economics block — mirrors lib/business-context.ts
+// buildBusinessContextBlock() so the brief judges profitability against the
+// brand's REAL margin/AOV/break-even instead of generic DTC assumptions.
+function businessContextBlock(client: any): string {
+  const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
+  const aov = Number(client?.aov)
+  const margin = Number(client?.gross_margin)
+  const budget = Number(client?.monthly_budget)
+  const goal = client?.primary_goal ? (GOAL_LABELS[String(client.primary_goal)] || String(client.primary_goal)) : null
+  const be = breakEvenRoas(client)
+  const has = (Number.isFinite(margin) && margin > 0) || be != null || Number.isFinite(aov) || !!client?.product_category || !!goal
+  if (!has) {
+    return `\nBUSINESS ECONOMICS: No margin/AOV on file — use a generic ~2.0x break-even but note real break-even depends on gross margin (50% margin = 2.0x, 70% = ~1.43x, 40% = 2.5x).`
+  }
+  const L: string[] = ['', 'BUSINESS CONTEXT — judge against THESE real economics, not generic DTC assumptions:']
+  if (client?.product_category) L.push(`- Sells: ${client.product_category}`)
+  if (Number.isFinite(aov)) L.push(`- AOV: ${money(aov)}`)
+  if (Number.isFinite(margin)) L.push(`- Gross margin: ${Math.round(margin)}%`)
+  if (goal) L.push(`- Primary goal: ${goal}`)
+  if (Number.isFinite(budget)) L.push(`- Monthly ad budget: ${money(budget)}`)
+  if (be != null) L.push(`- BREAK-EVEN ROAS: ${be.toFixed(2)}x — below this they lose money after cost of goods; above it they profit. Judge every campaign against ${be.toFixed(2)}x, NOT a generic 2x/2.5x bar, and compute profit/waste using the real ${Math.round(margin) || ''}% margin (gross profit = revenue × margin), not revenue itself.`)
+  return L.join('\n')
+}
+
 // Render a campaign's granular columns (frequency, demographics, placements,
 // daily trend, bid strategy) into a compact block for the brief prompt.
 function granularBlock(c: any): string {
@@ -122,6 +166,9 @@ async function generateBriefForClient(supabase: any, client: any, weekRef: strin
   const prompt = `You are Vanguard Intelligence, an AI-powered ad performance analyst for ${client.name}.
 
 ${STRICT_RULES}
+
+${TEACHING_RULES}
+${businessContextBlock(client)}
 
 Generate a concise weekly intelligence brief for ${weekRef}.
 
