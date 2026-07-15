@@ -12,10 +12,12 @@ import { useState, useEffect } from 'react'
 ─────────────────────────────────────────────────────────────────────────── */
 
 const AUDIT = '/audit'
+const START = '/signup'
 
-export default function LandingClient() {
+export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seatsLeft?: number; seatsTotal?: number }) {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const seatsOpen = seatsLeft > 0
 
   // Navbar blur transition on scroll
   useEffect(() => {
@@ -126,6 +128,7 @@ export default function LandingClient() {
         </a>
 
         <div className="nav-links">
+          <a href="#pricing" className="nav-signin">PRICING</a>
           <a href="/login" className="nav-signin">SIGN IN</a>
           <a href={AUDIT} className="nav-cta">SEE YOUR AUDIT →</a>
         </div>
@@ -151,6 +154,19 @@ export default function LandingClient() {
       <header className="hero">
         <div className="hero-bg" />
         <div className="hero-inner">
+          {/* Founders Program — first thing a visitor sees, live seat counter */}
+          <a href="#pricing" className="founders-pill reveal" aria-label="Founders Program — limited free-for-life seats">
+            <span className="fp-dot" />
+            <span className="fp-label">FOUNDERS PROGRAM</span>
+            <span className="fp-div" />
+            {seatsOpen ? (
+              <span className="fp-seats"><b>{seatsLeft}</b> of {seatsTotal} seats left · <span className="fp-free">free for life</span></span>
+            ) : (
+              <span className="fp-seats">All {seatsTotal} seats claimed · <span className="fp-free">join the waitlist</span></span>
+            )}
+            <span className="fp-arrow">→</span>
+          </a>
+
           <p className="eyebrow reveal">META ADS INTELLIGENCE · POWERED BY VAI</p>
 
           <h1 className="hero-h1 reveal" style={{ transitionDelay: '90ms' }}>
@@ -316,6 +332,78 @@ export default function LandingClient() {
         <div className="s-cta reveal"><a href={AUDIT} className="btn-gold">SEE YOUR AUDIT →</a></div>
       </section>
 
+      {/* ───────────────────────── PRICING · FOUNDERS · TRIAL ───────────────────────── */}
+      <section className="section pricing" id="pricing">
+        <p className="s-eyebrow reveal">PRICING</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>One plan — or one of four free seats.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>
+          Start free for 7 days — no card. Full VAI intelligence on your real Meta account from minute one.
+        </p>
+
+        {/* The free trial, explained plainly */}
+        <div className="trial-strip reveal" style={{ transitionDelay: '220ms' }}>
+          <div className="trial-col">
+            <span className="trial-k">WHAT YOU GET</span>
+            <span className="trial-v">Every campaign read and ranked — making money, wasting it, or dead — plus the first fix, in plain English.</span>
+          </div>
+          <div className="trial-col">
+            <span className="trial-k">HOW LONG</span>
+            <span className="trial-v">7 days, completely free. No credit card to start, nothing to cancel if you walk away.</span>
+          </div>
+          <div className="trial-col">
+            <span className="trial-k">AFTER THE TRIAL</span>
+            <span className="trial-v">$149/mo to keep it. Cancel anytime. You&rsquo;re never charged without adding a card yourself.</span>
+          </div>
+        </div>
+
+        {/* Founders positioned ABOVE the paid plan so the free seats read against the real price */}
+        <div className="plan-grid">
+          <div className="plan-card founders-card reveal">
+            <div className="plan-flag">FOUNDING CLIENTS · LIMITED</div>
+            <div className="plan-name">Founders Program</div>
+            <div className="plan-price">
+              <span className="plan-amt">Free</span>
+              <span className="plan-per">for life</span>
+            </div>
+            <div className="plan-anchor"><s>$149/mo</s> · $0 forever</div>
+            <div className={`seat-live${seatsOpen ? '' : ' full'}`}>
+              <span className="seat-dot" />
+              {seatsOpen ? <><b>{seatsLeft}</b>&nbsp;of&nbsp;{seatsTotal} seats left</> : <>All {seatsTotal} seats claimed</>}
+            </div>
+            <ul className="plan-list">
+              <li>Everything in the $149/mo plan — free, for as long as you&rsquo;re a client</li>
+              <li>Direct line to the founder; your feedback shapes the product</li>
+              <li>In exchange: honest feedback and a testimonial once you see results</li>
+              <li>Only {seatsTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
+            </ul>
+            {/* Founders see their audit first, then claim — the audit is the qualifier. */}
+            <a href={AUDIT} className="btn-gold big plan-cta">{seatsOpen ? 'See your audit, then claim →' : 'Join the waitlist →'}</a>
+          </div>
+
+          <div className="plan-card reveal" style={{ transitionDelay: '120ms' }}>
+            <div className="plan-name">VV Growth Ad Engine</div>
+            <div className="plan-price">
+              <span className="plan-amt">$149</span>
+              <span className="plan-per">/mo</span>
+            </div>
+            <div className="plan-anchor">7-day free trial · no card to start</div>
+            <div className="seat-live plain">Single plan. No tiers, no add-ons.</div>
+            <ul className="plan-list">
+              <li>Read-only connection to your Meta ad account</li>
+              <li>Every campaign classified and ranked by health, daily</li>
+              <li>Plain-English diagnosis + the single highest-impact fix</li>
+              <li>Weekly intelligence brief and biggest-leak alerts</li>
+            </ul>
+            <a href={START} className="btn-ghost big plan-cta">Start your 7-day free trial →</a>
+          </div>
+        </div>
+
+        <p className="pricing-fomo reveal">
+          One bleeding campaign usually wastes more in a single month than a whole year of VV.
+          The free trial shows you which one — before you pay a cent.
+        </p>
+      </section>
+
       {/* ───────────────────────── FAQ ───────────────────────── */}
       <section className="section">
         <p className="s-eyebrow reveal">QUESTIONS</p>
@@ -367,7 +455,7 @@ const FAQS = [
   { q: 'Is my data safe?', a: 'Connection is through Meta’s official Marketing API with read-only permissions. We never store your password, and you can disconnect in one click anytime.' },
   { q: 'How is this different from my Meta dashboard?', a: 'Meta shows you numbers. VV tells you what they mean and exactly what to do — which campaigns make money, which waste it, and the first fix, in plain English.' },
   { q: 'Do I need to be technical?', a: 'No. If you can read an email, you can read your report. It arrives in plain language with the single most important action highlighted.' },
-  { q: 'What does it cost?', a: 'The audit is free. We’re taking on 3 founding clients free-for-life in exchange for feedback — see your audit and we’ll talk.' },
+  { q: 'What does it cost?', a: 'The audit is free. The product is $149/mo with a 7-day free trial (no card to start). We’re also taking on a limited number of founding clients free-for-life in exchange for feedback and a testimonial — the live seat count is on the pricing section above.' },
 ]
 
 type ClassCard = {
@@ -566,11 +654,65 @@ const CSS = `
 .lp .foot-r a{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.25);transition:color .2s;}
 .lp .foot-r a:hover{color:rgba(255,255,255,.6);}
 
+/* ── founders pill (hero, above the fold) ── */
+.lp .founders-pill{display:inline-flex;align-items:center;gap:10px;margin:0 0 26px;padding:8px 14px;
+  background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.32);border-radius:100px;
+  transition:transform .2s,box-shadow .2s,border-color .2s;cursor:pointer;}
+.lp .founders-pill:hover{transform:translateY(-1px);border-color:rgba(201,168,76,.55);box-shadow:0 8px 26px rgba(201,168,76,.16);}
+.lp .fp-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.55);animation:fpPulse 2.4s ease-out infinite;}
+@keyframes fpPulse{0%{box-shadow:0 0 0 0 rgba(74,222,128,.5);}70%{box-shadow:0 0 0 7px rgba(74,222,128,0);}100%{box-shadow:0 0 0 0 rgba(74,222,128,0);}}
+.lp .fp-label{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--gold);}
+.lp .fp-div{width:1px;height:11px;background:rgba(201,168,76,.35);}
+.lp .fp-seats{font-family:var(--mono);font-size:8.5px;letter-spacing:.5px;color:rgba(255,255,255,.72);}
+.lp .fp-seats b{color:#fff;font-weight:600;}
+.lp .fp-free{color:var(--gold);}
+.lp .fp-arrow{font-family:var(--mono);font-size:10px;color:var(--gold);}
+
+/* ── pricing section ── */
+.lp .pricing{scroll-margin-top:80px;}
+.lp .trial-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin:48px auto 0;max-width:900px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;text-align:left;}
+.lp .trial-col{background:#080810;padding:24px 22px;display:flex;flex-direction:column;gap:9px;}
+.lp .trial-k{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--gold);}
+.lp .trial-v{font-family:var(--sans);font-size:13px;line-height:1.6;color:rgba(255,255,255,.66);}
+
+.lp .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;text-align:left;align-items:stretch;}
+.lp .plan-card{position:relative;display:flex;flex-direction:column;background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:32px 30px;transition:transform .2s,border-color .2s;}
+.lp .plan-card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.16);}
+.lp .founders-card{border-color:rgba(201,168,76,.4);background:linear-gradient(180deg,rgba(201,168,76,.07),rgba(201,168,76,.015));box-shadow:0 20px 60px rgba(201,168,76,.08);}
+.lp .founders-card:hover{border-color:rgba(201,168,76,.65);}
+.lp .plan-flag{display:inline-block;align-self:flex-start;font-family:var(--mono);font-size:7px;letter-spacing:2px;color:#050509;
+  background:var(--gold);padding:4px 9px;border-radius:3px;margin-bottom:16px;}
+.lp .plan-name{font-family:var(--serif);font-style:italic;font-weight:300;font-size:24px;color:#fff;margin-bottom:10px;}
+.lp .plan-price{display:flex;align-items:baseline;gap:8px;}
+.lp .plan-amt{font-family:var(--serif);font-size:46px;line-height:1;color:#fff;}
+.lp .plan-per{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.5);letter-spacing:1px;}
+.lp .plan-anchor{font-family:var(--mono);font-size:9px;letter-spacing:.5px;color:rgba(255,255,255,.4);margin-top:8px;}
+.lp .plan-anchor s{color:rgba(255,255,255,.35);}
+.lp .seat-live{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:7px 12px;border-radius:6px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#fff;
+  background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.28);}
+.lp .seat-live b{color:#4ade80;}
+.lp .seat-live .seat-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:fpPulse 2.4s ease-out infinite;}
+.lp .seat-live.full{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.6);}
+.lp .seat-live.full .seat-dot{background:rgba(255,255,255,.4);animation:none;}
+.lp .seat-live.plain{background:transparent;border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.5);}
+.lp .seat-live.plain .seat-dot{background:rgba(255,255,255,.3);animation:none;}
+.lp .plan-list{list-style:none;padding:0;margin:22px 0 26px;display:flex;flex-direction:column;gap:11px;flex:1;}
+.lp .plan-list li{position:relative;padding-left:20px;font-family:var(--sans);font-size:13px;line-height:1.55;color:rgba(255,255,255,.66);}
+.lp .plan-list li::before{content:'';position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
+.lp .plan-cta{width:100%;text-align:center;box-sizing:border-box;}
+.lp .pricing-fomo{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.4vw,22px);line-height:1.6;
+  color:rgba(255,255,255,.8);max-width:640px;margin:44px auto 0;}
+
 /* ── responsive ── */
 @media (max-width:860px){
   .lp .how-row{grid-template-columns:1fr;gap:28px;}
   .lp .how-row.reverse .how-visual{order:0;}
   .lp .how-row.reverse .how-text{order:0;}
+  .lp .trial-strip{grid-template-columns:1fr;}
+  .lp .plan-grid{grid-template-columns:1fr;}
 }
 @media (max-width:680px){
   .lp .nav{padding:14px 20px;}
@@ -579,6 +721,9 @@ const CSS = `
   .lp .class-grid{grid-template-columns:1fr 1fr;}
   .lp .faq-grid{grid-template-columns:1fr;gap:32px;margin-top:44px;}
   .lp .section{padding:80px 20px;}
+  .lp .founders-pill{gap:8px;padding:7px 12px;flex-wrap:wrap;justify-content:center;max-width:100%;}
+  .lp .fp-div{display:none;}
+  .lp .plan-card{padding:26px 22px;}
   .lp .vai-card{padding:24px;}
   .lp .hero-ctas{flex-direction:column;width:100%;}
   .lp .hero-ctas .btn-gold,.lp .hero-ctas .btn-ghost{width:100%;}
