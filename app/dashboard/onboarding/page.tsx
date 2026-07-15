@@ -154,33 +154,46 @@ export default function OnboardingPage() {
   async function completeOnboarding() {
     if (!client) return
     setCompleting(true)
-    await supabase.from('clients').update({ onboarding_complete: true, onboarding_step: 'done' }).eq('id', client.id)
-    await supabase.from('onboarding').update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() }).eq('client_id', client.id)
+    try {
+      // These writes gate the middleware — if the clients update fails,
+      // onboarding_complete never flips and /dashboard bounces the user
+      // straight back here. Surface the failure instead of hanging.
+      const { error: clientsErr } = await supabase.from('clients')
+        .update({ onboarding_complete: true, onboarding_step: 'done' })
+        .eq('id', client.id)
+      if (clientsErr) throw clientsErr
+      await supabase.from('onboarding').update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() }).eq('client_id', client.id)
 
-    // Kick off a Meta sync so the dashboard has campaign_snapshots for today.
-    // Without this the user lands on an empty dashboard until the nightly cron runs.
-    // Best-effort with a 12s cap — never block the redirect if Graph API is slow.
-    if (metaConnected) {
-      try {
-        const ctrl = new AbortController()
-        const timeout = setTimeout(() => ctrl.abort(), 12000)
-        await supabase.functions.invoke('sync-meta-campaigns', {
-          body: { client_id: client.id },
-        })
-        clearTimeout(timeout)
-      } catch {
-        // ignore — dashboard will show empty state and the cron will fill it
+      // Kick off a Meta sync so the dashboard has campaign_snapshots for today.
+      // Without this the user lands on an empty dashboard until the nightly cron runs.
+      // Best-effort with a hard 12s cap — never block the redirect if Graph API is slow.
+      // Note: functions.invoke doesn't accept an AbortSignal, so we race it against
+      // a timeout ourselves — otherwise a stalled Graph API call hangs forever and
+      // the "Entering..." button never releases.
+      if (metaConnected) {
+        try {
+          await Promise.race([
+            supabase.functions.invoke('sync-meta-campaigns', { body: { client_id: client.id } }),
+            new Promise((resolve) => setTimeout(resolve, 12000)),
+          ])
+        } catch {
+          // ignore — dashboard will show empty state and the cron will fill it
+        }
       }
+
+      toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
+      sessionStorage.setItem('vv_just_logged_in', '1')
+
+      // Pause briefly so the onboarding_complete write propagates before the
+      // middleware re-evaluates state on /dashboard — otherwise a stale read
+      // bounces the user back to /onboarding and the button feels stuck.
+      await new Promise(r => setTimeout(r, 800))
+      router.push('/dashboard')
+    } catch (err) {
+      console.error('completeOnboarding failed', err)
+      toast('Could not finish setup', 'Please try again in a moment.')
+      setCompleting(false)
     }
-
-    toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
-    sessionStorage.setItem('vv_just_logged_in', '1')
-
-    // Pause briefly so the onboarding_complete write propagates before the
-    // middleware re-evaluates state on /dashboard — otherwise a stale read
-    // bounces the user back to /onboarding and the button feels stuck.
-    await new Promise(r => setTimeout(r, 800))
-    router.push('/dashboard')
   }
 
   const ink = 'rgba(250,248,245,0.9)'
