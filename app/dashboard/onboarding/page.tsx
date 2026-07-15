@@ -1,7 +1,6 @@
 'use client'
 export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import AddCampaignForm from '../add-campaign/AddCampaignForm'
@@ -20,7 +19,6 @@ const META_APP_ID = '4462090677412633'
 
 export default function OnboardingPage() {
   const supabase = createClientComponentClient()
-  const router = useRouter()
   const { client, toast } = useApp()
   const [step, setStep] = useState(0)
   const [campaignCount, setCampaignCount] = useState(0)
@@ -153,16 +151,25 @@ export default function OnboardingPage() {
 
   async function completeOnboarding() {
     if (!client) return
+    console.log('[onboarding] completeOnboarding: start', { clientId: client.id, metaConnected })
     setCompleting(true)
     try {
       // These writes gate the middleware — if the clients update fails,
       // onboarding_complete never flips and /dashboard bounces the user
       // straight back here. Surface the failure instead of hanging.
+      console.log('[onboarding] step 1/4: marking clients.onboarding_complete=true')
       const { error: clientsErr } = await supabase.from('clients')
         .update({ onboarding_complete: true, onboarding_step: 'done' })
         .eq('id', client.id)
       if (clientsErr) throw clientsErr
-      await supabase.from('onboarding').update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() }).eq('client_id', client.id)
+      console.log('[onboarding] step 1/4: clients update OK')
+
+      console.log('[onboarding] step 2/4: marking onboarding row done')
+      const { error: obErr } = await supabase.from('onboarding')
+        .update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() })
+        .eq('client_id', client.id)
+      if (obErr) console.warn('[onboarding] step 2/4: onboarding row update failed (non-fatal)', obErr)
+      else console.log('[onboarding] step 2/4: onboarding update OK')
 
       // Kick off a Meta sync so the dashboard has campaign_snapshots for today.
       // Without this the user lands on an empty dashboard until the nightly cron runs.
@@ -171,26 +178,45 @@ export default function OnboardingPage() {
       // a timeout ourselves — otherwise a stalled Graph API call hangs forever and
       // the "Entering..." button never releases.
       if (metaConnected) {
+        console.log('[onboarding] step 3/4: kicking off Meta sync (12s cap)')
         try {
           await Promise.race([
             supabase.functions.invoke('sync-meta-campaigns', { body: { client_id: client.id } }),
             new Promise((resolve) => setTimeout(resolve, 12000)),
           ])
-        } catch {
-          // ignore — dashboard will show empty state and the cron will fill it
+          console.log('[onboarding] step 3/4: Meta sync finished or timed out')
+        } catch (syncErr) {
+          console.warn('[onboarding] step 3/4: Meta sync errored (non-fatal)', syncErr)
         }
+      } else {
+        console.log('[onboarding] step 3/4: skipped (no Meta connection)')
       }
 
       toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
       sessionStorage.setItem('vv_just_logged_in', '1')
 
-      // Pause briefly so the onboarding_complete write propagates before the
+      // Pause briefly so the onboarding_complete write commits before the
       // middleware re-evaluates state on /dashboard — otherwise a stale read
-      // bounces the user back to /onboarding and the button feels stuck.
-      await new Promise(r => setTimeout(r, 800))
-      router.push('/dashboard')
+      // bounces the user back to /onboarding.
+      await new Promise(r => setTimeout(r, 400))
+
+      // HARD navigation, not router.push. A soft client-side nav gets swallowed
+      // by Next's router cache / prefetch here (onboarding + middleware gate),
+      // leaving the button stuck on "Entering..." until a manual refresh. A full
+      // page load guarantees the redirect fires, runs the middleware fresh, and
+      // unmounts this component.
+      console.log('[onboarding] step 4/4: redirecting to /dashboard (hard nav)')
+      window.location.assign('/dashboard')
+
+      // Safety net: if the browser somehow ignores assign(), force a fallback
+      // and release the button so the user is never stranded on "Entering...".
+      setTimeout(() => {
+        console.warn('[onboarding] redirect fallback fired — forcing /dashboard')
+        window.location.href = '/dashboard'
+        setCompleting(false)
+      }, 3000)
     } catch (err) {
-      console.error('completeOnboarding failed', err)
+      console.error('[onboarding] completeOnboarding FAILED', err)
       toast('Could not finish setup', 'Please try again in a moment.')
       setCompleting(false)
     }
