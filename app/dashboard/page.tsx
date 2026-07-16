@@ -1,11 +1,9 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from './context'
-import { carryForwardManualCampaigns } from '@/lib/manual-campaigns'
-import PageLoader from './PageLoader'
+import { useDashboardData } from './queries'
+import { DashboardSkeleton } from './Skeletons'
 
 type Campaign = {
   id: string
@@ -33,60 +31,15 @@ type WeeklyBrief = {
 }
 
 export default function DashboardPage() {
-  const supabase = createClientComponentClient()
   const router = useRouter()
   const { client } = useApp()
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [brief, setBrief] = useState<WeeklyBrief | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    // Onboarding routing is enforced by middleware — just load campaign data.
-    if (client) load()
-  }, [client])
-
-  async function load() {
-    if (!client) return
-    setLoading(true)
-    try {
-      await carryForwardManualCampaigns(supabase, client.id).catch(() => {})
-      // Use the LATEST available snapshot date for this client, not strictly
-      // "today" — otherwise the dashboard goes blank on any day the daily sync
-      // hasn't run yet. The admin always sees the most current data on file.
-      const { data: latestRow } = await supabase
-        .from('campaign_snapshots')
-        .select('snapshot_date')
-        .eq('client_id', client.id)
-        .order('snapshot_date', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      const day = latestRow?.snapshot_date || new Date().toISOString().split('T')[0]
-      const [campsRes, briefRes] = await Promise.all([
-        supabase
-          .from('campaign_snapshots')
-          .select('*')
-          .eq('client_id', client.id)
-          .eq('snapshot_date', day)
-          .order('spend', { ascending: false }),
-        supabase
-          .from('weekly_briefs')
-          .select('*')
-          .eq('client_id', client.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ])
-      setCampaigns(campsRes.data || [])
-      setBrief(briefRes.data || null)
-    } catch {
-      setCampaigns([])
-      setBrief(null)
-    } finally {
-      // Always drop the spinner — empty results render the empty state below.
-      setLoading(false)
-    }
-  }
+  // Cached via React Query (see queries.ts) — revisiting the dashboard tab now
+  // reads from cache instantly and revalidates in the background instead of
+  // re-hitting Supabase and flashing a spinner every time.
+  const { data, isPending } = useDashboardData(client?.id)
+  const campaigns = (data?.campaigns || []) as Campaign[]
+  const brief = (data?.brief || null) as WeeklyBrief | null
 
   const totalSpend       = campaigns.reduce((s, c) => s + Number(c.spend), 0)
   const totalRevenue     = campaigns.reduce((s, c) => s + Number(c.revenue), 0)
@@ -120,7 +73,9 @@ export default function DashboardPage() {
   const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
 
-  if (loading) return <PageLoader />
+  // Skeleton renders immediately on first load (no 400ms blank gap); a cached
+  // revisit skips it entirely because data is already present.
+  if (isPending) return <DashboardSkeleton />
 
   if (campaigns.length === 0) return (
     <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>
@@ -279,7 +234,7 @@ export default function DashboardPage() {
       <div className="dash-bottom" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
 
         {/* Health breakdown */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
+        <div data-tour="states" style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Health Breakdown</div>
           {[
             { label: 'STRONG',   h: 'strong' },
@@ -309,7 +264,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Latest brief */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
+        <div data-tour="leak" style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>Latest Brief</div>
           {brief ? (
             <div>

@@ -3,7 +3,10 @@ export const dynamic = "force-dynamic"
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppCtx } from './context'
+import { warmTab } from './queries'
+import Tutorial from './Tutorial'
 import type { Client } from '@/lib/types'
 
 const NAV = [
@@ -41,6 +44,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
 
+  // Shared React Query cache lives here, above every dashboard route, so tab
+  // data survives cross-tab navigation. staleTime keeps a revisited tab from
+  // refetching for a minute; gcTime keeps it cached for 5. Window-focus
+  // refetch is off so returning to the tab doesn't flash a reload.
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: { staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false, retry: 1 },
+    },
+  }))
+
   const [clients, setClients] = useState<Client[]>([])
   const [client, setClientState] = useState<Client | null>(null)
   const [roles, setRoles] = useState<{ client_id: string; role: string }[]>([])
@@ -57,6 +70,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Portal intro
   const [portalPhase, setPortalPhase] = useState(0)
   const [portalDone, setPortalDone] = useState(true)
+
+  // First-run tutorial (Fix 1c)
+  const [showTutorial, setShowTutorial] = useState(false)
 
   useEffect(() => {
     const justLoggedIn = sessionStorage.getItem('vv_just_logged_in')
@@ -97,6 +113,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     NAV.map(n => '/dashboard' + (n.id === 'dashboard' ? '' : '/' + n.id))
       .forEach(r => router.prefetch(r))
   }, [])
+
+  // Warm the DATA cache for the most likely next tabs as soon as we know the
+  // active client — dashboard home + campaigns are the two most-visited views,
+  // so their first open is instant instead of hitting Supabase live.
+  useEffect(() => {
+    if (!client?.id) return
+    warmTab(queryClient, '/dashboard', client.id)
+    warmTab(queryClient, '/dashboard/campaigns', client.id)
+  }, [client?.id, queryClient])
+
+  // Show the first-run tutorial once, on the dashboard home only (that's where
+  // the highlighted elements live). "Replay tutorial" in Settings sets a local
+  // flag that re-triggers it without resetting the persisted DB column.
+  useEffect(() => {
+    if (!client || pathname !== '/dashboard') { setShowTutorial(false); return }
+    let replay = false
+    try { replay = localStorage.getItem('vv_replay_tutorial') === '1' } catch {}
+    if (replay || client.tutorial_completed !== true) {
+      // Wait past the portal intro + first paint so the highlighted elements exist.
+      const t = setTimeout(() => setShowTutorial(true), 700)
+      return () => clearTimeout(t)
+    }
+  }, [client?.id, client?.tutorial_completed, pathname])
+
+  async function finishTutorial() {
+    setShowTutorial(false)
+    try { localStorage.removeItem('vv_replay_tutorial') } catch {}
+    if (client && client.tutorial_completed !== true) {
+      await supabase.from('clients').update({ tutorial_completed: true }).eq('id', client.id)
+      setClientState(prev => (prev ? { ...prev, tutorial_completed: true } : prev))
+      setClients(list => list.map(c => (c.id === client.id ? { ...c, tutorial_completed: true } : c)))
+    }
+  }
 
   function toast(title: string, body: string) {
     setToastData({ show: true, title, body })
@@ -264,6 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const overlayOn  = portalPhase < 4
 
   return (
+    <QueryClientProvider client={queryClient}>
     <AppCtx.Provider value={{ client, setClient, clients, isAdmin, dark, setDark, toast }}>
 
       {/* Portal intro */}
@@ -409,6 +459,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </div>
                   )}
                   <button className="nav-btn" onClick={() => navigate(target)}
+                    onMouseEnter={() => warmTab(queryClient, target, client?.id)}
+                    data-tour={item.id === 'analysis' ? 'diagnosis' : item.id === 'settings' ? 'settings' : undefined}
                     style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 5, borderLeft: `2px solid ${active ? 'var(--goldlt)' : 'transparent'}`, backgroundColor: active ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
                     <span style={{ fontSize: 11, width: 16, textAlign: 'center', color: active ? 'var(--goldlt)' : 'rgba(250,248,245,0.28)', flexShrink: 0, transition: 'color 0.15s ease' }}>{item.icon}</span>
                     <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: active ? 'var(--sb-text)' : 'rgba(250,248,245,0.4)', fontWeight: active ? 500 : 400, transition: 'color 0.15s ease' }}>{item.label}</span>
@@ -493,6 +545,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
+      {/* First-run tutorial — only on the dashboard home, after the portal intro */}
+      {portalDone && showTutorial && pathname === '/dashboard' && (
+        <Tutorial onDone={finishTutorial} />
+      )}
+
       {/* Toast */}
       <div className="toast-wrap" style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--sb)', border: '1px solid var(--rule2)', borderRadius: 8, padding: '14px 18px', zIndex: 9998, maxWidth: 300, transform: toastData.show ? 'translateY(0)' : 'translateY(80px)', opacity: toastData.show ? 1 : 0, pointerEvents: toastData.show ? 'all' : 'none' }}>
         <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: 'var(--sb-text)', marginBottom: 3 }}>{toastData.title}</div>
@@ -500,5 +557,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
     </AppCtx.Provider>
+    </QueryClientProvider>
   )
 }

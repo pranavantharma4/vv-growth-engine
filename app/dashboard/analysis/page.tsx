@@ -1,5 +1,9 @@
 'use client'
 export const dynamic = "force-dynamic"
+// NOTE: Intentionally NOT migrated to the React Query cache layer (queries.ts).
+// AI Analysis is an on-demand Claude call with its own per-day cache in the
+// ai_analyses table; caching here was deliberately deferred to avoid changing
+// its behavior before launch. Revisit only if that risk is acceptable.
 import { useState, useEffect, useRef } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'

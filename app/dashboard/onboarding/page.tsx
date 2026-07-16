@@ -1,6 +1,7 @@
 'use client'
 export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import AddCampaignForm from '../add-campaign/AddCampaignForm'
@@ -19,11 +20,15 @@ const META_APP_ID = '4462090677412633'
 
 export default function OnboardingPage() {
   const supabase = createClientComponentClient()
+  const router = useRouter()
   const { client, toast } = useApp()
   const [step, setStep] = useState(0)
   const [campaignCount, setCampaignCount] = useState(0)
   const [metaConnected, setMetaConnected] = useState(false)
   const [completing, setCompleting] = useState(false)
+  // Drives the branded fade-into-dashboard overlay after setup completes,
+  // replacing the old hard window.location reload + "Entering…" hang.
+  const [transitioning, setTransitioning] = useState(false)
   const [showManual, setShowManual] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -164,61 +169,51 @@ export default function OnboardingPage() {
       if (clientsErr) throw clientsErr
       console.log('[onboarding] step 1/4: clients update OK')
 
-      console.log('[onboarding] step 2/4: marking onboarding row done')
-      const { error: obErr } = await supabase.from('onboarding')
+      // Onboarding row + Meta sync are both non-blocking now: we don't await
+      // them before transitioning. The dashboard renders with skeletons and
+      // populates as data lands, so a slow Graph API call never stalls the
+      // "Entering…" button (the old failure mode).
+      console.log('[onboarding] step 2/4: marking onboarding row done (non-blocking)')
+      supabase.from('onboarding')
         .update({ step: 'done', completed_steps: ['welcome', 'data', 'confirm'], completed_at: new Date().toISOString() })
         .eq('client_id', client.id)
-      if (obErr) console.warn('[onboarding] step 2/4: onboarding row update failed (non-fatal)', obErr)
-      else console.log('[onboarding] step 2/4: onboarding update OK')
+        .then(({ error }: { error: unknown }) => { if (error) console.warn('[onboarding] onboarding row update failed (non-fatal)', error) })
 
-      // Kick off a Meta sync so the dashboard has campaign_snapshots for today.
-      // Without this the user lands on an empty dashboard until the nightly cron runs.
-      // Best-effort with a hard 12s cap — never block the redirect if Graph API is slow.
-      // Note: functions.invoke doesn't accept an AbortSignal, so we race it against
-      // a timeout ourselves — otherwise a stalled Graph API call hangs forever and
-      // the "Entering..." button never releases.
       if (metaConnected) {
-        console.log('[onboarding] step 3/4: kicking off Meta sync (12s cap)')
-        try {
-          await Promise.race([
-            supabase.functions.invoke('sync-meta-campaigns', { body: { client_id: client.id } }),
-            new Promise((resolve) => setTimeout(resolve, 12000)),
-          ])
-          console.log('[onboarding] step 3/4: Meta sync finished or timed out')
-        } catch (syncErr) {
-          console.warn('[onboarding] step 3/4: Meta sync errored (non-fatal)', syncErr)
-        }
-      } else {
-        console.log('[onboarding] step 3/4: skipped (no Meta connection)')
+        console.log('[onboarding] step 3/4: kicking off Meta sync in background')
+        supabase.functions.invoke('sync-meta-campaigns', { body: { client_id: client.id } })
+          .catch((e: unknown) => console.warn('[onboarding] Meta sync errored (non-fatal)', e))
       }
 
       toast('Setup complete', 'Your first intelligence brief arrives Monday at 7AM.')
+      // Signals the dashboard layout to play its branded VV portal intro, so
+      // the hand-off from onboarding into the dashboard is one continuous
+      // on-brand animation instead of a white reload flash.
       sessionStorage.setItem('vv_just_logged_in', '1')
 
-      // Pause briefly so the onboarding_complete write commits before the
-      // middleware re-evaluates state on /dashboard — otherwise a stale read
-      // bounces the user back to /onboarding.
-      await new Promise(r => setTimeout(r, 400))
+      // Fade up the branded transition overlay, give the onboarding_complete
+      // write ~450ms to commit (so middleware doesn't read a stale flag and
+      // bounce us back), then soft-navigate. router.refresh() busts the router
+      // cache that previously swallowed the soft nav.
+      console.log('[onboarding] step 4/4: fading into dashboard (soft nav)')
+      setTransitioning(true)
+      await new Promise(r => setTimeout(r, 450))
+      router.replace('/dashboard')
+      router.refresh()
 
-      // HARD navigation, not router.push. A soft client-side nav gets swallowed
-      // by Next's router cache / prefetch here (onboarding + middleware gate),
-      // leaving the button stuck on "Entering..." until a manual refresh. A full
-      // page load guarantees the redirect fires, runs the middleware fresh, and
-      // unmounts this component.
-      console.log('[onboarding] step 4/4: redirecting to /dashboard (hard nav)')
-      window.location.assign('/dashboard')
-
-      // Safety net: if the browser somehow ignores assign(), force a fallback
-      // and release the button so the user is never stranded on "Entering...".
+      // Safety net: if the soft nav is ever swallowed and we're still sitting on
+      // /onboarding, force a hard load so the user is never stranded.
       setTimeout(() => {
-        console.warn('[onboarding] redirect fallback fired — forcing /dashboard')
-        window.location.href = '/dashboard'
-        setCompleting(false)
-      }, 3000)
+        if (window.location.pathname.includes('/onboarding')) {
+          console.warn('[onboarding] soft nav did not land — forcing hard nav')
+          window.location.assign('/dashboard')
+        }
+      }, 1600)
     } catch (err) {
       console.error('[onboarding] completeOnboarding FAILED', err)
       toast('Could not finish setup', 'Please try again in a moment.')
       setCompleting(false)
+      setTransitioning(false)
     }
   }
 
@@ -248,6 +243,20 @@ export default function OnboardingPage() {
 
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', paddingTop: 24 }}>
+
+      {/* Branded transition — fades over the onboarding view the moment setup
+          completes, then the dashboard's VV portal intro takes over on soft
+          nav for one continuous animation (no white reload flash). */}
+      {transitioning && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#020203', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, animation: 'vvEnterFade 0.35s ease forwards' }}>
+          <div style={{ fontFamily: serif, fontSize: 'clamp(64px,14vw,120px)', fontWeight: 300, fontStyle: 'italic', color: ink, letterSpacing: 1, lineHeight: 1, animation: 'vvEnterPulse 1.6s ease-in-out infinite' }}>VV</div>
+          <div style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '3px', textTransform: 'uppercase' }}>Entering your dashboard</div>
+          <style>{`
+            @keyframes vvEnterFade { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes vvEnterPulse { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+          `}</style>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 48, position: 'relative' }}>

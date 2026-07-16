@@ -1,6 +1,7 @@
 'use client'
 export const dynamic = "force-dynamic"
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 import ConnectionsSection from '../ConnectionsSection'
@@ -8,7 +9,15 @@ import BusinessContextForm from '../BusinessContextForm'
 
 export default function SettingsPage() {
   const supabase = createClientComponentClient()
+  const router = useRouter()
   const { client, toast, dark, setDark } = useApp()
+
+  // Re-run the first-run walkthrough. Uses a local flag (not a DB reset) so the
+  // layout re-triggers the tour on the dashboard home; it clears itself on finish.
+  function replayTutorial() {
+    try { localStorage.setItem('vv_replay_tutorial', '1') } catch {}
+    router.push('/dashboard')
+  }
   const [minimal, setMinimal] = useState(false)
   useEffect(() => { setMinimal(typeof document !== 'undefined' && document.body.classList.contains('minimal')) }, [])
   function toggleMinimal(v: boolean) {
@@ -173,6 +182,17 @@ export default function SettingsPage() {
         </div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', marginTop: 12, lineHeight: 1.7 }}>
           Minimal view hides secondary panels for a focused, board-room presentation.
+        </div>
+
+        {/* Replay the first-run walkthrough (Fix 1c) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--rule)', flexWrap: 'wrap' }}>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', lineHeight: 1.7 }}>
+            Replay the guided tour of the dashboard.
+          </div>
+          <button onClick={replayTutorial}
+            style={{ padding: '9px 16px', borderRadius: 4, cursor: 'pointer', fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid var(--goldborder)', background: 'var(--goldpaper)', color: 'var(--gold)' }}>
+            Replay Tutorial →
+          </button>
         </div>
       </div>
 

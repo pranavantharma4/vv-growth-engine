@@ -1,9 +1,9 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useState } from 'react'
 import { useApp } from '../context'
-import PageLoader from '../PageLoader'
+import { useCampaigns } from '../queries'
+import { TableSkeleton } from '../Skeletons'
 import CampaignDetail from '../CampaignDetail'
 
 type Campaign = {
@@ -21,38 +21,14 @@ type Campaign = {
 }
 
 export default function CampaignsPage() {
-  const supabase = createClientComponentClient()
   const { client } = useApp()
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [loading, setLoading] = useState(true)
+  // Cached via React Query — instant on revisit, shared with the dashboard-home
+  // prefetch warmed in the layout.
+  const { data, isPending } = useCampaigns(client?.id)
+  const campaigns = (data || []) as Campaign[]
   const [filter, setFilter] = useState<string>('all')
   const [platform, setPlatform] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-
-  useEffect(() => { if (client) load() }, [client])
-
-  async function load() {
-    if (!client) return
-    setLoading(true)
-    // Latest available snapshot date (not strictly today) so campaigns never
-    // appear empty on a day the daily sync hasn't run yet.
-    const { data: latestRow } = await supabase
-      .from('campaign_snapshots')
-      .select('snapshot_date')
-      .eq('client_id', client.id)
-      .order('snapshot_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const day = latestRow?.snapshot_date || new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('campaign_snapshots')
-      .select('*')
-      .eq('client_id', client.id)
-      .eq('snapshot_date', day)
-      .order('spend', { ascending: false })
-    setCampaigns(data || [])
-    setLoading(false)
-  }
 
   const filtered = campaigns.filter(c => {
     const healthMatch = filter === 'all' || c.health === filter
@@ -72,7 +48,7 @@ export default function CampaignsPage() {
   const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Number(n).toLocaleString()}`
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
 
-  if (loading) return <PageLoader />
+  if (isPending) return <TableSkeleton rows={6} maxWidth={1100} />
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -104,9 +80,11 @@ export default function CampaignsPage() {
             </button>
           ))}
         </div>
-        {/* Platform filter */}
+        {/* Platform filter — Meta only for now. Google/TikTok ad-account
+            ingestion is deferred to a later version, so their filter chips are
+            omitted to avoid offering a filter that can never return rows. */}
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          {['all', 'meta', 'google', 'tiktok'].map(p => (
+          {['all', 'meta'].map(p => (
             <button key={p} onClick={() => setPlatform(p)}
               style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 3, border: `1px solid ${platform === p ? 'var(--goldborder)' : 'var(--rule)'}`, background: platform === p ? 'var(--goldpaper)' : 'transparent', color: platform === p ? 'var(--gold)' : 'var(--ink3)', cursor: 'pointer', transition: 'all 0.15s ease' }}>
               {p}

@@ -1,9 +1,8 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
-import PageLoader from '../PageLoader'
+import { useLatestBrief } from '../queries'
+import { PanelSkeleton } from '../Skeletons'
 
 type Brief = {
   id: string
@@ -23,30 +22,14 @@ type Brief = {
 }
 
 export default function BriefPage() {
-  const supabase = createClientComponentClient()
   const { client } = useApp()
-  const [brief, setBrief] = useState<Brief | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => { if (client) load() }, [client])
-
-  async function load() {
-    if (!client) return
-    setLoading(true)
-    const { data } = await supabase
-      .from('weekly_briefs').select('*')
-      .eq('client_id', client.id)
-      .order('created_at', { ascending: false })
-      .limit(1).maybeSingle()
-    setBrief(data || null)
-    setLoading(false)
-  }
+  const { data: brief, isPending } = useLatestBrief(client?.id) as { data: Brief | null | undefined; isPending: boolean }
 
   const fmt     = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Number(n).toLocaleString()}`
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
   const healthColor = (h: string) => ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' }[h] || 'var(--ink3)')
 
-  if (loading) return <PageLoader />
+  if (isPending) return <PanelSkeleton />
 
   if (!brief) return (
     <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>

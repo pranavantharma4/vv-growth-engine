@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import FoundersModal from './FoundersModal'
 
 /* ──────────────────────────────────────────────────────────────────────────
    vngrdvisuals.com — landing page.
@@ -17,7 +19,34 @@ const START = '/signup'
 export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seatsLeft?: number; seatsTotal?: number }) {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const seatsOpen = seatsLeft > 0
+  const [foundersOpen, setFoundersOpen] = useState(false)
+
+  // Live seat counter — seeded from the server-rendered props, then kept current
+  // via a Supabase realtime subscription so it ticks down the instant a seat is
+  // claimed while a visitor is on the page (founders_program is in the
+  // supabase_realtime publication).
+  const [liveSeats, setLiveSeats] = useState({ left: seatsLeft, total: seatsTotal })
+  useEffect(() => {
+    const supabase = createClientComponentClient()
+    const ch = supabase
+      .channel('founders_program_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'founders_program' }, (payload) => {
+        const row = payload.new as { seats_total?: number; seats_claimed?: number } | null
+        if (!row) return
+        const total = row.seats_total ?? seatsTotal
+        setLiveSeats({ left: Math.max(0, total - (row.seats_claimed ?? 0)), total })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const curLeft = liveSeats.left
+  const curTotal = liveSeats.total
+  const seatsOpen = curLeft > 0
+
+  // Open the Founders selection flow instead of following the anchor. The href
+  // stays as a no-JS fallback (scrolls to the pricing section).
+  const openFounders = (e: React.MouseEvent) => { e.preventDefault(); setFoundersOpen(true) }
 
   // Navbar blur transition on scroll
   useEffect(() => {
@@ -155,14 +184,14 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
         <div className="hero-bg" />
         <div className="hero-inner">
           {/* Founders Program — first thing a visitor sees, live seat counter */}
-          <a href="#pricing" className="founders-pill reveal" aria-label="Founders Program — limited free-for-life seats">
+          <a href="#pricing" onClick={openFounders} className="founders-pill reveal" aria-label="Founders Program — limited free-for-life seats">
             <span className="fp-dot" />
             <span className="fp-label">FOUNDERS PROGRAM</span>
             <span className="fp-div" />
             {seatsOpen ? (
-              <span className="fp-seats"><b>{seatsLeft}</b> of {seatsTotal} seats left · <span className="fp-free">free for life</span></span>
+              <span className="fp-seats"><b>{curLeft}</b> of {curTotal} seats left · <span className="fp-free">free for life</span></span>
             ) : (
-              <span className="fp-seats">All {seatsTotal} seats claimed · <span className="fp-free">join the waitlist</span></span>
+              <span className="fp-seats">All {curTotal} seats claimed · <span className="fp-free">join the waitlist</span></span>
             )}
             <span className="fp-arrow">→</span>
           </a>
@@ -368,16 +397,16 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
             <div className="plan-anchor"><s>$149/mo</s> · $0 forever</div>
             <div className={`seat-live${seatsOpen ? '' : ' full'}`}>
               <span className="seat-dot" />
-              {seatsOpen ? <><b>{seatsLeft}</b>&nbsp;of&nbsp;{seatsTotal} seats left</> : <>All {seatsTotal} seats claimed</>}
+              {seatsOpen ? <><b>{curLeft}</b>&nbsp;of&nbsp;{curTotal} seats left</> : <>All {curTotal} seats claimed</>}
             </div>
             <ul className="plan-list">
               <li>Everything in the $149/mo plan — free, for as long as you&rsquo;re a client</li>
               <li>Direct line to the founder; your feedback shapes the product</li>
               <li>In exchange: honest feedback and a testimonial once you see results</li>
-              <li>Only {seatsTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
+              <li>Only {curTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
             </ul>
-            {/* Founders see their audit first, then claim — the audit is the qualifier. */}
-            <a href={AUDIT} className="btn-gold big plan-cta">{seatsOpen ? 'See your audit, then claim →' : 'Join the waitlist →'}</a>
+            {/* Founders CTA opens the three-path selection flow (claim / audit / book). */}
+            <a href="#pricing" onClick={openFounders} className="btn-gold big plan-cta">{seatsOpen ? 'Explore the Founders Program →' : 'Join the waitlist →'}</a>
           </div>
 
           <div className="plan-card reveal" style={{ transitionDelay: '120ms' }}>
@@ -444,6 +473,14 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
           <a href="/login">Sign In</a>
         </div>
       </footer>
+
+      {/* Founders Program selection flow (Fix 3) */}
+      <FoundersModal
+        open={foundersOpen}
+        onClose={() => setFoundersOpen(false)}
+        seatsLeft={curLeft}
+        seatsTotal={curTotal}
+      />
     </div>
   )
 }

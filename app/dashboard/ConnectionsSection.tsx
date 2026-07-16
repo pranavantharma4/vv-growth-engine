@@ -158,24 +158,11 @@ export default function ConnectionsSection() {
         </div>
       </div>
 
-      {/* Google + TikTok — coming soon */}
-      {[
-        { name: 'Google Ads', sub: 'Search, Display & YouTube', bg: '#ea4335', mark: 'G', markColor: '#fff' },
-        { name: 'TikTok Ads', sub: 'TikTok for Business', bg: '#010101', mark: 'T', markColor: '#00f2ea' },
-      ].map((p) => (
-        <div key={p.name} style={{ ...card, opacity: 0.6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 34, height: 34, background: p.bg, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: p.markColor, fontWeight: 700, fontSize: 13, fontFamily: 'Arial' }}>{p.mark}</span>
-            </div>
-            <div>
-              <div style={{ fontFamily: SANS, fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>{p.name}</div>
-              <div style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1px', marginTop: 2 }}>{p.sub}</div>
-            </div>
-          </div>
-          <span style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', background: 'var(--rule)', border: '1px solid var(--rule2)', padding: '3px 10px', borderRadius: 2, letterSpacing: '1.5px' }}>COMING SOON</span>
-        </div>
-      ))}
+      {/* Google Ads + TikTok Ads connection cards are deferred to a later
+          version — those integrations aren't built yet, so the placeholder
+          "coming soon" cards were removed rather than shown as dead UI. When
+          Google/TikTok ad-account ingestion ships, re-add connect cards here
+          mirroring the Meta card above. */}
 
       <div style={{ padding: '12px 14px', background: 'var(--goldpaper)', border: '1px solid var(--goldborder)', borderRadius: 4 }}>
         <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--gold)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>Read-Only Access</div>

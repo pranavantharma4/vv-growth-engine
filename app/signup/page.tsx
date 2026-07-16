@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
 
@@ -15,6 +15,16 @@ import { useRouter } from 'next/navigation'
 export default function SignupPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
+  // Founders intent from the homepage selection flow (/signup?plan=founders).
+  // Read client-side from the URL (not useSearchParams) to avoid Next's static
+  // prerender bailout that requires a Suspense boundary at build time.
+  // ROUTE-ONLY for now: we surface founders framing and record the intent, but
+  // the actual seat claim (insert founders_seats, set is_founder, skip billing)
+  // is a deliberate follow-up pending sign-off — a normal 7-day trial is created.
+  const [isFounders, setIsFounders] = useState(false)
+  useEffect(() => {
+    setIsFounders(new URLSearchParams(window.location.search).get('plan') === 'founders')
+  }, [])
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -37,6 +47,9 @@ export default function SignupPage() {
     if (password.length < 8) { setError('Use at least 8 characters for your password.'); return }
     setLoading(true)
     setError('')
+
+    // Record founders intent for the follow-up seat-claim wiring / analytics.
+    if (isFounders) { try { sessionStorage.setItem('vv_plan_intent', 'founders') } catch {} }
 
     const { data, error: err } = await supabase.auth.signUp({
       email,
@@ -112,8 +125,13 @@ export default function SignupPage() {
             </>
           ) : (
             <>
-              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Get started</div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>{isFounders ? 'Founders Program' : 'Get started'}</div>
               <div style={{ fontFamily: serif, fontSize: 22, color: ink, marginBottom: 6 }}>Create your account</div>
+              {isFounders && (
+                <div style={{ fontFamily: mono, fontSize: 8, color: gold, background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.28)', borderRadius: 4, padding: '10px 12px', marginBottom: 14, letterSpacing: '0.5px', lineHeight: 1.7 }}>
+                  ★ Claiming a founding seat — the full $149/mo engine, free for life. Create your account to get started.
+                </div>
+              )}
               <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', lineHeight: 1.7, marginBottom: 24 }}>
                 7 days free. No card required. Read-only — nothing changes in your ad account.
               </div>

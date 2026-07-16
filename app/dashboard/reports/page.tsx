@@ -1,8 +1,9 @@
 'use client'
 export const dynamic = "force-dynamic"
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useState } from 'react'
 import { useApp } from '../context'
+import { useReports } from '../queries'
+import { TableSkeleton } from '../Skeletons'
 
 type Brief = {
   id: string
@@ -22,25 +23,11 @@ type Brief = {
 }
 
 export default function ReportsPage() {
-  const supabase = createClientComponentClient()
   const { client, toast } = useApp()
-  const [briefs, setBriefs] = useState<Brief[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, isPending } = useReports(client?.id)
+  const briefs = (data || []) as Brief[]
   const [expanded, setExpanded] = useState<string | null>(null)
   const [exporting, setExporting] = useState<string | null>(null)
-
-  useEffect(() => { if (client) load() }, [client])
-
-  async function load() {
-    if (!client) return
-    setLoading(true)
-    const { data } = await supabase
-      .from('weekly_briefs').select('*')
-      .eq('client_id', client.id)
-      .order('created_at', { ascending: false })
-    setBriefs(data || [])
-    setLoading(false)
-  }
 
   async function exportPDF(brief: Brief) {
     setExporting(brief.id)
@@ -129,11 +116,7 @@ export default function ReportsPage() {
   const fmtRoas = (r: number) => `${Number(r).toFixed(1)}x`
   const healthColor = (h: string) => ({ strong: '#4ade80', weak: '#fbbf24', bleeding: '#fb923c', dead: '#f87171' }[h] || 'var(--ink3)')
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>Loading reports...</div>
-    </div>
-  )
+  if (isPending) return <TableSkeleton rows={5} maxWidth={900} />
 
   if (briefs.length === 0) return (
     <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>

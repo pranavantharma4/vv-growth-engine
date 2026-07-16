@@ -11,6 +11,7 @@ export type Client = {
   updated_at: string
   onboarding_complete: boolean | null
   onboarding_step: string | null
+  tutorial_completed?: boolean | null
   invited_by: string | null
   notification_preferences?: {
     weekly: boolean
