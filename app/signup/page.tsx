@@ -119,7 +119,7 @@ export default function SignupPage() {
               <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Account</div>
               <div style={{ fontFamily: serif, fontSize: 22, color: ink, marginBottom: 8 }}>Confirm your email</div>
               <div style={{ fontFamily: mono, fontSize: 8, color: '#4ade80', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 4, padding: '14px 16px', margin: '16px 0', letterSpacing: '0.5px', lineHeight: 1.7 }}>
-                ✓ We sent a confirmation link to {email}. Click it to activate your 7-day trial and start connecting Meta.
+                ✓ We sent a confirmation link to {email}. Click it to {isFounders ? 'activate your founding access' : 'activate your 7-day trial'} and start connecting Meta.
               </div>
               <a href="/login" style={{ fontFamily: mono, fontSize: 9, color: ink3, letterSpacing: '1px', textDecoration: 'underline' }}>← Back to sign in</a>
             </>
@@ -133,7 +133,9 @@ export default function SignupPage() {
                 </div>
               )}
               <div style={{ fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '0.5px', lineHeight: 1.7, marginBottom: 24 }}>
-                7 days free. No card required. Read-only — nothing changes in your ad account.
+                {isFounders
+                  ? 'Free for life for the founding brands. No credit card. Read-only — nothing changes in your ad account.'
+                  : '7 days free. No card required. Read-only — nothing changes in your ad account.'}
               </div>
 
               <form onSubmit={handleSignup}>
@@ -158,7 +160,7 @@ export default function SignupPage() {
 
                 <button type="submit" disabled={loading}
                   style={{ width: '100%', padding: '13px', fontFamily: mono, fontSize: 10, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#050509', background: loading ? 'rgba(201,168,76,0.5)' : gold, border: 'none', borderRadius: 4, cursor: loading ? 'not-allowed' : 'pointer' }}>
-                  {loading ? 'Creating account...' : 'Start Free Trial →'}
+                  {loading ? 'Creating account...' : isFounders ? 'Claim your founding seat →' : 'Start Free Trial →'}
                 </button>
               </form>
 

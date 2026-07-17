@@ -72,85 +72,61 @@ export default function FoundersModal({ open, onClose, seatsLeft, seatsTotal }: 
         ) : (
           <>
             <div className="fm-head">
-              <p className="fm-eyebrow">CHOOSE YOUR PATH</p>
-              <h2 className="fm-h">Three ways to start with VV.</h2>
+              <p className="fm-eyebrow">{seatsOpen ? 'FOUNDING SEATS · CLOSING' : 'FOUNDING SEATS · CLOSED'}</p>
+              <h2 className="fm-h">
+                {seatsOpen
+                  ? <>Claim one of {seatsTotal} free-for-life seats.</>
+                  : <>All {seatsTotal} founding seats are gone.</>}
+              </h2>
             </div>
 
-            <div className="fm-cards">
-              {/* ── Card 1 — Founders Program (hero) with deck-of-cards FOMO ── */}
-              <div className="fm-hero-wrap">
-                {/* Deck behind: the $149/mo product they get free — layered, subtle,
-                    fans out on hover. Purely decorative. */}
-                <div className="fm-deck fm-deck-2" aria-hidden="true">
-                  <span className="fm-deck-tag">VV GROWTH AD ENGINE</span>
-                  <span className="fm-deck-price">${PRICE}<i>/mo value</i></span>
-                </div>
-                <div className="fm-deck fm-deck-1" aria-hidden="true">
-                  <span className="fm-deck-tag">THE $149/MO PRODUCT</span>
-                  <span className="fm-deck-price">yours <i>free for life</i></span>
-                </div>
+            {/* ── HERO — Founders Program: the obvious best deal, front & center ── */}
+            <div className={`fm-hero${seatsOpen ? '' : ' full'}`}>
+              <div className={`fm-seats${seatsOpen ? '' : ' full'}`}>
+                <span className="fm-seat-dot" />
+                {seatsOpen
+                  ? <span><b>{seatsLeft}</b> of {seatsTotal} seats left · the door is closing</span>
+                  : <span>All {seatsTotal} seats claimed</span>}
+              </div>
 
-                <div className={`fm-card fm-hero${seatsOpen ? '' : ' full'}`}>
-                  <div className="fm-flag">{seatsOpen ? 'FOUNDING CLIENTS · LIMITED' : 'SEATS CLOSED'}</div>
+              <div className="fm-hero-row">
+                <div className="fm-hero-main">
                   <div className="fm-name">VV Founders Program</div>
-                  <div className="fm-anchor"><s>${PRICE}/mo</s> · free for life</div>
-
-                  <div className={`fm-seats${seatsOpen ? '' : ' full'}`}>
-                    <span className="fm-seat-dot" />
-                    {seatsOpen
-                      ? <span><b>{seatsLeft}</b> of {seatsTotal} seats left</span>
-                      : <span>All {seatsTotal} seats claimed</span>}
-                  </div>
-
+                  <div className="fm-anchor"><s>${PRICE}/mo</s> · <b>free — for life</b></div>
                   <ul className="fm-list">
-                    <li>The full $149/mo engine — free, for as long as you&rsquo;re a client</li>
+                    <li>The full ${PRICE}/mo engine — free, for as long as you&rsquo;re a client</li>
                     <li>Direct line to the founder; your feedback shapes the product</li>
                     <li>Only {seatsTotal} seats, ever. When they&rsquo;re gone, the door closes.</li>
                   </ul>
-
-                  <div className="fm-actions">
-                    {seatsOpen ? (
-                      <>
-                        <a href={SIGNUP_FOUNDERS} className="fm-btn fm-btn-gold">Claim your seat →</a>
-                        <button className="fm-btn fm-btn-ghost" onClick={() => setBooking(true)}>Book a call →</button>
-                      </>
-                    ) : (
-                      <a href={SIGNUP_FOUNDERS} className="fm-btn fm-btn-gold">Join the waitlist →</a>
-                    )}
-                  </div>
+                </div>
+                <div className="fm-hero-cta">
+                  {seatsOpen ? (
+                    <>
+                      <a href={SIGNUP_FOUNDERS} className="fm-btn fm-btn-gold">Claim your seat →</a>
+                      <button className="fm-btn fm-btn-ghost" onClick={() => setBooking(true)}>Book a call →</button>
+                    </>
+                  ) : (
+                    <a href={SIGNUP_FOUNDERS} className="fm-btn fm-btn-gold">Join the waitlist →</a>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* ── Card 2 — Ad Vision Drop (free audit) ── */}
-              <div className="fm-card">
-                <div className="fm-flag ghost">FREE · NO LOGIN</div>
-                <div className="fm-name">VV Ad Vision Drop</div>
-                <div className="fm-anchor">60-second read-only Meta audit</div>
-                <ul className="fm-list">
-                  <li>Connect Meta read-only — we never touch your ads</li>
-                  <li>See your 3 biggest budget leaks in plain English</li>
-                  <li>No account, no card, no commitment</li>
-                </ul>
-                <div className="fm-actions">
-                  <a href={AUDIT} className="fm-btn fm-btn-gold">Start your audit →</a>
-                  <button className="fm-btn fm-btn-ghost" onClick={() => setBooking(true)}>Book a meeting →</button>
-                </div>
+            {/* ── CONSEQUENCE STRIP — $149 as the price once the free seats close.
+                 Deliberately de-emphasised: it exists to make the seats feel urgent,
+                 not to compete with them. ── */}
+            <div className="fm-conseq-arrow">↓ once the {seatsTotal} seats are gone, this is what it costs</div>
+            <div className="fm-consequence">
+              <div className="fm-conseq-text">
+                <span><b className="fm-price">${PRICE}</b><span className="fm-conseq-per">/mo</span></span>
+                <span className="fm-conseq-label">The regular price after the founding seats close — 7-day free trial, no card to start.</span>
               </div>
+              <a href={SIGNUP} className="fm-btn fm-btn-ghost fm-conseq-btn">Start 7-day trial →</a>
+            </div>
 
-              {/* ── Card 3 — Standard plan (the door that stays open) ── */}
-              <div className="fm-card">
-                <div className="fm-flag ghost">ALWAYS OPEN</div>
-                <div className="fm-name">VV Growth Ad Engine</div>
-                <div className="fm-anchor"><b className="fm-price">${PRICE}</b>/mo · 7-day free trial</div>
-                <ul className="fm-list">
-                  <li>Start anytime — the reliable path when founding seats close</li>
-                  <li>Full VAI intelligence on your real Meta account</li>
-                  <li>7-day free trial, no card to start, cancel anytime</li>
-                </ul>
-                <div className="fm-actions">
-                  <a href={SIGNUP} className="fm-btn fm-btn-gold">Start free trial →</a>
-                </div>
-              </div>
+            {/* ── TERTIARY — free audit, the no-commitment try-first ── */}
+            <div className="fm-tertiary">
+              Not ready to commit? <a href={AUDIT}>Start the free 60-second Ad Vision Drop →</a> — your 3 biggest leaks, no login.
             </div>
           </>
         )}
@@ -184,32 +160,20 @@ const CSS = `
   .fm-eyebrow { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 4px; color: #c9a84c; margin: 0 0 10px; }
   .fm-h { font-family: 'Cormorant Garamond', serif; font-weight: 300; font-style: italic; font-size: clamp(26px, 4vw, 38px); color: #faf8f5; margin: 0; }
 
-  .fm-cards { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 18px; align-items: start; }
+  /* HERO — Founders Program, one dominant full-width card (deck-of-cards dropped
+     for a clean, legible hierarchy). It's the obvious best deal. */
+  .fm-hero { background: linear-gradient(180deg, rgba(201,168,76,0.12), rgba(255,255,255,0.02)); border: 1px solid rgba(201,168,76,0.42);
+    border-radius: 16px; padding: 20px 26px 24px; box-shadow: 0 0 0 1px rgba(201,168,76,0.10), 0 26px 70px rgba(201,168,76,0.07); }
+  .fm-hero.full { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.02); box-shadow: none; }
+  .fm-hero-row { display: flex; gap: 30px; align-items: center; }
+  .fm-hero-main { flex: 1; min-width: 0; }
+  .fm-hero-cta { display: flex; flex-direction: column; justify-content: center; gap: 10px; width: 200px; flex-shrink: 0; }
 
-  /* Deck-of-cards FOMO — layered behind the hero card, fans on hover */
-  .fm-hero-wrap { position: relative; }
-  .fm-deck { position: absolute; left: 0; right: 0; top: 0; border-radius: 14px; border: 1px solid rgba(201,168,76,0.16);
-    background: linear-gradient(180deg, rgba(201,168,76,0.06), rgba(255,255,255,0.015)); padding: 16px 20px; min-height: 120px;
-    display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; transition: transform .4s cubic-bezier(.16,1,.3,1), opacity .4s ease; }
-  .fm-deck-tag { font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 2px; color: rgba(201,168,76,0.6); }
-  .fm-deck-price { font-family: 'Cormorant Garamond', serif; font-size: 22px; color: rgba(250,248,245,0.5); }
-  .fm-deck-price i { font-style: italic; font-size: 13px; color: rgba(250,248,245,0.32); }
-  .fm-deck-1 { transform: translateY(-10px) rotate(-2.2deg); opacity: .7; }
-  .fm-deck-2 { transform: translateY(-18px) rotate(2.6deg); opacity: .4; }
-  .fm-hero-wrap:hover .fm-deck-1 { transform: translate(-16px,-16px) rotate(-4.5deg); opacity: .85; }
-  .fm-hero-wrap:hover .fm-deck-2 { transform: translate(16px,-24px) rotate(5deg); opacity: .55; }
-
-  .fm-card { position: relative; background: rgba(255,255,255,0.022); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px;
-    padding: 22px 22px 24px; display: flex; flex-direction: column; min-height: 340px; }
-  .fm-hero { border-color: rgba(201,168,76,0.42); background: linear-gradient(180deg, rgba(201,168,76,0.10), rgba(255,255,255,0.02));
-    box-shadow: 0 0 0 1px rgba(201,168,76,0.12), 0 24px 60px rgba(201,168,76,0.06); }
-
-  .fm-flag { font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 2px; color: #c9a84c; margin-bottom: 12px; }
-  .fm-flag.ghost { color: rgba(250,248,245,0.4); }
-  .fm-name { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400; color: #faf8f5; line-height: 1.1; margin-bottom: 6px; }
-  .fm-anchor { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(250,248,245,0.5); margin-bottom: 14px; }
-  .fm-anchor s { color: rgba(250,248,245,0.35); }
-  .fm-price { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: #faf8f5; font-weight: 400; }
+  .fm-name { font-family: 'Cormorant Garamond', serif; font-size: 27px; font-weight: 400; color: #faf8f5; line-height: 1.1; margin-bottom: 6px; }
+  .fm-anchor { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(250,248,245,0.55); margin-bottom: 16px; }
+  .fm-anchor s { color: rgba(250,248,245,0.4); }
+  .fm-anchor b { color: #c9a84c; font-weight: 600; }
+  .fm-price { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: #faf8f5; font-weight: 400; }
 
   .fm-seats { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-family: 'DM Mono', monospace; font-size: 10px;
     color: #4ade80; background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.24); border-radius: 100px; padding: 5px 12px; margin-bottom: 14px; }
@@ -219,11 +183,25 @@ const CSS = `
   .fm-seats.full .fm-seat-dot { background: rgba(250,248,245,0.4); animation: none; }
   @keyframes fmPulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.45) } 70% { box-shadow: 0 0 0 7px rgba(74,222,128,0) } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0) } }
 
-  .fm-list { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
-  .fm-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.5; color: rgba(250,248,245,0.6); }
+  .fm-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
+  .fm-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.5; color: rgba(250,248,245,0.66); }
   .fm-list li::before { content: '·'; position: absolute; left: 3px; color: #c9a84c; font-weight: 700; }
 
-  .fm-actions { display: flex; flex-direction: column; gap: 9px; margin-top: auto; }
+  /* CONSEQUENCE STRIP — $149 as the "what it costs otherwise" reference. Muted,
+     subordinate; its job is FOMO, not to compete with the free seats. */
+  .fm-conseq-arrow { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 1px; color: rgba(250,248,245,0.4); margin: 18px 0 8px; padding-left: 2px; }
+  .fm-consequence { display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px 20px; }
+  .fm-conseq-text { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
+  .fm-conseq-per { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(250,248,245,0.5); margin-left: 2px; }
+  .fm-conseq-label { font-family: 'DM Sans', sans-serif; font-size: 12px; line-height: 1.5; color: rgba(250,248,245,0.5); }
+  .fm-conseq-btn { width: auto; white-space: nowrap; padding: 10px 16px; flex-shrink: 0; }
+
+  /* TERTIARY — free audit try-first */
+  .fm-tertiary { text-align: center; margin-top: 18px; font-family: 'DM Sans', sans-serif; font-size: 12px; color: rgba(250,248,245,0.45); line-height: 1.6; }
+  .fm-tertiary a { color: #c9a84c; text-decoration: none; border-bottom: 1px solid rgba(201,168,76,0.4); }
+  .fm-tertiary a:hover { border-bottom-color: #c9a84c; }
+
   .fm-btn { display: block; text-align: center; text-decoration: none; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600;
     letter-spacing: 1.4px; text-transform: uppercase; padding: 12px 16px; border-radius: 6px; cursor: pointer; transition: transform .12s, background .18s, border-color .18s; }
   .fm-btn:active { transform: scale(.98); }
@@ -239,10 +217,11 @@ const CSS = `
   .fm-cal-frame { width: 100%; height: 68vh; min-height: 520px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: #050509; }
   .fm-cal-frame iframe { display: block; width: 100%; height: 100%; }
 
-  @media (max-width: 880px) {
-    .fm-cards { grid-template-columns: 1fr; }
-    .fm-deck { display: none; } /* stacked layout: hide the fanned deck on mobile */
-    .fm-card { min-height: 0; }
+  @media (max-width: 720px) {
+    .fm-hero-row { flex-direction: column; align-items: stretch; gap: 18px; }
+    .fm-hero-cta { width: 100%; }
+    .fm-consequence { flex-direction: column; align-items: stretch; gap: 12px; }
+    .fm-conseq-btn { width: 100%; }
     .fm-sheet { padding: 18px 16px 24px; }
   }
 `

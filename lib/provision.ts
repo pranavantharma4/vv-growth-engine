@@ -15,6 +15,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * New accounts start on a 7-day no-card trial (subscription_status='trialing'),
  * so they reach the dashboard immediately; billing (Phase 3) converts them to
  * 'active' before the trial ends, or the entitlement gate sends them to /billing.
+ *
+ * The 7-day trial belongs ONLY to the $149/mo standard plan and is the default
+ * for every self-serve signup here. The Founders Program is free-for-life, NOT a
+ * trial: founding seats are granted manually via /api/admin/grant-founder (sets
+ * is_founder=true), which makes isEntitled() short-circuit true and bypass all
+ * trial/billing gates. A ?plan=founders signup therefore lands on a normal trial
+ * until its seat is granted — intentional (route-only), so the 4 free seats are
+ * protected from anyone self-claiming free-for-life. The free Ad Vision Drop
+ * audit is no-login and never creates a clients row, so it has no trial at all.
  */
 
 const TRIAL_DAYS = 7

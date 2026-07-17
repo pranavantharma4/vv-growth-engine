@@ -12,6 +12,7 @@ export type Client = {
   onboarding_complete: boolean | null
   onboarding_step: string | null
   tutorial_completed?: boolean | null
+  is_founder?: boolean | null
   invited_by: string | null
   notification_preferences?: {
     weekly: boolean

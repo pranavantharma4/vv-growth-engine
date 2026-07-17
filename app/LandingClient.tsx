@@ -159,6 +159,7 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
         <div className="nav-links">
           <a href="#pricing" className="nav-signin">PRICING</a>
           <a href="/login" className="nav-signin">SIGN IN</a>
+          <a href={START} className="nav-signup">SIGN UP</a>
           <a href={AUDIT} className="nav-cta">SEE YOUR AUDIT →</a>
         </div>
 
@@ -176,6 +177,7 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
       <div className={`menu${menuOpen ? ' open' : ''}`}>
         <button className="menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>×</button>
         <a href="/login" onClick={() => setMenuOpen(false)}>SIGN IN</a>
+        <a href={START} onClick={() => setMenuOpen(false)}>SIGN UP</a>
         <a href={AUDIT} onClick={() => setMenuOpen(false)}>SEE YOUR AUDIT →</a>
       </div>
 
@@ -364,67 +366,45 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
       {/* ───────────────────────── PRICING · FOUNDERS · TRIAL ───────────────────────── */}
       <section className="section pricing" id="pricing">
         <p className="s-eyebrow reveal">PRICING</p>
-        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>One plan — or one of four free seats.</h2>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Four seats, free for life — then $149/mo.</h2>
         <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>
-          Start free for 7 days — no card. Full VAI intelligence on your real Meta account from minute one.
+          Grab one of the four founding seats while they last. Once they&rsquo;re gone, it&rsquo;s $149/mo with a 7-day free trial.
         </p>
 
-        {/* The free trial, explained plainly */}
-        <div className="trial-strip reveal" style={{ transitionDelay: '220ms' }}>
-          <div className="trial-col">
-            <span className="trial-k">WHAT YOU GET</span>
-            <span className="trial-v">Every campaign read and ranked — making money, wasting it, or dead — plus the first fix, in plain English.</span>
+        {/* Founders is the hero — the obvious best deal. The $149 plan below is
+            the "what it costs otherwise" reference that makes the free seats
+            urgent, not an equal competing option. */}
+        <div className="pr-hero reveal" style={{ transitionDelay: '220ms' }}>
+          <div className={`seat-live${seatsOpen ? '' : ' full'}`}>
+            <span className="seat-dot" />
+            {seatsOpen ? <><b>{curLeft}</b>&nbsp;of&nbsp;{curTotal} seats left · the door is closing</> : <>All {curTotal} seats claimed</>}
           </div>
-          <div className="trial-col">
-            <span className="trial-k">HOW LONG</span>
-            <span className="trial-v">7 days, completely free. No credit card to start, nothing to cancel if you walk away.</span>
-          </div>
-          <div className="trial-col">
-            <span className="trial-k">AFTER THE TRIAL</span>
-            <span className="trial-v">$149/mo to keep it. Cancel anytime. You&rsquo;re never charged without adding a card yourself.</span>
+          <div className="pr-hero-row">
+            <div className="pr-hero-main">
+              <div className="plan-flag">FOUNDING CLIENTS · LIMITED</div>
+              <div className="plan-name">Founders Program</div>
+              <div className="plan-anchor"><s>$149/mo</s> · <b>free — for life</b></div>
+              <ul className="plan-list">
+                <li>Everything in the $149/mo plan — free, for as long as you&rsquo;re a client</li>
+                <li>Direct line to the founder; your feedback shapes the product</li>
+                <li>Only {curTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
+              </ul>
+            </div>
+            <div className="pr-hero-cta">
+              <a href="#pricing" onClick={openFounders} className="btn-gold big plan-cta">{seatsOpen ? 'Claim a founding seat →' : 'Join the waitlist →'}</a>
+              <span className="pr-hero-note">Free forever · read-only · no card</span>
+            </div>
           </div>
         </div>
 
-        {/* Founders positioned ABOVE the paid plan so the free seats read against the real price */}
-        <div className="plan-grid">
-          <div className="plan-card founders-card reveal">
-            <div className="plan-flag">FOUNDING CLIENTS · LIMITED</div>
-            <div className="plan-name">Founders Program</div>
-            <div className="plan-price">
-              <span className="plan-amt">Free</span>
-              <span className="plan-per">for life</span>
-            </div>
-            <div className="plan-anchor"><s>$149/mo</s> · $0 forever</div>
-            <div className={`seat-live${seatsOpen ? '' : ' full'}`}>
-              <span className="seat-dot" />
-              {seatsOpen ? <><b>{curLeft}</b>&nbsp;of&nbsp;{curTotal} seats left</> : <>All {curTotal} seats claimed</>}
-            </div>
-            <ul className="plan-list">
-              <li>Everything in the $149/mo plan — free, for as long as you&rsquo;re a client</li>
-              <li>Direct line to the founder; your feedback shapes the product</li>
-              <li>In exchange: honest feedback and a testimonial once you see results</li>
-              <li>Only {curTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
-            </ul>
-            {/* Founders CTA opens the three-path selection flow (claim / audit / book). */}
-            <a href="#pricing" onClick={openFounders} className="btn-gold big plan-cta">{seatsOpen ? 'Explore the Founders Program →' : 'Join the waitlist →'}</a>
+        {/* Consequence strip — the $149 reference, deliberately subordinate. */}
+        <div className="pr-conseq-arrow reveal">↓ once the {curTotal} seats are gone, this is what it costs</div>
+        <div className="pr-consequence reveal">
+          <div className="pr-conseq-text">
+            <span className="pr-conseq-price">$149<span>/mo</span></span>
+            <span className="pr-conseq-label">The regular price after the founding seats close — 7-day free trial, no card to start, cancel anytime.</span>
           </div>
-
-          <div className="plan-card reveal" style={{ transitionDelay: '120ms' }}>
-            <div className="plan-name">VV Growth Ad Engine</div>
-            <div className="plan-price">
-              <span className="plan-amt">$149</span>
-              <span className="plan-per">/mo</span>
-            </div>
-            <div className="plan-anchor">7-day free trial · no card to start</div>
-            <div className="seat-live plain">Single plan. No tiers, no add-ons.</div>
-            <ul className="plan-list">
-              <li>Read-only connection to your Meta ad account</li>
-              <li>Every campaign classified and ranked by health, daily</li>
-              <li>Plain-English diagnosis + the single highest-impact fix</li>
-              <li>Weekly intelligence brief and biggest-leak alerts</li>
-            </ul>
-            <a href={START} className="btn-ghost big plan-cta">Start your 7-day free trial →</a>
-          </div>
+          <a href={START} className="btn-ghost plan-cta pr-conseq-btn">Start 7-day trial →</a>
         </div>
 
         <p className="pricing-fomo reveal">
@@ -557,6 +537,9 @@ const CSS = `
 .lp .nav-links{display:flex;align-items:center;gap:24px;}
 .lp .nav-signin{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.5);transition:color .2s;}
 .lp .nav-signin:hover{color:#fff;}
+.lp .nav-signup{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:1px;color:rgba(255,255,255,.82);
+  border:1px solid rgba(255,255,255,.22);padding:8px 15px;border-radius:4px;transition:border-color .2s,color .2s;}
+.lp .nav-signup:hover{border-color:var(--gold);color:var(--gold);}
 .lp .nav-cta{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:1px;color:#050509;background:var(--gold);
   padding:9px 16px;border-radius:4px;transition:transform .2s,box-shadow .2s;}
 .lp .nav-cta:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,168,76,.3);}
@@ -740,6 +723,25 @@ const CSS = `
 .lp .plan-list li{position:relative;padding-left:20px;font-family:var(--sans);font-size:13px;line-height:1.55;color:rgba(255,255,255,.66);}
 .lp .plan-list li::before{content:'';position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
 .lp .plan-cta{width:100%;text-align:center;box-sizing:border-box;}
+
+/* Pricing hierarchy (Fix 4): Founders hero + subordinate $149 consequence strip */
+.lp .pr-hero{max-width:820px;margin:40px auto 0;text-align:left;background:linear-gradient(180deg,rgba(201,168,76,.11),rgba(201,168,76,.02));
+  border:1px solid rgba(201,168,76,.42);border-radius:16px;padding:22px 30px 26px;box-shadow:0 26px 70px rgba(201,168,76,.08);}
+.lp .pr-hero-row{display:flex;gap:32px;align-items:center;margin-top:14px;}
+.lp .pr-hero-main{flex:1;min-width:0;}
+.lp .pr-hero-cta{width:230px;flex-shrink:0;display:flex;flex-direction:column;align-items:stretch;gap:10px;}
+.lp .pr-hero-note{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.4);text-align:center;}
+.lp .pr-hero .plan-anchor b{color:var(--gold);}
+.lp .pr-hero .plan-list{margin:18px 0 0;}
+.lp .pr-conseq-arrow{max-width:820px;margin:14px auto 8px;text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.4);}
+.lp .pr-consequence{max-width:820px;margin:0 auto;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:22px;
+  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 22px;}
+.lp .pr-conseq-text{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;min-width:0;}
+.lp .pr-conseq-price{font-family:var(--serif);font-size:30px;color:rgba(255,255,255,.9);}
+.lp .pr-conseq-price span{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.5);margin-left:2px;}
+.lp .pr-conseq-label{font-family:var(--sans);font-size:12px;line-height:1.5;color:rgba(255,255,255,.5);}
+.lp .pr-conseq-btn{width:auto;white-space:nowrap;flex-shrink:0;padding:11px 20px;}
+
 .lp .pricing-fomo{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.4vw,22px);line-height:1.6;
   color:rgba(255,255,255,.8);max-width:640px;margin:44px auto 0;}
 
@@ -761,6 +763,10 @@ const CSS = `
   .lp .founders-pill{gap:8px;padding:7px 12px;flex-wrap:wrap;justify-content:center;max-width:100%;}
   .lp .fp-div{display:none;}
   .lp .plan-card{padding:26px 22px;}
+  .lp .pr-hero-row{flex-direction:column;align-items:stretch;gap:18px;}
+  .lp .pr-hero-cta{width:100%;}
+  .lp .pr-consequence{flex-direction:column;align-items:stretch;gap:14px;}
+  .lp .pr-conseq-btn{width:100%;text-align:center;}
   .lp .vai-card{padding:24px;}
   .lp .hero-ctas{flex-direction:column;width:100%;}
   .lp .hero-ctas .btn-gold,.lp .hero-ctas .btn-ghost{width:100%;}

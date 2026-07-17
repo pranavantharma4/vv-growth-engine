@@ -69,7 +69,11 @@ export default function VisionDropLanding() {
           <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: INK, letterSpacing: 2 }}>VV</span>
           <span style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Vanguard Visuals</span>
         </a>
-        <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2px', textTransform: 'uppercase' }}>Ad Vision Drop</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2px', textTransform: 'uppercase' }}>Ad Vision Drop</div>
+          <a href="/login" style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '1.5px', textTransform: 'uppercase', textDecoration: 'none' }}>Sign in</a>
+          <a href="/signup" style={{ fontFamily: MONO, fontSize: 8, fontWeight: 500, color: '#050509', background: GOLD, letterSpacing: '1.5px', textTransform: 'uppercase', textDecoration: 'none', padding: '7px 13px', borderRadius: 4 }}>Sign up</a>
+        </div>
       </header>
 
       {/* HERO */}

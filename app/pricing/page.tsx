@@ -68,7 +68,8 @@ export default function PricingPage() {
         </div>
 
         <div style={{ marginTop: 44, fontFamily: mono, fontSize: 8, color: ink3, letterSpacing: '1px' }}>
-          Already have an account? <a href="/login" style={{ color: ink2, textDecoration: 'underline' }}>Sign in</a>
+          <a href="/signup" style={{ color: gold, textDecoration: 'underline' }}>Sign up</a>
+          {' · '}Already have an account? <a href="/login" style={{ color: ink2, textDecoration: 'underline' }}>Sign in</a>
         </div>
       </div>
     </div>

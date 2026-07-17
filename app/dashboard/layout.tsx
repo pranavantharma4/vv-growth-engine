@@ -287,6 +287,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // who switches the dropdown to a client-role client also drops to client view.
   const activeRole = client ? roles.find(r => r.client_id === client.id)?.role : null
   const isAdmin = activeRole === 'admin'
+  // Founding Member treatment (Fix 5) — a distinct, premium status marker shown
+  // when the active client is a Founders Program member.
+  const isFounder = !!client?.is_founder
 
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
@@ -306,6 +309,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const I4    = 'rgba(245,243,239,0.11)'
   const G     = '#c9a84c'
   const INK   = 'rgba(245,243,239,0.95)'
+
+  // Reusable "Founding Member" pill — small, gold, premium; used in the sidebar
+  // account box(es). Editorial, not gaudy.
+  const foundingPill = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 7, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'linear-gradient(180deg,#d8b95e,#c9a84c)', padding: '3px 8px', borderRadius: 3, marginTop: 7, boxShadow: '0 2px 10px rgba(201,168,76,0.22)' }}>
+      <span style={{ fontSize: 8, lineHeight: 1 }}>◆</span> FOUNDING MEMBER
+    </span>
+  )
 
   const symVisible = portalPhase === 1
   const vvVisible  = portalPhase >= 2 && portalPhase <= 4
@@ -408,7 +419,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Client switcher — only show if user is admin somewhere with multiple clients */}
           {hasAnyAdminRole && clients.length > 0 && (
             <div className="client-sw" onClick={() => setDropdown(d => !d)}
-              style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
+              style={{ margin: '10px 10px 4px', background: isFounder ? 'rgba(201,168,76,0.09)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFounder ? 'rgba(201,168,76,0.32)' : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
@@ -423,6 +434,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <span style={{ color: 'rgba(250,248,245,0.28)', fontSize: 10, flexShrink: 0, marginLeft: 6, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
                 )}
               </div>
+              {isFounder && <div>{foundingPill}</div>}
               {dropdown && clients.length > 1 && (
                 <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                   {clients.map((c: Client) => (
@@ -437,12 +449,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
 
-          {/* Client name display for non-admin — no switcher */}
+          {/* Client name display for non-admin — no switcher. Founding Members
+              get a gold-tinted box + badge (Fix 5). */}
           {!hasAnyAdminRole && client && (
-            <div style={{ margin: '10px 10px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--sb-rule)', borderRadius: 6, padding: '9px 11px' }}>
+            <div style={{ margin: '10px 10px 4px', background: isFounder ? 'rgba(201,168,76,0.09)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFounder ? 'rgba(201,168,76,0.32)' : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Your Account</div>
               <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client.name}</div>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client.plan} · {client.status}</div>
+              {isFounder && foundingPill}
             </div>
           )}
 
@@ -494,8 +508,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* MAIN */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)', transition: 'background 0.35s ease' }}>
 
-          {/* Header */}
-          <header style={{ padding: '13px 24px', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
+          {/* Header — Founding Members get a subtle gold hairline accent on top (Fix 5) */}
+          <header style={{ padding: '13px 24px', borderTop: isFounder ? '2px solid var(--gold)' : 'none', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isFounder ? 'linear-gradient(180deg, rgba(201,168,76,0.05), var(--bg) 60%)' : 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 300, letterSpacing: 0.5, color: 'var(--ink)', transition: 'color 0.35s ease' }}>{title}</div>
               <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
