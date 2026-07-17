@@ -287,9 +287,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // who switches the dropdown to a client-role client also drops to client view.
   const activeRole = client ? roles.find(r => r.client_id === client.id)?.role : null
   const isAdmin = activeRole === 'admin'
-  // Founding Member treatment (Fix 5) — a distinct, premium status marker shown
-  // when the active client is a Founders Program member.
-  const isFounder = !!client?.is_founder
+  // Account-tier treatment (Fix 5) — a distinct, on-brand status marker per tier,
+  // all on the dark editorial base:
+  //   ARCHITECT (platinum / silver-white) — admin operators, highest tier
+  //   FOUNDING MEMBER (gold) — real Founders Program clients
+  //   SANDBOX (slate blue / muted cyan) — internal test account(s), not a tier
+  // Precedence: admin → architect; known sandbox id → sandbox (overrides its
+  // is_founder flag); any other is_founder client → founding.
+  const SANDBOX_CLIENT_IDS = ['dcf08b53-2abb-4b5d-935a-a7fb8e85502b'] // pranavantharma4 / Vngrd Visuals (test account)
+  type Tier = 'architect' | 'founding' | 'sandbox'
+  const TIERS: Record<Tier, { label: string; pill: string; pillText: string; accent: string; tint: string; border: string; headerTint: string; glow: string }> = {
+    architect: { label: 'ARCHITECT',       pill: 'linear-gradient(180deg,#f4f2ec,#cdccc6)', pillText: '#141310', accent: '#e6e3dc', tint: 'rgba(240,238,232,0.08)', border: 'rgba(240,238,232,0.34)', headerTint: 'rgba(240,238,232,0.05)', glow: 'rgba(240,238,232,0.22)' },
+    founding:  { label: 'FOUNDING MEMBER', pill: 'linear-gradient(180deg,#d8b95e,#c9a84c)', pillText: '#050509', accent: '#c9a84c', tint: 'rgba(201,168,76,0.09)',  border: 'rgba(201,168,76,0.32)',  headerTint: 'rgba(201,168,76,0.05)',  glow: 'rgba(201,168,76,0.22)' },
+    sandbox:   { label: 'SANDBOX',         pill: 'linear-gradient(180deg,#93b6d6,#5f8fb3)', pillText: '#04101c', accent: '#7fa8c9', tint: 'rgba(127,168,201,0.10)', border: 'rgba(127,168,201,0.34)', headerTint: 'rgba(127,168,201,0.06)', glow: 'rgba(127,168,201,0.20)' },
+  }
+  const tier: Tier | null =
+    isAdmin ? 'architect'
+    : (client && SANDBOX_CLIENT_IDS.includes(client.id)) ? 'sandbox'
+    : client?.is_founder ? 'founding'
+    : null
+  const tierCfg = tier ? TIERS[tier] : null
 
   const page = pathname.split('/').pop() || 'dashboard'
   const [title, sub] = TITLES[page] || ['', '']
@@ -310,11 +327,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const G     = '#c9a84c'
   const INK   = 'rgba(245,243,239,0.95)'
 
-  // Reusable "Founding Member" pill — small, gold, premium; used in the sidebar
-  // account box(es). Editorial, not gaudy.
-  const foundingPill = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 7, fontWeight: 600, letterSpacing: '1.5px', color: '#050509', background: 'linear-gradient(180deg,#d8b95e,#c9a84c)', padding: '3px 8px', borderRadius: 3, marginTop: 7, boxShadow: '0 2px 10px rgba(201,168,76,0.22)' }}>
-      <span style={{ fontSize: 8, lineHeight: 1 }}>◆</span> FOUNDING MEMBER
+  // Tier pill — small, premium; color/label driven by the active tier. Editorial,
+  // not gaudy. Renders null when the active account has no tier.
+  const tierPill = tierCfg && (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 7, fontWeight: 600, letterSpacing: '1.5px', color: tierCfg.pillText, background: tierCfg.pill, padding: '3px 8px', borderRadius: 3, marginTop: 7, boxShadow: `0 2px 10px ${tierCfg.glow}` }}>
+      <span style={{ fontSize: 8, lineHeight: 1 }}>◆</span> {tierCfg.label}
     </span>
   )
 
@@ -419,7 +436,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Client switcher — only show if user is admin somewhere with multiple clients */}
           {hasAnyAdminRole && clients.length > 0 && (
             <div className="client-sw" onClick={() => setDropdown(d => !d)}
-              style={{ margin: '10px 10px 4px', background: isFounder ? 'rgba(201,168,76,0.09)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFounder ? 'rgba(201,168,76,0.32)' : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
+              style={{ margin: '10px 10px 4px', background: tierCfg ? tierCfg.tint : 'rgba(255,255,255,0.04)', border: `1px solid ${tierCfg ? tierCfg.border : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px', cursor: 'pointer', position: 'relative' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Active Client</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
@@ -434,7 +451,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <span style={{ color: 'rgba(250,248,245,0.28)', fontSize: 10, flexShrink: 0, marginLeft: 6, display: 'inline-block', transition: 'transform 0.2s ease', transform: dropdown ? 'rotate(180deg)' : 'none' }}>▾</span>
                 )}
               </div>
-              {isFounder && <div>{foundingPill}</div>}
+              {tierPill && <div>{tierPill}</div>}
               {dropdown && clients.length > 1 && (
                 <div className="client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1816', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, marginTop: 4, zIndex: 100, overflow: 'hidden' }}>
                   {clients.map((c: Client) => (
@@ -449,14 +466,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
 
-          {/* Client name display for non-admin — no switcher. Founding Members
-              get a gold-tinted box + badge (Fix 5). */}
+          {/* Client name display for non-admin — no switcher. Tiered accounts get
+              a tinted box + colored badge (Fix 5). */}
           {!hasAnyAdminRole && client && (
-            <div style={{ margin: '10px 10px 4px', background: isFounder ? 'rgba(201,168,76,0.09)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isFounder ? 'rgba(201,168,76,0.32)' : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px' }}>
+            <div style={{ margin: '10px 10px 4px', background: tierCfg ? tierCfg.tint : 'rgba(255,255,255,0.04)', border: `1px solid ${tierCfg ? tierCfg.border : 'var(--sb-rule)'}`, borderRadius: 6, padding: '9px 11px' }}>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--sb-muted)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 4 }}>Your Account</div>
               <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 500, color: 'var(--sb-text)' }}>{client.name}</div>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--goldlt)', marginTop: 2, textTransform: 'capitalize' }}>{client.plan} · {client.status}</div>
-              {isFounder && foundingPill}
+              {tierPill}
             </div>
           )}
 
@@ -508,8 +525,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* MAIN */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)', transition: 'background 0.35s ease' }}>
 
-          {/* Header — Founding Members get a subtle gold hairline accent on top (Fix 5) */}
-          <header style={{ padding: '13px 24px', borderTop: isFounder ? '2px solid var(--gold)' : 'none', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isFounder ? 'linear-gradient(180deg, rgba(201,168,76,0.05), var(--bg) 60%)' : 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
+          {/* Header — tiered accounts get a subtle colored hairline + gradient (Fix 5) */}
+          <header style={{ padding: '13px 24px', borderTop: tierCfg ? `2px solid ${tierCfg.accent}` : 'none', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: tierCfg ? `linear-gradient(180deg, ${tierCfg.headerTint}, var(--bg) 60%)` : 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 300, letterSpacing: 0.5, color: 'var(--ink)', transition: 'color 0.35s ease' }}>{title}</div>
               <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
