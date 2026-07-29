@@ -12,12 +12,16 @@ import ProductShowcase from '@/components/ProductShowcase'
    Structure: hero → product showcase → the four states → a sample diagnosis →
    method → security → pricing → FAQ → founder line → closing band.
 
-   Exactly two calls to action, both "See your audit →" → /audit: one in the
-   hero, one in the closing band. Motion is fade-and-rise on scroll only.
+   The audit CTA ("See your audit →" → /audit) appears in the header, the hero,
+   and the closing band; the pricing section carries the founding-clients CTA.
+   Motion is concentrated: a living hero gradient, the product showcase loop,
+   and a one-time count-up on the four states — nothing else moves.
 ─────────────────────────────────────────────────────────────────────────── */
 
 const AUDIT = '/audit'
 const START = '/signup'
+// Series — the VV video channel. TODO(verify): confirm this is the live handle.
+const SERIES = 'https://www.youtube.com/@vngrdvisuals'
 
 const STRONG = '#4ade80'
 const WEAK = '#fbbf24'
@@ -25,16 +29,7 @@ const BLEEDING = '#fb923c'
 const DEAD = '#f87171'
 
 export default function LandingClient() {
-  const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-
-  // Navbar blur transition on scroll
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   // Scroll reveals — fade + rise, toggled via IntersectionObserver at 15%.
   // prefers-reduced-motion visitors get everything visible immediately.
@@ -60,6 +55,52 @@ export default function LandingClient() {
     return () => io.disconnect()
   }, [])
 
+  // Four-states count-up — figures ease from 0 to their value over 900ms when
+  // the band scrolls into view, staggered 100ms, once. Reduced-motion skips
+  // straight to the final value (server-rendered text stays put).
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const els = Array.from(document.querySelectorAll<HTMLElement>('.count'))
+    if (!els.length) return
+    const fmt = (el: HTMLElement, val: number) => {
+      const dec = Number(el.dataset.dec || 0)
+      const pre = el.dataset.prefix || ''
+      const suf = el.dataset.suffix || ''
+      const n = dec === 0 ? Math.round(val).toLocaleString('en-US') : val.toFixed(dec)
+      return pre + n + suf
+    }
+    els.forEach((el) => { el.textContent = fmt(el, 0) }) // reset to zero before reveal
+    const run = (el: HTMLElement, delay: number) => {
+      const to = parseFloat(el.dataset.to || '0')
+      const dur = 900
+      let t0: number | null = null
+      const step = (t: number) => {
+        if (t0 === null) t0 = t
+        const p = Math.min((t - t0 - delay) / dur, 1)
+        if (p < 0) { requestAnimationFrame(step); return }
+        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
+        el.textContent = fmt(el, to * e)
+        if (p < 1) requestAnimationFrame(step)
+        else el.textContent = fmt(el, to)
+      }
+      requestAnimationFrame(step)
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            const el = e.target as HTMLElement
+            run(el, Number(el.dataset.stagger || 0))
+            io.unobserve(el)
+          }
+        })
+      },
+      { threshold: 0.4 }
+    )
+    els.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [])
+
   // Lock body scroll while the mobile menu is open
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : ''
@@ -74,36 +115,43 @@ export default function LandingClient() {
       <div className="grain" aria-hidden />
 
       {/* ───────────────────────── NAVBAR ───────────────────────── */}
-      <nav className={`nav${scrolled ? ' scrolled' : ''}`}>
-        <a href="/" className="nav-brand" aria-label="VV Growth Ad Engine">
+      <nav className="nav">
+        <a href="/" className="nav-brand" aria-label="Vanguard Visuals">
           <span className="nav-vv">VV</span>
-          <span className="nav-sub">GROWTH AD ENGINE</span>
+          <span className="nav-sub">VANGUARD VISUALS</span>
         </a>
 
         <div className="nav-links">
-          <a href="#pricing" className="nav-link">PRICING</a>
-          <a href="/security" className="nav-link">SECURITY</a>
-          <a href="/login" className="nav-link">SIGN IN</a>
-          <a href={START} className="nav-link nav-strong">SIGN UP</a>
+          <a href="/methodology" className="nav-link">Method</a>
+          <a href="/security" className="nav-link">Security</a>
+          <a href="/#pricing" className="nav-link">Pricing</a>
+          <a href={SERIES} className="nav-link" target="_blank" rel="noopener noreferrer">Series</a>
+        </div>
+
+        <div className="nav-right">
+          <a href="/login" className="nav-link nav-signin">Sign in</a>
+          <a href={AUDIT} className="btn-gold btn-compact">See your audit →</a>
         </div>
 
         <button
-          className="nav-burger"
+          className="nav-menu-btn"
           aria-label="Open menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(true)}
         >
-          <span /><span /><span />
+          Menu
         </button>
       </nav>
 
       {/* Mobile full-screen overlay */}
       <div className={`menu${menuOpen ? ' open' : ''}`}>
-        <button className="menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>×</button>
-        <a href="#pricing" onClick={() => setMenuOpen(false)}>PRICING</a>
-        <a href="/security" onClick={() => setMenuOpen(false)}>SECURITY</a>
-        <a href="/login" onClick={() => setMenuOpen(false)}>SIGN IN</a>
-        <a href={START} onClick={() => setMenuOpen(false)}>SIGN UP</a>
+        <button className="menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>Close</button>
+        <a href="/methodology" onClick={() => setMenuOpen(false)}>Method</a>
+        <a href="/security" onClick={() => setMenuOpen(false)}>Security</a>
+        <a href="/#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+        <a href={SERIES} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Series</a>
+        <a href="/login" onClick={() => setMenuOpen(false)}>Sign in</a>
+        <a href={AUDIT} className="menu-cta" onClick={() => setMenuOpen(false)}>See your audit →</a>
       </div>
 
       {/* ───────────────────────── [1] HERO ───────────────────────── */}
@@ -111,7 +159,7 @@ export default function LandingClient() {
         <div className="hero-bg" aria-hidden />
         <div className="wrap hero-inner">
           <p className="eyebrow reveal">META ADS INTELLIGENCE</p>
-          <h1 className="h1 reveal" style={{ transitionDelay: '60ms' }}>
+          <h1 className="h1">
             <span className="h1-l1">Know what your money</span>
             <span className="h1-l2">is <span className="gold">doing.</span></span>
           </h1>
@@ -153,7 +201,16 @@ export default function LandingClient() {
             {STATES.map((s, i) => (
               <div className="state reveal" key={s.label} style={{ transitionDelay: `${i * 80}ms` }}>
                 <span className="state-label" style={{ color: s.color }}>{s.label}</span>
-                <span className="state-fig">{s.fig}</span>
+                <span
+                  className="state-fig count"
+                  data-to={s.to}
+                  data-dec={s.dec}
+                  data-prefix={s.prefix || ''}
+                  data-suffix={s.suffix || ''}
+                  data-stagger={i * 100}
+                >
+                  {s.fig}
+                </span>
                 <span className="state-desc">{s.desc}</span>
               </div>
             ))}
@@ -245,12 +302,22 @@ export default function LandingClient() {
       {/* ───────────────────────── [7] PRICING ───────────────────────── */}
       <section className="sec" id="pricing">
         <div className="wrap">
-          <p className="eyebrow reveal">PRICING</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>One plan. $149 a&nbsp;month.</h2>
-          <p className="lead reveal" style={{ transitionDelay: '120ms', marginTop: 24, maxWidth: '52ch' }}>
-            Seven-day free trial. No card to start. Cancel anytime. We&rsquo;re early
-            — founding clients work directly with the founder and shape what VV
+          <p className="eyebrow reveal">FOUNDING CLIENTS</p>
+          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Free, for the founders who shape&nbsp;it.</h2>
+          <p className="body reveal" style={{ transitionDelay: '120ms', marginTop: 24 }}>
+            We&rsquo;re taking a small number of founding clients — free, for as long
+            as they stay. In exchange: honest feedback and a testimonial when VV
+            earns one. Direct line to the founder. Your account shapes what VV
             becomes.
+          </p>
+
+          <div className="founders-panel reveal" style={{ transitionDelay: '160ms' }}>
+            <a href={START} className="btn-gold">Apply for a founding seat →</a>
+          </div>
+
+          <p className="pricing-after reveal" style={{ transitionDelay: '200ms' }}>
+            After the founding cohort: $149/mo. Seven-day free trial, no card to
+            start, cancel anytime.
           </p>
         </div>
       </section>
@@ -316,10 +383,10 @@ export default function LandingClient() {
 /* ───────────────────────── DATA ───────────────────────── */
 
 const STATES = [
-  { label: 'STRONG', color: STRONG, fig: '6.2×', desc: 'Making money. A candidate to scale.' },
-  { label: 'WEAK', color: WEAK, fig: '1.8×', desc: 'Profitable but underperforming. Fix before it slips.' },
-  { label: 'BLEEDING', color: BLEEDING, fig: '$3,200', desc: 'Actively losing money every month.' },
-  { label: 'DEAD', color: DEAD, fig: '0.0×', desc: 'Zero return. Move the budget.' },
+  { label: 'STRONG', color: STRONG, fig: '6.2×', to: 6.2, dec: 1, prefix: '', suffix: '×', desc: 'Making money. A candidate to scale.' },
+  { label: 'WEAK', color: WEAK, fig: '1.8×', to: 1.8, dec: 1, prefix: '', suffix: '×', desc: 'Profitable but underperforming. Fix before it slips.' },
+  { label: 'BLEEDING', color: BLEEDING, fig: '$3,200', to: 3200, dec: 0, prefix: '$', suffix: '', desc: 'Actively losing money every month.' },
+  { label: 'DEAD', color: DEAD, fig: '0.0×', to: 0, dec: 1, prefix: '', suffix: '', desc: 'Zero return. Move the budget.' },
 ]
 
 const METHOD = [
@@ -402,35 +469,52 @@ const CSS = `
 .lp .ln-gold{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:var(--gold);}
 .lp .ln{color:inherit;}
 
-/* ── NAVBAR ── */
-.lp .nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
-  padding:16px 32px;background:transparent;transition:background .4s ease,backdrop-filter .4s ease,border-color .4s ease;
-  border-bottom:1px solid transparent;}
-.lp .nav.scrolled{background:rgba(5,5,9,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--rule);}
+/* ── NAVBAR — sticky, always-on translucent bar ── */
+.lp .nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:24px;
+  padding:16px 32px;background:rgba(5,5,9,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--rule);}
 .lp .nav-brand{display:flex;align-items:baseline;gap:12px;}
-.lp .nav-vv{font-family:var(--serif);font-style:italic;font-weight:300;font-size:28px;line-height:1;color:var(--ink);}
-.lp .nav-sub{font-family:var(--mono);font-size:7px;letter-spacing:3px;color:var(--ink3);}
-.lp .nav-links{display:flex;align-items:center;gap:24px;}
-.lp .nav-link{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--ink3);transition:color .2s ease;}
+.lp .nav-vv{font-family:var(--serif);font-style:italic;font-weight:600;font-size:26px;line-height:1;color:var(--ink);letter-spacing:1px;}
+.lp .nav-sub{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--ink3);}
+.lp .nav-links{display:flex;align-items:center;gap:32px;}
+.lp .nav-link{font-family:var(--sans);font-weight:400;font-size:13px;color:var(--ink2);transition:color .2s ease;}
 .lp .nav-link:hover{color:var(--ink);}
-.lp .nav-strong{color:var(--ink2);}
-.lp .nav-burger{display:none;flex-direction:column;gap:4px;background:none;border:none;cursor:pointer;padding:12px;}
-.lp .nav-burger span{display:block;width:22px;height:1.5px;background:var(--ink);}
+.lp .nav-right{display:flex;align-items:center;gap:24px;}
+.lp .btn-compact{padding:12px 24px;font-size:10px;}
+.lp .nav-menu-btn{display:none;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--ink2);padding:8px;transition:color .2s ease;}
+.lp .nav-menu-btn:hover{color:var(--ink);}
 
-/* mobile menu */
+/* mobile menu — minimal full-screen overlay */
 .lp .menu{position:fixed;inset:0;z-index:60;background:rgba(5,5,9,.98);backdrop-filter:blur(8px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;
   opacity:0;pointer-events:none;transition:opacity .3s ease;}
 .lp .menu.open{opacity:1;pointer-events:auto;}
-.lp .menu a{font-family:var(--mono);font-size:14px;letter-spacing:2px;color:var(--ink2);padding:8px 12px;}
-.lp .menu-close{position:absolute;top:20px;right:28px;background:none;border:none;color:var(--ink3);font-size:32px;line-height:1;cursor:pointer;}
+.lp .menu a{font-family:var(--sans);font-weight:400;font-size:18px;color:var(--ink2);}
+.lp .menu a.menu-cta{color:var(--gold);}
+.lp .menu-close{position:absolute;top:24px;right:24px;background:none;border:none;color:var(--ink3);
+  font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;padding:8px;}
 
 /* ── [1] HERO ── */
 .lp .hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;}
-.lp .hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;
-  background:radial-gradient(90% 60% at 25% 35%,rgba(201,168,76,.06),transparent 60%);}
+/* living gradient — the bright spot drifts 25%→~32% x / 35%→~42% y and scales
+   1→1.08 over 18s, alternating, ease-in-out. Barely perceptible. */
+.lp .hero-bg{position:absolute;inset:-10%;z-index:0;pointer-events:none;transform-origin:25% 35%;
+  background:radial-gradient(90% 60% at 25% 35%,rgba(201,168,76,.06),transparent 60%);
+  animation:heroDrift 18s ease-in-out infinite alternate;}
+@keyframes heroDrift{from{transform:translate(0,0) scale(1);}to{transform:translate(4%,4%) scale(1.08);}}
 .lp .hero-inner{position:relative;z-index:1;padding-top:96px;padding-bottom:96px;}
 .lp .hero-fine{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:var(--ink3);margin:24px 0 0;}
+
+/* hero H1 lines stagger in once, on load (not scroll) */
+.lp .h1-l1,.lp .h1-l2{opacity:0;animation:heroRise .8s cubic-bezier(.16,1,.3,1) both;}
+.lp .h1-l1{animation-delay:.06s;}
+.lp .h1-l2{animation-delay:.18s;}
+@keyframes heroRise{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){
+  .lp .hero-bg{animation:none;}
+  .lp .h1-l1,.lp .h1-l2{opacity:1;animation:none;}
+}
 
 /* ── [2] SHOWCASE ── */
 .lp .showcase-cap{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--ink3);margin:24px 0 0;text-align:center;}
@@ -470,6 +554,12 @@ const CSS = `
 .lp .scope-note{font-family:var(--sans);font-weight:300;font-size:14px;line-height:1.6;color:var(--ink2);margin:16px 0 0;}
 .lp .scope-note-off{color:var(--ink3);}
 
+/* ── [7] PRICING — founding clients panel + quiet after-line ── */
+.lp .founders-panel{margin-top:48px;border:1px solid var(--goldborder);background:var(--goldpaper);border-radius:8px;
+  padding:40px;max-width:760px;display:flex;}
+.lp .pricing-after{font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:.01em;
+  color:var(--ink3);max-width:62ch;margin:24px 0 0;}
+
 /* ── FAQ ── */
 .lp .faq{margin-top:48px;max-width:820px;}
 .lp .faq-row{display:grid;grid-template-columns:1fr 1.4fr;gap:32px;padding:24px 0;border-top:1px solid var(--rule);}
@@ -507,7 +597,8 @@ const CSS = `
 @media (max-width:680px){
   .lp .nav{padding:16px 24px;}
   .lp .nav-links{display:none;}
-  .lp .nav-burger{display:flex;}
+  .lp .nav-right{display:none;}
+  .lp .nav-menu-btn{display:flex;}
   .lp .sec{padding:80px 0;}
   .lp .close{padding:80px 0;}
   .lp .founder{padding:64px 0;}
