@@ -448,6 +448,7 @@ export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seats
           <span className="foot-c">© 2026 Vanguard Visuals. All rights reserved.</span>
         </div>
         <div className="foot-r">
+          <a href="/security">Security</a>
           <a href="/privacy">Privacy Policy</a>
           <a href="/terms">Terms</a>
           <a href="/login">Sign In</a>
