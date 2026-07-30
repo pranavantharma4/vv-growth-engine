@@ -8,6 +8,35 @@ import { useState, useEffect, useRef } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context'
 
+// ── PDF Unicode font ──────────────────────────────────────────────────────
+// jsPDF's built-in Helvetica is a single-byte WinAnsi font. Any character it
+// can't map (e.g. → U+2192, ≥ U+2265) forces jsPDF to re-encode the whole
+// drawn string as UTF-16 — but a standard font has no Unicode CMap, so a viewer
+// renders those bytes as garbage ("→" becomes "!’") AND the entire wrapped line
+// they sit on turns unreadable, which looks like mid-sentence truncation.
+// Embedding a full-Unicode TTF (DejaVu Sans — permissively licensed) makes jsPDF
+// emit a proper CID font with real glyphs + a ToUnicode map, fixing both.
+// Fetched from /public on first export and cached (kept out of the JS bundle).
+let _unicodeFontB64: string | null = null
+async function loadUnicodeFontB64(): Promise<string> {
+  if (_unicodeFontB64) return _unicodeFontB64
+  const res = await fetch('/fonts/DejaVuSans.ttf')
+  if (!res.ok) throw new Error(`font fetch failed: ${res.status}`)
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  // chunked, to avoid a call-stack overflow on String.fromCharCode(...bigArray)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)))
+  }
+  _unicodeFontB64 = btoa(bin)
+  return _unicodeFontB64
+}
+async function registerUnicodeFont(doc: any) {
+  const b64 = await loadUnicodeFontB64()
+  doc.addFileToVFS('DejaVuSans.ttf', b64)
+  doc.addFont('DejaVuSans.ttf', 'DejaVuSans', 'normal')
+}
+
 type Campaign = {
   id: string
   campaign_name: string
@@ -125,6 +154,12 @@ export default function OptimizePage() {
     try {
       const { jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      // Register a full-Unicode font for all body text so → / ≥ etc. render
+      // (see note above loadUnicodeFontB64). If the asset can't be fetched we
+      // fall back to Helvetica so the export still succeeds (ASCII-safe).
+      let bodyFont = 'helvetica'
+      try { await registerUnicodeFont(doc); bodyFont = 'DejaVuSans' }
+      catch (e) { console.warn('[exportPDF] Unicode font unavailable, using Helvetica', e) }
       const W = 210, margin = 20
       let y = 24
 
@@ -135,7 +170,9 @@ export default function OptimizePage() {
       doc.setFont('helvetica', 'italic')
       doc.text('VV', margin, y)
       doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
+      // All subsequent text (labels, stats, blueprint body) uses the Unicode
+      // font — nothing calls setFont again in this function, so it inherits.
+      doc.setFont(bodyFont, 'normal')
       doc.setTextColor(180, 160, 120)
       doc.text('VAI · OPTIMIZATION BLUEPRINT', margin + 12, y - 4)
       doc.text(name, margin + 12, y + 2)

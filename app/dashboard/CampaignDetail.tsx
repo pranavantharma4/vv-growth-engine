@@ -175,3 +175,4 @@ export default function CampaignDetail({ c }: { c: any }) {
     </div>
   )
 }
+
