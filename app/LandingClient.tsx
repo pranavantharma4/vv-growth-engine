@@ -1,42 +1,65 @@
 'use client'
 import { useState, useEffect } from 'react'
-import ProductShowcase from '@/components/ProductShowcase'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import FoundersModal from './FoundersModal'
 
 /* ──────────────────────────────────────────────────────────────────────────
    vngrdvisuals.com — landing page.
-
-   One statement per viewport, editorial dark register. VV connects to your
-   Meta ad account (read-only) and tells you which campaigns make money, which
-   quietly waste it, and what to fix first — in plain English.
-
-   Structure: hero → product showcase → the four states → a sample diagnosis →
-   method → security → pricing → FAQ → founder line → closing band.
-
-   The audit CTA ("See your audit →" → /audit) appears in the header, the hero,
-   and the closing band; the pricing section carries the founding-clients CTA.
-   Motion is concentrated: a living hero gradient, the product showcase loop,
-   and a one-time count-up on the four states — nothing else moves.
+   One product. One promise: VV connects to your Meta ad account (read-only)
+   and tells you which campaigns are making money, which are wasting it, and
+   what to fix — in plain English.
+   Structure scans in 10 seconds: hero → what it does → an example report →
+   how it works → FAQ. Every CTA → the free audit. No agency framing, no
+   pricing page. The offer is the Founders Program.
 ─────────────────────────────────────────────────────────────────────────── */
 
 const AUDIT = '/audit'
 const START = '/signup'
-// Series — the VV video channel. TODO(verify): confirm this is the live handle.
-const SERIES = 'https://www.youtube.com/@vngrdvisuals'
 
-const STRONG = '#4ade80'
-const WEAK = '#fbbf24'
-const BLEEDING = '#fb923c'
-const DEAD = '#f87171'
-
-export default function LandingClient() {
+export default function LandingClient({ seatsLeft = 4, seatsTotal = 4 }: { seatsLeft?: number; seatsTotal?: number }) {
+  const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [foundersOpen, setFoundersOpen] = useState(false)
 
-  // Scroll reveals — fade + rise, toggled via IntersectionObserver at 15%.
-  // prefers-reduced-motion visitors get everything visible immediately.
+  // Live seat counter — seeded from the server-rendered props, then kept current
+  // via a Supabase realtime subscription so it ticks down the instant a seat is
+  // claimed while a visitor is on the page (founders_program is in the
+  // supabase_realtime publication).
+  const [liveSeats, setLiveSeats] = useState({ left: seatsLeft, total: seatsTotal })
   useEffect(() => {
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const supabase = createClientComponentClient()
+    const ch = supabase
+      .channel('founders_program_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'founders_program' }, (payload) => {
+        const row = payload.new as { seats_total?: number; seats_claimed?: number } | null
+        if (!row) return
+        const total = row.seats_total ?? seatsTotal
+        setLiveSeats({ left: Math.max(0, total - (row.seats_claimed ?? 0)), total })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const curLeft = liveSeats.left
+  const curTotal = liveSeats.total
+  const seatsOpen = curLeft > 0
+
+  // Open the Founders selection flow instead of following the anchor. The href
+  // stays as a no-JS fallback (scrolls to the pricing section).
+  const openFounders = (e: React.MouseEvent) => { e.preventDefault(); setFoundersOpen(true) }
+
+  // Navbar blur transition on scroll
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Scroll reveals — fade up, CSS-only transition toggled via IntersectionObserver
+  useEffect(() => {
     const els = Array.from(document.querySelectorAll('.reveal'))
-    if (reduced || !('IntersectionObserver' in window)) {
+    if (!('IntersectionObserver' in window)) {
       els.forEach((el) => el.classList.add('in'))
       return
     }
@@ -49,53 +72,7 @@ export default function LandingClient() {
           }
         })
       },
-      { threshold: 0.15 }
-    )
-    els.forEach((el) => io.observe(el))
-    return () => io.disconnect()
-  }, [])
-
-  // Four-states count-up — figures ease from 0 to their value over 900ms when
-  // the band scrolls into view, staggered 100ms, once. Reduced-motion skips
-  // straight to the final value (server-rendered text stays put).
-  useEffect(() => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-    const els = Array.from(document.querySelectorAll<HTMLElement>('.count'))
-    if (!els.length) return
-    const fmt = (el: HTMLElement, val: number) => {
-      const dec = Number(el.dataset.dec || 0)
-      const pre = el.dataset.prefix || ''
-      const suf = el.dataset.suffix || ''
-      const n = dec === 0 ? Math.round(val).toLocaleString('en-US') : val.toFixed(dec)
-      return pre + n + suf
-    }
-    els.forEach((el) => { el.textContent = fmt(el, 0) }) // reset to zero before reveal
-    const run = (el: HTMLElement, delay: number) => {
-      const to = parseFloat(el.dataset.to || '0')
-      const dur = 900
-      let t0: number | null = null
-      const step = (t: number) => {
-        if (t0 === null) t0 = t
-        const p = Math.min((t - t0 - delay) / dur, 1)
-        if (p < 0) { requestAnimationFrame(step); return }
-        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
-        el.textContent = fmt(el, to * e)
-        if (p < 1) requestAnimationFrame(step)
-        else el.textContent = fmt(el, to)
-      }
-      requestAnimationFrame(step)
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            const el = e.target as HTMLElement
-            run(el, Number(el.dataset.stagger || 0))
-            io.unobserve(el)
-          }
-        })
-      },
-      { threshold: 0.4 }
+      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
     )
     els.forEach((el) => io.observe(el))
     return () => io.disconnect()
@@ -107,509 +84,702 @@ export default function LandingClient() {
     return () => { document.body.style.overflow = '' }
   }, [menuOpen])
 
+  // Report card sequenced reveal — plays once the card enters view, like a live report
+  useEffect(() => {
+    const card = document.querySelector('.vai-card')
+    if (!card) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add('play')
+            io.unobserve(e.target)
+          }
+        })
+      },
+      { threshold: 0.2 }
+    )
+    io.observe(card)
+    return () => io.disconnect()
+  }, [])
+
+  // Count-up for stats — fast (<800ms), eased, fires when each number enters view
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const els = Array.from(document.querySelectorAll<HTMLElement>('.count'))
+    if (!els.length) return
+    const fmt = (el: HTMLElement, val: number) => {
+      const dec = Number(el.dataset.dec || 0)
+      const pre = el.dataset.prefix || ''
+      const suf = el.dataset.suffix || ''
+      const n = dec === 0
+        ? Math.round(val).toLocaleString('en-US')
+        : val.toFixed(dec)
+      return pre + n + suf
+    }
+    els.forEach((el) => { el.textContent = fmt(el, 0) }) // start at zero (hidden until revealed)
+    const run = (el: HTMLElement) => {
+      const to = parseFloat(el.dataset.to || '0')
+      const dur = 750
+      let t0: number | null = null
+      const step = (t: number) => {
+        if (t0 === null) t0 = t
+        const p = Math.min((t - t0) / dur, 1)
+        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
+        el.textContent = fmt(el, to * e)
+        if (p < 1) requestAnimationFrame(step)
+        else el.textContent = fmt(el, to)
+      }
+      requestAnimationFrame(step)
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) { run(e.target as HTMLElement); io.unobserve(e.target) }
+        })
+      },
+      { threshold: 0.4 }
+    )
+    els.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [])
+
   return (
     <div className="lp">
       <style>{CSS}</style>
 
-      {/* barely-visible grain, fixed behind everything */}
-      <div className="grain" aria-hidden />
-
       {/* ───────────────────────── NAVBAR ───────────────────────── */}
-      <nav className="nav">
-        <a href="/" className="nav-brand" aria-label="Vanguard Visuals">
+      <nav className={`nav${scrolled ? ' scrolled' : ''}`}>
+        <a href="/" className="nav-brand" aria-label="VV Growth Ad Engine">
           <span className="nav-vv">VV</span>
-          <span className="nav-sub">VANGUARD VISUALS</span>
+          <span className="nav-sub">GROWTH AD ENGINE</span>
         </a>
 
         <div className="nav-links">
-          <a href="/methodology" className="nav-link">Method</a>
-          <a href="/security" className="nav-link">Security</a>
-          <a href="/#pricing" className="nav-link">Pricing</a>
-          <a href={SERIES} className="nav-link" target="_blank" rel="noopener noreferrer">Series</a>
-        </div>
-
-        <div className="nav-right">
-          <a href="/login" className="nav-link nav-signin">Sign in</a>
-          <a href={AUDIT} className="btn-gold btn-compact">See your audit →</a>
+          <a href="#pricing" className="nav-signin">PRICING</a>
+          <a href="/methodology" className="nav-page">Method</a>
+          <a href="/security" className="nav-page">Security</a>
+          <a href="/login" className="nav-signin">SIGN IN</a>
+          <a href={START} className="nav-signup">SIGN UP</a>
+          <a href={AUDIT} className="nav-cta">SEE YOUR AUDIT →</a>
         </div>
 
         <button
-          className="nav-menu-btn"
+          className="nav-burger"
           aria-label="Open menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(true)}
         >
-          Menu
+          <span /><span /><span />
         </button>
       </nav>
 
       {/* Mobile full-screen overlay */}
       <div className={`menu${menuOpen ? ' open' : ''}`}>
-        <button className="menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>Close</button>
-        <a href="/methodology" onClick={() => setMenuOpen(false)}>Method</a>
-        <a href="/security" onClick={() => setMenuOpen(false)}>Security</a>
-        <a href="/#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
-        <a href={SERIES} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Series</a>
-        <a href="/login" onClick={() => setMenuOpen(false)}>Sign in</a>
-        <a href={AUDIT} className="menu-cta" onClick={() => setMenuOpen(false)}>See your audit →</a>
+        <button className="menu-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>×</button>
+        <a href="/login" onClick={() => setMenuOpen(false)}>SIGN IN</a>
+        <a href={START} onClick={() => setMenuOpen(false)}>SIGN UP</a>
+        <a href={AUDIT} onClick={() => setMenuOpen(false)}>SEE YOUR AUDIT →</a>
       </div>
 
-      {/* ───────────────────────── [1] HERO ───────────────────────── */}
+      {/* ───────────────────────── HERO — one promise, one CTA ───────────────────────── */}
       <header className="hero">
-        <div className="hero-bg" aria-hidden />
-        <div className="wrap hero-inner">
-          <p className="eyebrow reveal">META ADS INTELLIGENCE</p>
-          <h1 className="h1">
-            <span className="h1-l1">Know what your money</span>
-            <span className="h1-l2">is <span className="gold">doing.</span></span>
+        <div className="hero-bg" />
+        <div className="hero-inner">
+          {/* Founders Program — first thing a visitor sees, live seat counter */}
+          <a href="#pricing" onClick={openFounders} className="founders-pill reveal" aria-label="Founders Program — limited free-for-life seats">
+            <span className="fp-dot" />
+            <span className="fp-label">FOUNDERS PROGRAM</span>
+            <span className="fp-div" />
+            {seatsOpen ? (
+              <span className="fp-seats"><b>{curLeft}</b> of {curTotal} seats left · <span className="fp-free">free for life</span></span>
+            ) : (
+              <span className="fp-seats">All {curTotal} seats claimed · <span className="fp-free">join the waitlist</span></span>
+            )}
+            <span className="fp-arrow">→</span>
+          </a>
+
+          <p className="eyebrow reveal">META ADS INTELLIGENCE · POWERED BY VAI</p>
+
+          <h1 className="hero-h1 reveal" style={{ transitionDelay: '90ms' }}>
+            Know which campaigns<br />
+            make money — and which<br />
+            quietly waste&nbsp;it.
           </h1>
-          <p className="lead reveal" style={{ transitionDelay: '140ms', maxWidth: '52ch' }}>
-            VV connects to your Meta ad account — read-only — and tells you which
-            campaigns make money, which quietly waste it, and what to fix first.
-            In plain English.
+
+          <p className="hero-lede reveal" style={{ transitionDelay: '180ms' }}>
+            VV connects to your Meta ad account (read-only) and tells you which campaigns
+            are making money, which are wasting it, and what to fix — in plain English.
           </p>
-          <div className="reveal" style={{ transitionDelay: '220ms', marginTop: 48 }}>
-            <a href={AUDIT} className="btn-gold">See your audit →</a>
+
+          <div className="hero-ctas reveal" style={{ transitionDelay: '270ms' }}>
+            <a href={AUDIT} className="btn-gold big">SEE YOUR AUDIT →</a>
           </div>
-          <p className="hero-fine reveal" style={{ transitionDelay: '300ms' }}>FREE · 60 SECONDS · READ-ONLY</p>
+
+          <p className="hero-fine reveal" style={{ transitionDelay: '340ms' }}>Free · 60 seconds · Read-only. Nothing changes in your account.</p>
         </div>
       </header>
 
-      {/* ───────────────────────── [2] PRODUCT SHOWCASE ───────────────────────── */}
-      <section className="sec alt">
-        <div className="wrap">
-          <p className="eyebrow reveal">INSIDE THE PRODUCT</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms', maxWidth: '20ch' }}>
-            Your account, read in plain&nbsp;English.
-          </h2>
-          <div className="reveal" style={{ transitionDelay: '120ms', marginTop: 48 }}>
-            <ProductShowcase />
-          </div>
-          <p className="showcase-cap reveal" style={{ transitionDelay: '160ms' }}>
-            A live view of the VV dashboard. Illustrative — not a real account.
-          </p>
-        </div>
-      </section>
+      {/* ───────────────────────── WHAT IT DOES — Strong / Weak / Bleeding / Dead ───────────────────────── */}
+      <section className="section">
+        <p className="s-eyebrow reveal">WHAT IT DOES</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Every campaign,&nbsp;classified.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>VV reads your whole Meta account and sorts every campaign into one of four states — so you see your biggest leak first.</p>
 
-      {/* ───────────────────────── [3] THE FOUR STATES ───────────────────────── */}
-      <section className="sec">
-        <div className="wrap">
-          <p className="eyebrow reveal">THE CLASSIFICATION</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Every campaign, classified.</h2>
-
-          <div className="states">
-            {STATES.map((s, i) => (
-              <div className="state reveal" key={s.label} style={{ transitionDelay: `${i * 80}ms` }}>
-                <span className="state-label" style={{ color: s.color }}>{s.label}</span>
-                <span
-                  className="state-fig count"
-                  data-to={s.to}
-                  data-dec={s.dec}
-                  data-prefix={s.prefix || ''}
-                  data-suffix={s.suffix || ''}
-                  data-stagger={i * 100}
+        <div className="class-grid">
+          {CLASSES.map((c, i) => (
+            <div className="class-card reveal" key={c.label} style={{ transitionDelay: `${i * 100}ms` }}>
+              <div className="class-tag">
+                <span className="dot" style={{ background: c.color }} />
+                <span style={{ color: c.color }}>{c.label}</span>
+              </div>
+              {c.count ? (
+                <div
+                  className="class-stat count"
+                  style={{ color: c.color }}
+                  data-to={c.count.to}
+                  data-dec={c.count.dec}
+                  data-prefix={c.count.prefix || ''}
+                  data-suffix={c.count.suffix || ''}
                 >
-                  {s.fig}
-                </span>
-                <span className="state-desc">{s.desc}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ───────────────────────── [4] THE DIAGNOSIS ───────────────────────── */}
-      <section className="sec alt">
-        <div className="wrap">
-          <p className="eyebrow reveal">THE REPORT</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Plain English. One&nbsp;action.</h2>
-
-          <div className="doc reveal" style={{ transitionDelay: '120ms' }}>
-            <p className="doc-meta">SUMMER SALE — RETARGETING · <span style={{ color: BLEEDING }}>BLEEDING</span> · $3,200/MO · 1.8× ROAS</p>
-            <p className="doc-diag">
-              This retargeting campaign is burning budget against warm audiences
-              that have stopped responding. You&rsquo;re spending $178 to acquire a
-              customer on a $320 AOV — every conversion costs more than it returns.
-              Frequency has crossed 3.4× and CTR has slid over the last two weeks:
-              classic fatigue.
-            </p>
-            <p className="doc-action-label">IMMEDIATE ACTION</p>
-            <p className="doc-action">
-              Pause this campaign and reallocate the $3,200 to Lookalike — Past
-              Purchasers, your strongest performer at 4.8×.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ───────────────────────── [5] METHOD ───────────────────────── */}
-      <section className="sec">
-        <div className="wrap">
-          <p className="eyebrow reveal">METHOD</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Judgment, written as&nbsp;software.</h2>
-
-          <div className="cols">
-            {METHOD.map((m, i) => (
-              <div className="col reveal" key={m.title} style={{ transitionDelay: `${i * 80}ms` }}>
-                <h3 className="col-title">{m.title}</h3>
-                <p className="col-body">{m.body}</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="reveal" style={{ marginTop: 48 }}>
-            <a href="/methodology" className="ln-gold">READ THE FULL METHOD →</a>
-          </p>
-        </div>
-      </section>
-
-      {/* ───────────────────────── [6] TRUST ───────────────────────── */}
-      <section className="sec alt">
-        <div className="wrap">
-          <p className="eyebrow reveal">SECURITY</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>
-            VV cannot touch your campaigns. By&nbsp;design.
-          </h2>
-          <p className="body reveal" style={{ transitionDelay: '120ms', marginTop: 24 }}>
-            We request read-only access to your Meta ad account and nothing more.
-            We can see your data. We cannot spend, pause, edit, or launch anything
-            — because the access we hold makes it impossible.
-          </p>
-
-          <div className="scope reveal" style={{ transitionDelay: '160ms' }}>
-            <div className="scope-panel scope-req">
-              <p className="scope-cap">REQUESTED</p>
-              <p className="scope-mono">ads_read</p>
-              <p className="scope-note">Read campaign structure, spend, and performance metrics.</p>
+                  {c.stat}
+                </div>
+              ) : (
+                <div className="class-stat" style={{ color: c.color }}>{c.stat}</div>
+              )}
+              <div className="class-unit">{c.unit}</div>
+              <p className="class-desc">{c.desc}</p>
             </div>
-            <div className="scope-panel scope-never">
-              <p className="scope-cap scope-cap-off">NEVER REQUESTED</p>
-              {['ads_management', 'business_management', 'pages_manage_ads'].map((s) => (
-                <p className="scope-mono scope-mono-off" key={s}>
-                  <span aria-hidden style={{ textDecoration: 'none', marginRight: 10 }}>×</span>{s}
-                </p>
-              ))}
-              <p className="scope-note scope-note-off">Write access. Campaign creation. Budget changes.</p>
+          ))}
+        </div>
+
+        <div className="s-cta reveal"><a href={AUDIT} className="btn-ghost">SEE YOUR AUDIT →</a></div>
+      </section>
+
+      {/* ───────────────────────── THE REPORT — one example ───────────────────────── */}
+      <section className="section">
+        <p className="s-eyebrow reveal">THE REPORT</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>What you actually&nbsp;get.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>Plain English. Your biggest leak, your best performer, and the one thing to do next.</p>
+
+        <div className="vai-card reveal">
+          <div className="vai-top vstep" style={{ animationDelay: '150ms' }}>
+            <div className="vai-top-l">
+              <span className="vai-name">SUMMER SALE — RETARGETING</span>
+              <span className="badge badge-meta">META</span>
+              <span className="badge badge-bleed">BLEEDING</span>
+            </div>
+            <div className="vai-top-r">
+              <span className="vai-spend">$3,200/mo</span>
+              <span className="vai-roas">1.8× ROAS</span>
             </div>
           </div>
 
-          <p className="reveal" style={{ marginTop: 32 }}>
-            <a href="/security" className="ln-gold">READ THE SECURITY ARCHITECTURE →</a>
+          <div className="divider" />
+
+          <div className="vai-diag-row vstep" style={{ animationDelay: '450ms' }}>
+            <span className="vai-diag-label">VAI DIAGNOSIS</span>
+          </div>
+
+          <p className="vai-diag-body vstep" style={{ animationDelay: '620ms' }}>
+            This retargeting campaign is burning budget against warm audiences that have
+            stopped responding. You&rsquo;re spending $178 to acquire a customer on a $320
+            AOV — every conversion costs more than it returns. Frequency has crossed 3.4×
+            and CTR has slid over the last two weeks: classic fatigue.
           </p>
+
+          <p className="vai-action-label vstep" style={{ animationDelay: '900ms' }}>IMMEDIATE ACTION</p>
+          <p className="vai-action vstep" style={{ animationDelay: '1000ms' }}>Pause this campaign and reallocate the $3,200 to Lookalike — Past Purchasers, your strongest performer at 4.8×.</p>
+
+          <div className="vai-foot vstep" style={{ animationDelay: '1250ms' }}>
+            <span>This is the free audit — on your own account, in 60 seconds.</span>
+            <a href={AUDIT} className="gold-link">See yours →</a>
+          </div>
         </div>
       </section>
 
-      {/* ───────────────────────── [7] PRICING ───────────────────────── */}
-      <section className="sec" id="pricing">
-        <div className="wrap">
-          <p className="eyebrow reveal">FOUNDING CLIENTS</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Free, for the founders who shape&nbsp;it.</h2>
-          <p className="body reveal" style={{ transitionDelay: '120ms', marginTop: 24 }}>
-            We&rsquo;re taking a small number of founding clients — free, for as long
-            as they stay. In exchange: honest feedback and a testimonial when VV
-            earns one. Direct line to the founder. Your account shapes what VV
-            becomes.
-          </p>
+      {/* ───────────────────────── HOW IT WORKS — 3 steps ───────────────────────── */}
+      <section className="section">
+        <p className="s-eyebrow reveal">HOW IT WORKS</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Three steps. Sixty&nbsp;seconds.</h2>
 
-          <div className="founders-panel reveal" style={{ transitionDelay: '160ms' }}>
-            <a href={START} className="btn-gold">Apply for a founding seat →</a>
+        <div className="how">
+          {/* Row 1 — Connect */}
+          <div className="how-row reveal r-left">
+            <div className="how-visual">
+              <div className="mini-card connect-card">
+                <span className="meta-mark">f</span>
+                <button className="connect-btn">Connect Meta Ads</button>
+                <span className="connect-fine">Read-only access</span>
+              </div>
+            </div>
+            <div className="how-text">
+              <span className="how-num">01</span>
+              <h3 className="how-h">Connect your Meta account</h3>
+              <p className="how-p">One-click, read-only connection through Meta&rsquo;s official API. Nothing in your account ever changes — VV can only read.</p>
+            </div>
           </div>
 
-          <p className="pricing-after reveal" style={{ transitionDelay: '200ms' }}>
-            After the founding cohort: $149/mo. Seven-day free trial, no card to
-            start, cancel anytime.
-          </p>
+          {/* Row 2 — Analyze (reversed) */}
+          <div className="how-row reverse reveal r-right">
+            <div className="how-visual">
+              <div className="mini-card stack-card">
+                {ANALYZE_ROWS.map((r) => (
+                  <div className="stack-row" key={r.name}>
+                    <span className="stack-badge" style={{ color: r.color, borderColor: r.color }}>{r.tag}</span>
+                    <span className="stack-name">{r.name}</span>
+                    <span className="stack-spend">{r.spend}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="how-text">
+              <span className="how-num">02</span>
+              <h3 className="how-h">VV reads every campaign</h3>
+              <p className="how-p">It analyzes spend, ROAS, CTR, CPA and frequency across your account and ranks every campaign by health — making money, wasting it, or dead.</p>
+            </div>
+          </div>
+
+          {/* Row 3 — Report */}
+          <div className="how-row reveal r-left">
+            <div className="how-visual">
+              <div className="mini-card inbox-card">
+                <div className="inbox-top">
+                  <span className="inbox-dot" />
+                  <span className="inbox-from">Your VV Report</span>
+                  <span className="inbox-time">Ready</span>
+                </div>
+                <div className="inbox-subj">Your biggest budget leak this week</div>
+                <div className="inbox-prev">Summer Sale — Retargeting is costing you $1,440 more than it returns every month…</div>
+              </div>
+            </div>
+            <div className="how-text">
+              <span className="how-num">03</span>
+              <h3 className="how-h">Read your report</h3>
+              <p className="how-p">A plain-English breakdown of which campaigns make money, which waste it, and exactly what to fix first. No dashboard to learn, no jargon.</p>
+            </div>
+          </div>
         </div>
+
+        <div className="s-cta reveal"><a href={AUDIT} className="btn-gold">SEE YOUR AUDIT →</a></div>
+      </section>
+
+      {/* ───────────────────────── PRICING · FOUNDERS · TRIAL ───────────────────────── */}
+      <section className="section pricing" id="pricing">
+        <p className="s-eyebrow reveal">PRICING</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Four seats, free for life — then&nbsp;$149/mo.</h2>
+        <p className="s-sub reveal" style={{ transitionDelay: '160ms' }}>
+          Grab one of the four founding seats while they last. Once they&rsquo;re gone, it&rsquo;s $149/mo with a 7-day free trial.
+        </p>
+
+        {/* Founders is the hero — the obvious best deal. The $149 plan below is
+            the "what it costs otherwise" reference that makes the free seats
+            urgent, not an equal competing option. */}
+        <div className="pr-hero reveal" style={{ transitionDelay: '220ms' }}>
+          <div className={`seat-live${seatsOpen ? '' : ' full'}`}>
+            <span className="seat-dot" />
+            {seatsOpen ? <><b>{curLeft}</b>&nbsp;of&nbsp;{curTotal} seats left</> : <>All {curTotal} seats claimed</>}
+          </div>
+          <div className="pr-hero-row">
+            <div className="pr-hero-main">
+              <div className="plan-flag">FOUNDING CLIENTS · LIMITED</div>
+              <div className="plan-name">Founders Program</div>
+              <div className="plan-anchor"><b>free — for life</b></div>
+              <ul className="plan-list">
+                <li>Everything in the $149/mo plan — free, for as long as you&rsquo;re a client</li>
+                <li>Direct line to the founder; your feedback shapes the product</li>
+                <li>Only {curTotal} seats — ever. When they&rsquo;re gone, they&rsquo;re gone.</li>
+              </ul>
+            </div>
+            <div className="pr-hero-cta">
+              <a href="#pricing" onClick={openFounders} className="btn-gold big plan-cta">{seatsOpen ? 'Claim a founding seat →' : 'Join the waitlist →'}</a>
+              <span className="pr-hero-note">Free forever · read-only · no card</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Consequence strip — the $149 reference, deliberately subordinate. */}
+        <div className="pr-conseq-arrow reveal">↓ once the {curTotal} seats are gone, this is what it costs</div>
+        <div className="pr-consequence reveal">
+          <div className="pr-conseq-text">
+            <span className="pr-conseq-price">$149<span>/mo</span></span>
+            <span className="pr-conseq-label">The regular price after the founding seats close — 7-day free trial, no card to start, cancel anytime.</span>
+          </div>
+          <a href={START} className="btn-ghost plan-cta pr-conseq-btn">Start 7-day trial →</a>
+        </div>
+
+        <p className="pricing-fomo reveal">
+          One bleeding campaign usually wastes more in a single month than a whole year of VV.
+          The free trial shows you which one — before you pay a cent.
+        </p>
       </section>
 
       {/* ───────────────────────── FAQ ───────────────────────── */}
-      <section className="sec alt">
-        <div className="wrap">
-          <p className="eyebrow reveal">QUESTIONS</p>
-          <h2 className="h2 reveal" style={{ transitionDelay: '60ms' }}>Before you connect.</h2>
+      <section className="section">
+        <p className="s-eyebrow reveal">QUESTIONS</p>
+        <h2 className="s-head reveal" style={{ transitionDelay: '80ms' }}>Before you&nbsp;connect.</h2>
 
-          <div className="faq reveal" style={{ transitionDelay: '120ms' }}>
-            {FAQS.map((f) => (
-              <div className="faq-row" key={f.q}>
-                <h3 className="faq-q">{f.q}</h3>
-                <p className="faq-a">{f.a}</p>
-              </div>
-            ))}
-          </div>
+        <div className="faq-grid">
+          {FAQS.map((f, i) => (
+            <div className="faq-pair reveal" key={f.q} style={{ transitionDelay: `${(i % 2) * 80}ms` }}>
+              <h3 className="faq-q">{f.q}</h3>
+              <p className="faq-a">{f.a}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ───────────────────────── [8] FOUNDER LINE ───────────────────────── */}
-      <section className="sec founder">
-        <div className="wrap">
-          <p className="founder-line reveal">
-            VV is built by Vanguard Visuals. We read ad accounts for a living — VV
-            is that judgment, written as software.
-          </p>
-        </div>
-      </section>
-
-      {/* ───────────────────────── [9] CLOSING BAND ───────────────────────── */}
+      {/* ───────────────────────── CLOSE — one CTA ───────────────────────── */}
       <section className="close">
-        <div className="wrap close-inner">
-          <h2 className="h2 reveal">Some campaigns are making money. Some are&nbsp;not.</h2>
-          <p className="lead reveal" style={{ transitionDelay: '80ms', marginTop: 16 }}>Find out which — in 60 seconds.</p>
-          <div className="reveal" style={{ transitionDelay: '160ms', marginTop: 48 }}>
-            <a href={AUDIT} className="btn-gold">See your audit →</a>
-          </div>
-        </div>
+        <div className="close-glow" />
+        <h2 className="close-h reveal">
+          Some of your campaigns<br />
+          are making money.<br />
+          Some are&nbsp;not.
+        </h2>
+        <p className="close-sub reveal">Find out which — in plain English, in 60 seconds.</p>
+        <div className="s-cta reveal"><a href={AUDIT} className="btn-gold big">SEE YOUR AUDIT →</a></div>
+        <p className="close-fine reveal">Free · 60 seconds · Read-only. Nothing changes in your account.</p>
       </section>
 
       {/* ───────────────────────── FOOTER ───────────────────────── */}
       <footer className="footer">
-        <div className="wrap foot-inner">
-          <div className="foot-l">
-            <div className="foot-brand"><span className="nav-vv">VV</span> <span className="foot-ge">Growth Ad Engine</span></div>
-            <span className="foot-c">© 2026 Vanguard Visuals. All rights reserved.</span>
-          </div>
-          <div className="foot-r">
-            <a href="/methodology" className="ln">Method</a>
-            <a href="/security" className="ln">Security</a>
-            <a href="/privacy" className="ln">Privacy</a>
-            <a href="/terms" className="ln">Terms</a>
-            <a href="/login" className="ln">Sign In</a>
-          </div>
+        <div className="foot-l">
+          <div className="foot-brand"><span className="nav-vv">VV</span> <span className="foot-ge">Growth Ad Engine</span></div>
+          <span className="foot-c">© 2026 Vanguard Visuals. All rights reserved.</span>
+        </div>
+        <div className="foot-r">
+          <a href="/security">Security</a>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms</a>
+          <a href="/login">Sign In</a>
         </div>
       </footer>
+
+      {/* Founders Program selection flow (Fix 3) */}
+      <FoundersModal
+        open={foundersOpen}
+        onClose={() => setFoundersOpen(false)}
+        seatsLeft={curLeft}
+        seatsTotal={curTotal}
+      />
     </div>
   )
 }
 
 /* ───────────────────────── DATA ───────────────────────── */
 
-const STATES = [
-  { label: 'STRONG', color: STRONG, fig: '6.2×', to: 6.2, dec: 1, prefix: '', suffix: '×', desc: 'Making money. A candidate to scale.' },
-  { label: 'WEAK', color: WEAK, fig: '1.8×', to: 1.8, dec: 1, prefix: '', suffix: '×', desc: 'Profitable but underperforming. Fix before it slips.' },
-  { label: 'BLEEDING', color: BLEEDING, fig: '$3,200', to: 3200, dec: 0, prefix: '$', suffix: '', desc: 'Actively losing money every month.' },
-  { label: 'DEAD', color: DEAD, fig: '0.0×', to: 0, dec: 1, prefix: '', suffix: '', desc: 'Zero return. Move the budget.' },
-]
-
-const METHOD = [
-  {
-    title: 'Thresholds with reasons',
-    body: 'WEAK means 1.5×–2.5× ROAS: profitable but underperforming. Every classification has a defined boundary and a reason you can read.',
-  },
-  {
-    title: 'Signals, not symptoms',
-    body: 'Frequency is a receipt, not a warning. VV reads the leading indicators — CTR decay, spend concentration — before the dashboard admits there’s a problem.',
-  },
-  {
-    title: 'One action first',
-    body: 'Every report ends with the single highest-impact fix. Not twelve charts. The one thing.',
-  },
-]
-
 const FAQS = [
   { q: 'Will this touch my ad account?', a: 'Never. VV has read-only access — it cannot create, edit, pause, or delete anything. Nothing in your account changes.' },
   { q: 'Is my data safe?', a: 'Connection is through Meta’s official Marketing API with read-only permissions. We never store your password, and you can disconnect in one click anytime.' },
   { q: 'How is this different from my Meta dashboard?', a: 'Meta shows you numbers. VV tells you what they mean and exactly what to do — which campaigns make money, which waste it, and the first fix, in plain English.' },
   { q: 'Do I need to be technical?', a: 'No. If you can read an email, you can read your report. It arrives in plain language with the single most important action highlighted.' },
-  { q: 'What does it cost?', a: 'The audit is free. The product is $149/mo with a 7-day free trial — no card to start, cancel anytime.' },
+  { q: 'What does it cost?', a: 'The audit is free. The product is $149/mo with a 7-day free trial (no card to start). We’re also taking on a limited number of founding clients free-for-life in exchange for feedback and a testimonial — the live seat count is on the pricing section above.' },
+]
+
+type ClassCard = {
+  label: string; color: string; stat: string; unit: string; desc: string
+  count?: { to: number; dec: number; prefix?: string; suffix?: string }
+}
+
+const CLASSES: ClassCard[] = [
+  { label: 'STRONG',   color: '#4ade80', stat: '6.2×',   unit: 'ROAS',      desc: 'Making money. A scaling candidate — VV tells you how much more budget to put here.', count: { to: 6.2, dec: 1, suffix: '×' } },
+  { label: 'WEAK',     color: '#fbbf24', stat: '1.8×',   unit: 'ROAS',      desc: 'Underdelivering. Needs a fix before it starts bleeding — VV names the root cause.',   count: { to: 1.8, dec: 1, suffix: '×' } },
+  { label: 'BLEEDING', color: '#fb923c', stat: '$3,200', unit: 'WASTED/MO', desc: 'Actively losing money. VV flags it and tells you exactly what to change first.',        count: { to: 3200, dec: 0, prefix: '$' } },
+  { label: 'DEAD',     color: '#f87171', stat: '0.0×',   unit: 'ROAS',      desc: 'Zero return. Pause it — VV tells you where to move the budget instead.' },
+]
+
+const ANALYZE_ROWS = [
+  { tag: 'STRONG',   color: '#4ade80', name: 'Lookalike — Past Purchasers', spend: '$4,100' },
+  { tag: 'WEAK',     color: '#fbbf24', name: 'Broad — Interest Stack',       spend: '$2,300' },
+  { tag: 'BLEEDING', color: '#fb923c', name: 'Summer Sale — Retargeting',    spend: '$3,200' },
+  { tag: 'DEAD',     color: '#f87171', name: 'Spring Promo — Cold',          spend: '$900'   },
 ]
 
 /* ───────────────────────── STYLES ───────────────────────── */
 
 const CSS = `
-.lp{
+:root{
+  --bg:#050509; --gold:#c9a84c;
+  --ink:#faf8f5; --ink2:rgba(255,255,255,.5);
   --serif:'Cormorant Garamond',serif;
   --mono:'DM Mono',monospace;
   --sans:'DM Sans',sans-serif;
-  background:var(--bg);color:var(--ink);overflow-x:hidden;width:100%;position:relative;
 }
+.lp{background:#050509;color:#fff;overflow-x:hidden;width:100%;}
 .lp ::selection{background:rgba(201,168,76,.25);color:#faf8f5;}
 .lp a{color:inherit;text-decoration:none;}
 
-/* grain — inline SVG turbulence, 2% opacity, fixed behind content */
-.lp .grain{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.02;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size:128px 128px;}
-.lp > *:not(.grain){position:relative;z-index:1;}
-
-/* reveal — fade + rise, 600ms */
-.lp .reveal{opacity:0;transform:translateY(16px);
-  transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1);will-change:opacity,transform;}
+/* reveal — fade up + slight scale, premium ease-out */
+.lp .reveal{opacity:0;transform:translateY(24px) scale(.985);
+  transition:opacity .7s cubic-bezier(.22,.61,.36,1),transform .7s cubic-bezier(.22,.61,.36,1);will-change:opacity,transform;}
 .lp .reveal.in{opacity:1;transform:none;}
+/* slide variants for How-It-Works rows — alternating sides */
+.lp .reveal.r-left{transform:translateX(-44px);}
+.lp .reveal.r-right{transform:translateX(44px);}
+.lp .reveal.r-left.in,.lp .reveal.r-right.in{transform:none;}
+
+/* report card sequenced reveal — children generate in like a live report */
+.lp .vstep{opacity:0;}
+.lp .vai-card.play .vstep{animation:lpStep .55s cubic-bezier(.22,.61,.36,1) forwards;}
+@keyframes lpStep{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+
 @media (prefers-reduced-motion:reduce){
-  .lp .reveal{opacity:1;transform:none;transition:none;}
+  .lp .reveal,.lp .reveal.r-left,.lp .reveal.r-right{opacity:1;transform:none;transition:none;}
+  .lp .vstep{opacity:1;animation:none;}
 }
 
-/* ── layout ── */
-.lp .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
-.lp .sec{padding:140px 0;border-top:1px solid var(--rule);}
-.lp .sec.alt{background:var(--bg2);}
+/* ── NAVBAR ── */
+.lp .nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
+  padding:18px 32px;background:transparent;transition:background .4s ease,backdrop-filter .4s ease,border-color .4s ease;
+  border-bottom:1px solid transparent;}
+.lp .nav.scrolled{background:rgba(5,5,9,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06);}
+.lp .nav-brand{display:flex;align-items:baseline;gap:10px;}
+.lp .nav-vv{font-family:var(--serif);font-style:italic;font-weight:300;font-size:28px;line-height:1;color:#fff;}
+.lp .nav-sub{font-family:var(--mono);font-size:7px;letter-spacing:3px;color:rgba(255,255,255,.45);}
+.lp .nav-links{display:flex;align-items:center;gap:24px;}
+.lp .nav-signin{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.5);transition:color .2s;}
+.lp .nav-signin:hover{color:#fff;}
+.lp .nav-page{font-family:var(--sans);font-weight:400;font-size:13px;color:var(--ink2);transition:color .2s;}
+.lp .nav-page:hover{color:var(--ink);}
+.lp .nav-signup{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:1px;color:rgba(255,255,255,.82);
+  border:1px solid rgba(255,255,255,.22);padding:8px 15px;border-radius:4px;transition:border-color .2s,color .2s;}
+.lp .nav-signup:hover{border-color:var(--gold);color:var(--gold);}
+.lp .nav-cta{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:1px;color:#050509;background:var(--gold);
+  padding:9px 16px;border-radius:4px;transition:transform .2s,box-shadow .2s;}
+.lp .nav-cta:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,168,76,.3);}
+.lp .nav-burger{display:none;flex-direction:column;gap:5px;background:none;border:none;cursor:pointer;padding:11px;}
+.lp .nav-burger span{display:block;width:22px;height:1.5px;background:#fff;}
 
-/* ── type scale ── */
-.lp .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--ink3);margin:0;}
-.lp .h1{font-family:var(--serif);font-weight:300;font-size:clamp(52px,7vw,96px);line-height:1.02;letter-spacing:-.03em;
-  color:var(--ink);margin:24px 0 0;font-feature-settings:"liga" 1;display:flex;flex-direction:column;}
-.lp .h1-l2{margin-left:.5ch;}
-.lp .gold{color:var(--gold);}
-.lp .h2{font-family:var(--serif);font-weight:300;font-size:clamp(32px,4vw,48px);line-height:1.12;letter-spacing:-.02em;
-  color:var(--ink);margin:0;font-feature-settings:"liga" 1;}
-.lp .lead{font-family:var(--sans);font-weight:300;font-size:21px;line-height:1.6;color:var(--ink);margin:0;}
-.lp .body{font-family:var(--sans);font-weight:300;font-size:17px;line-height:1.75;letter-spacing:.01em;color:var(--ink2);max-width:62ch;margin:0;}
-
-/* ── buttons ── */
-.lp .btn-gold{display:inline-flex;align-items:center;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:1.2px;
-  text-transform:uppercase;color:#050509;background:var(--gold);padding:16px 32px;border-radius:4px;
-  transition:background .2s ease-out,transform .2s ease-out;}
-.lp .btn-gold:hover{background:#d4b55c;transform:translateY(-1px);}
-.lp .btn-gold:active{transform:translateY(0);}
-.lp .btn-gold:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
-
-/* ── text links — animated underline ── */
-.lp .ln,.lp .ln-gold{background-image:linear-gradient(var(--gold),var(--gold));background-repeat:no-repeat;
-  background-position:0 100%;background-size:0% 1px;transition:background-size .2s ease-out,color .2s ease-out;}
-.lp .ln:hover,.lp .ln-gold:hover{background-size:100% 1px;}
-.lp .ln-gold{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:var(--gold);}
-.lp .ln{color:inherit;}
-
-/* ── NAVBAR — sticky, always-on translucent bar ── */
-.lp .nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:24px;
-  padding:16px 32px;background:rgba(5,5,9,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--rule);}
-.lp .nav-brand{display:flex;align-items:baseline;gap:12px;}
-.lp .nav-vv{font-family:var(--serif);font-style:italic;font-weight:600;font-size:26px;line-height:1;color:var(--ink);letter-spacing:1px;}
-.lp .nav-sub{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--ink3);}
-.lp .nav-links{display:flex;align-items:center;gap:32px;}
-.lp .nav-link{font-family:var(--sans);font-weight:400;font-size:13px;color:var(--ink2);transition:color .2s ease;}
-.lp .nav-link:hover{color:var(--ink);}
-.lp .nav-right{display:flex;align-items:center;gap:24px;}
-.lp .btn-compact{padding:12px 24px;font-size:10px;}
-.lp .nav-menu-btn{display:none;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:11px;
-  letter-spacing:1.5px;text-transform:uppercase;color:var(--ink2);padding:8px;transition:color .2s ease;}
-.lp .nav-menu-btn:hover{color:var(--ink);}
-
-/* mobile menu — minimal full-screen overlay */
+/* mobile menu */
 .lp .menu{position:fixed;inset:0;z-index:60;background:rgba(5,5,9,.98);backdrop-filter:blur(8px);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px;
   opacity:0;pointer-events:none;transition:opacity .3s ease;}
 .lp .menu.open{opacity:1;pointer-events:auto;}
-.lp .menu a{font-family:var(--sans);font-weight:400;font-size:18px;color:var(--ink2);}
-.lp .menu a.menu-cta{color:var(--gold);}
-.lp .menu-close{position:absolute;top:24px;right:24px;background:none;border:none;color:var(--ink3);
-  font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;padding:8px;}
+.lp .menu a{font-family:var(--mono);font-size:14px;letter-spacing:2px;color:rgba(255,255,255,.85);padding:6px 12px;}
+.lp .menu a:last-of-type{color:var(--gold);}
+.lp .menu-close{position:absolute;top:20px;right:28px;background:none;border:none;color:rgba(255,255,255,.6);font-size:34px;line-height:1;cursor:pointer;}
 
-/* ── [1] HERO ── */
-.lp .hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;}
-/* living gradient — the bright spot drifts 25%→~32% x / 35%→~42% y and scales
-   1→1.08 over 18s, alternating, ease-in-out. Barely perceptible. */
-.lp .hero-bg{position:absolute;inset:-10%;z-index:0;pointer-events:none;transform-origin:25% 35%;
-  background:radial-gradient(90% 60% at 25% 35%,rgba(201,168,76,.06),transparent 60%);
-  animation:heroDrift 18s ease-in-out infinite alternate;}
-@keyframes heroDrift{from{transform:translate(0,0) scale(1);}to{transform:translate(4%,4%) scale(1.08);}}
-.lp .hero-inner{position:relative;z-index:1;padding-top:96px;padding-bottom:96px;}
-.lp .hero-fine{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:var(--ink3);margin:24px 0 0;}
+/* ── buttons ── */
+.lp .btn-gold{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:2px;
+  color:#050509;background:var(--gold);padding:14px 32px;border-radius:4px;transition:transform .2s,box-shadow .2s,background .2s;}
+.lp .btn-gold:hover{background:#d4b55c;transform:translateY(-2px);box-shadow:0 10px 30px rgba(201,168,76,.32);}
+.lp .btn-gold.big{font-size:11px;padding:17px 40px;}
+.lp .btn-ghost{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.6);
+  border:1px solid rgba(255,255,255,.2);padding:14px 32px;border-radius:4px;transition:border-color .2s,color .2s;}
+.lp .btn-ghost:hover{border-color:rgba(201,168,76,.5);color:#fff;}
 
-/* hero H1 lines stagger in once, on load (not scroll) */
-.lp .h1-l1,.lp .h1-l2{opacity:0;animation:heroRise .8s cubic-bezier(.16,1,.3,1) both;}
-.lp .h1-l1{animation-delay:.06s;}
-.lp .h1-l2{animation-delay:.18s;}
-@keyframes heroRise{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
-@media (prefers-reduced-motion:reduce){
-  .lp .hero-bg{animation:none;}
-  .lp .h1-l1,.lp .h1-l2{opacity:1;animation:none;}
-}
+/* ── HERO ── */
+.lp .hero{position:relative;min-height:92vh;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:140px 24px 100px;overflow:hidden;}
+.lp .hero-bg{position:absolute;inset:0;z-index:0;
+  background:linear-gradient(135deg,#050509 0%,#050509 55%,#0d0c10 100%);
+  background-size:200% 200%;animation:lpDrift 26s ease-in-out infinite;}
+@keyframes lpDrift{0%{background-position:0% 0%;}50%{background-position:100% 100%;}100%{background-position:0% 0%;}}
+.lp .hero-inner{position:relative;z-index:1;max-width:760px;width:100%;display:flex;flex-direction:column;align-items:center;}
+.lp .eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin:0 0 28px;}
+.lp .hero-h1{font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(40px,7.5vw,88px);line-height:1.05;letter-spacing:-.02em;color:#fff;margin:0 0 28px;}
+.lp .hero-lede{font-family:var(--sans);font-weight:400;font-size:15px;line-height:1.75;color:rgba(255,255,255,.62);max-width:560px;margin:0 0 40px;}
+.lp .hero-ctas{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;}
+.lp .hero-fine{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.3);margin:0;}
 
-/* ── [2] SHOWCASE ── */
-.lp .showcase-cap{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--ink3);margin:24px 0 0;text-align:center;}
+/* ── generic section ── */
+.lp .section{max-width:1100px;margin:0 auto;padding:110px 24px;text-align:center;}
+.lp .s-eyebrow{font-family:var(--mono);font-size:8px;letter-spacing:3px;color:var(--gold);margin:0 0 16px;}
+.lp .s-head{font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(32px,5vw,44px);color:#fff;margin:0 0 12px;}
+.lp .s-sub{font-family:var(--sans);font-size:14px;line-height:1.7;color:rgba(255,255,255,.5);max-width:520px;margin:0 auto;}
+.lp .s-cta{margin-top:40px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;}
 
-/* ── [3] FOUR STATES ── */
-.lp .states{display:grid;grid-template-columns:repeat(4,1fr);margin-top:64px;}
-.lp .state{display:flex;flex-direction:column;padding:0 32px;border-left:1px solid var(--rule);}
-.lp .state:first-child{padding-left:0;border-left:none;}
-.lp .state-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;height:16px;line-height:16px;}
-.lp .state-fig{font-family:var(--serif);font-weight:300;font-size:clamp(40px,5vw,62px);line-height:1;letter-spacing:-.02em;
-  color:var(--ink);margin:24px 0 16px;font-variant-numeric:lining-nums;}
-.lp .state-desc{font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.6;letter-spacing:.01em;color:var(--ink2);}
+/* ── classification grid (what it does) ── */
+.lp .class-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:48px;text-align:left;}
+.lp .class-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:8px;
+  padding:28px 24px;transition:transform .2s,border-color .2s;}
+.lp .class-card:hover{transform:scale(1.01);border-color:rgba(201,168,76,.2);}
+.lp .class-tag{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:8px;letter-spacing:1px;margin-bottom:16px;}
+.lp .dot{width:6px;height:6px;border-radius:50%;}
+.lp .class-stat{font-family:var(--serif);font-style:italic;font-size:32px;line-height:1;font-variant-numeric:lining-nums;}
+.lp .class-unit{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.4);margin-top:4px;margin-bottom:12px;}
+.lp .class-desc{font-family:var(--sans);font-size:13px;line-height:1.6;color:rgba(255,255,255,.55);margin:0;}
 
-/* ── [4] DIAGNOSIS ── */
-.lp .doc{margin-top:48px;border:1px solid var(--rule);border-radius:8px;padding:48px;max-width:760px;}
-.lp .doc-meta{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--ink3);margin:0 0 24px;}
-.lp .doc-diag{font-family:var(--serif);font-weight:300;font-size:19px;line-height:1.7;letter-spacing:-.01em;color:var(--ink);
-  margin:0;max-width:62ch;font-variant-numeric:lining-nums;}
-.lp .doc-action-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--gold);margin:32px 0 8px;}
-.lp .doc-action{font-family:var(--sans);font-weight:500;font-size:16px;line-height:1.6;color:var(--ink);margin:0;max-width:62ch;font-variant-numeric:lining-nums;}
+/* ── report card (the example) ── */
+.lp .vai-card{width:100%;max-width:720px;margin:48px auto 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;padding:36px;text-align:left;transition:transform .2s,border-color .2s;}
+.lp .vai-card:hover{transform:scale(1.01);border-color:rgba(201,168,76,.2);}
+.lp .vai-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+.lp .vai-top-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.lp .vai-name{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.5);}
+.lp .badge{font-family:var(--mono);font-size:7px;font-weight:500;letter-spacing:1px;padding:3px 7px;border-radius:3px;}
+.lp .badge-meta{background:rgba(24,119,242,.16);color:#4d94ff;border:1px solid rgba(24,119,242,.4);}
+.lp .badge-bleed{background:rgba(251,146,60,.14);color:#fb923c;border:1px solid rgba(251,146,60,.4);}
+.lp .vai-top-r{display:flex;align-items:baseline;gap:12px;}
+.lp .vai-spend{font-family:var(--mono);font-size:10px;color:#fff;font-variant-numeric:lining-nums;}
+.lp .vai-roas{font-family:var(--serif);font-size:20px;color:#fb923c;font-variant-numeric:lining-nums;}
+.lp .divider{height:1px;background:rgba(255,255,255,.08);margin:18px 0;}
+.lp .vai-diag-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.lp .vai-diag-label{font-family:var(--mono);font-size:7px;letter-spacing:3px;color:var(--gold);}
+.lp .vai-diag-body{font-family:var(--serif);font-size:15px;line-height:1.85;color:rgba(255,255,255,.82);margin:16px 0 20px;}
+.lp .vai-action-label{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--gold);margin:0 0 8px;}
+.lp .vai-action{font-family:var(--mono);font-size:12px;line-height:1.6;color:#fff;margin:0 0 20px;}
+.lp .vai-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  border-top:1px solid rgba(255,255,255,.06);padding-top:16px;margin-top:20px;}
+.lp .vai-foot span{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.3);}
+.lp .gold-link{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--gold);transition:opacity .2s;}
+.lp .gold-link:hover{opacity:.7;}
 
-/* ── [5] METHOD ── */
-.lp .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:64px;}
-.lp .col{padding-top:24px;border-top:1px solid var(--rule);}
-.lp .col-title{font-family:var(--sans);font-weight:500;font-size:16px;color:var(--ink);margin:0 0 12px;}
-.lp .col-body{font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:.01em;color:var(--ink2);margin:0;font-variant-numeric:lining-nums;}
+/* ── how it works ── */
+.lp .how{margin-top:64px;display:flex;flex-direction:column;gap:64px;}
+.lp .how-row{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;text-align:left;}
+.lp .how-row.reverse .how-visual{order:2;}
+.lp .how-row.reverse .how-text{order:1;}
+.lp .how-visual{display:flex;justify-content:center;}
+.lp .how-text{display:flex;flex-direction:column;}
+.lp .how-num{font-family:var(--serif);font-size:56px;letter-spacing:-.02em;color:var(--gold);line-height:1.05;margin-bottom:8px;font-variant-numeric:lining-nums;}
+.lp .how-h{font-family:var(--serif);font-style:italic;font-weight:300;font-size:28px;color:#fff;margin:0 0 14px;}
+.lp .how-p{font-family:var(--sans);font-size:14px;line-height:1.75;color:rgba(255,255,255,.55);margin:0;}
+.lp .mini-card{width:100%;max-width:380px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:28px;}
+.lp .connect-card{display:flex;flex-direction:column;align-items:center;gap:14px;}
+.lp .meta-mark{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:9px;
+  background:#1877f2;color:#fff;font-family:var(--serif);font-weight:600;font-size:22px;font-style:italic;}
+.lp .connect-btn{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:1px;color:#050509;background:var(--gold);
+  border:none;border-radius:6px;padding:13px 26px;cursor:default;}
+.lp .connect-fine{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.35);}
+.lp .stack-card{display:flex;flex-direction:column;gap:12px;}
+.lp .stack-row{display:flex;align-items:center;gap:10px;}
+.lp .stack-badge{font-family:var(--mono);font-size:7px;letter-spacing:1px;border:1px solid;border-radius:3px;padding:3px 6px;flex:0 0 auto;}
+.lp .stack-name{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.7);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lp .stack-spend{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.5);flex:0 0 auto;}
+.lp .inbox-card{display:flex;flex-direction:column;gap:10px;}
+.lp .inbox-top{display:flex;align-items:center;gap:8px;}
+.lp .inbox-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);}
+.lp .inbox-from{font-family:var(--mono);font-size:10px;color:#fff;flex:1;}
+.lp .inbox-time{font-family:var(--mono);font-size:8px;color:rgba(255,255,255,.35);}
+.lp .inbox-subj{font-family:var(--serif);font-style:italic;font-size:16px;color:rgba(255,255,255,.9);}
+.lp .inbox-prev{font-family:var(--sans);font-size:12px;line-height:1.6;color:rgba(255,255,255,.45);}
 
-/* ── [6] TRUST — scope pair ── */
-.lp .scope{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:48px;max-width:760px;}
-.lp .scope-panel{border-radius:8px;padding:24px 32px;}
-.lp .scope-req{border:1px solid var(--goldborder);background:var(--goldpaper);}
-.lp .scope-never{border:1px solid var(--rule);background:transparent;}
-.lp .scope-cap{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--ink2);margin:0 0 16px;}
-.lp .scope-cap-off{color:var(--ink3);}
-.lp .scope-mono{font-family:var(--mono);font-size:16px;color:var(--ink);margin:0;font-variant-numeric:lining-nums;}
-.lp .scope-mono-off{color:var(--ink3);text-decoration:line-through;text-decoration-color:var(--ink4);margin-bottom:8px;}
-.lp .scope-note{font-family:var(--sans);font-weight:300;font-size:14px;line-height:1.6;color:var(--ink2);margin:16px 0 0;}
-.lp .scope-note-off{color:var(--ink3);}
+/* ── faq ── */
+.lp .faq-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px 56px;margin-top:56px;text-align:left;}
+.lp .faq-q{font-family:var(--serif);font-style:italic;font-weight:300;font-size:18px;line-height:1.35;color:#fff;margin:0 0 10px;}
+.lp .faq-a{font-family:var(--sans);font-size:13px;line-height:1.7;color:rgba(255,255,255,.6);margin:0;}
 
-/* ── [7] PRICING — founding clients panel + quiet after-line ── */
-.lp .founders-panel{margin-top:48px;border:1px solid var(--goldborder);background:var(--goldpaper);border-radius:8px;
-  padding:40px;max-width:760px;display:flex;}
-.lp .pricing-after{font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:.01em;
-  color:var(--ink3);max-width:62ch;margin:24px 0 0;}
-
-/* ── FAQ ── */
-.lp .faq{margin-top:48px;max-width:820px;}
-.lp .faq-row{display:grid;grid-template-columns:1fr 1.4fr;gap:32px;padding:24px 0;border-top:1px solid var(--rule);}
-.lp .faq-row:last-child{border-bottom:1px solid var(--rule);}
-.lp .faq-q{font-family:var(--sans);font-weight:500;font-size:16px;line-height:1.4;color:var(--ink);margin:0;}
-.lp .faq-a{font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:.01em;color:var(--ink2);margin:0;}
-
-/* ── [8] FOUNDER LINE — quiet coda, no top rule ── */
-.lp .founder{border-top:none;padding:96px 0;text-align:center;}
-.lp .founder-line{font-family:var(--sans);font-weight:300;font-size:18px;line-height:1.7;color:var(--ink2);max-width:52ch;margin:0 auto;}
-
-/* ── [9] CLOSING BAND ── */
-.lp .close{background:var(--bg2);border-top:1px solid var(--rule);padding:120px 0;}
-.lp .close-inner{text-align:center;display:flex;flex-direction:column;align-items:center;}
-.lp .close .h2{max-width:22ch;}
+/* ── close ── */
+.lp .close{position:relative;padding:130px 24px;text-align:center;overflow:hidden;}
+.lp .close-glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:700px;height:700px;
+  background:radial-gradient(circle,rgba(201,168,76,.06),transparent 60%);pointer-events:none;}
+.lp .close-h{position:relative;font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(34px,6vw,64px);line-height:1.05;letter-spacing:-.02em;color:#fff;margin:0 0 28px;}
+.lp .close-sub{position:relative;font-family:var(--sans);font-size:15px;color:rgba(255,255,255,.5);margin:0 0 40px;}
+.lp .close-fine{position:relative;font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.25);margin:24px 0 0;}
 
 /* ── footer ── */
-.lp .footer{border-top:1px solid var(--rule);padding:48px 0 64px;}
-.lp .foot-inner{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;}
-.lp .foot-brand{display:flex;align-items:baseline;gap:8px;margin-bottom:12px;}
-.lp .foot-ge{font-family:var(--serif);font-style:italic;font-size:16px;color:var(--ink2);}
-.lp .foot-c{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--ink3);}
-.lp .foot-r{display:flex;gap:24px;flex-wrap:wrap;}
-.lp .foot-r a{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--ink3);}
+.lp .footer{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;
+  max-width:1100px;margin:0 auto;padding:48px 32px 64px;border-top:1px solid rgba(255,255,255,.06);}
+.lp .foot-brand{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;}
+.lp .foot-ge{font-family:var(--serif);font-style:italic;font-size:16px;color:rgba(255,255,255,.7);}
+.lp .foot-c{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.25);}
+.lp .foot-r{display:flex;gap:20px;flex-wrap:wrap;}
+.lp .foot-r a{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.25);transition:color .2s;}
+.lp .foot-r a:hover{color:rgba(255,255,255,.6);}
+
+/* ── founders pill (hero, above the fold) ── */
+.lp .founders-pill{display:inline-flex;align-items:center;gap:10px;margin:0 0 26px;padding:8px 14px;
+  background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.32);border-radius:100px;
+  transition:transform .2s,box-shadow .2s,border-color .2s;cursor:pointer;}
+.lp .founders-pill:hover{transform:translateY(-1px);border-color:rgba(201,168,76,.55);box-shadow:0 8px 26px rgba(201,168,76,.16);}
+.lp .fp-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.55);animation:fpPulse 2.4s ease-out infinite;}
+@keyframes fpPulse{0%{box-shadow:0 0 0 0 rgba(74,222,128,.5);}70%{box-shadow:0 0 0 7px rgba(74,222,128,0);}100%{box-shadow:0 0 0 0 rgba(74,222,128,0);}}
+.lp .fp-label{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--gold);}
+.lp .fp-div{width:1px;height:11px;background:rgba(201,168,76,.35);}
+.lp .fp-seats{font-family:var(--mono);font-size:8.5px;letter-spacing:.5px;color:rgba(255,255,255,.72);}
+.lp .fp-seats b{color:#fff;font-weight:600;}
+.lp .fp-free{color:var(--gold);}
+.lp .fp-arrow{font-family:var(--mono);font-size:10px;color:var(--gold);}
+
+/* ── pricing section ── */
+.lp .pricing{scroll-margin-top:80px;}
+.lp .trial-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin:48px auto 0;max-width:900px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;text-align:left;}
+.lp .trial-col{background:#080810;padding:24px 22px;display:flex;flex-direction:column;gap:9px;}
+.lp .trial-k{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--gold);}
+.lp .trial-v{font-family:var(--sans);font-size:13px;line-height:1.6;color:rgba(255,255,255,.66);}
+
+.lp .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;text-align:left;align-items:stretch;}
+.lp .plan-card{position:relative;display:flex;flex-direction:column;background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:32px 30px;transition:transform .2s,border-color .2s;}
+.lp .plan-card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.16);}
+.lp .founders-card{border-color:rgba(201,168,76,.4);background:linear-gradient(180deg,rgba(201,168,76,.07),rgba(201,168,76,.015));box-shadow:0 20px 60px rgba(201,168,76,.08);}
+.lp .founders-card:hover{border-color:rgba(201,168,76,.65);}
+.lp .plan-flag{display:inline-block;align-self:flex-start;font-family:var(--mono);font-size:7px;letter-spacing:2px;color:#050509;
+  background:var(--gold);padding:4px 9px;border-radius:3px;margin-bottom:16px;}
+.lp .plan-name{font-family:var(--serif);font-style:italic;font-weight:300;font-size:24px;color:#fff;margin-bottom:10px;}
+.lp .plan-price{display:flex;align-items:baseline;gap:8px;}
+.lp .plan-amt{font-family:var(--serif);font-size:46px;line-height:1.05;letter-spacing:-.02em;color:#fff;font-variant-numeric:lining-nums;}
+.lp .plan-per{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.5);letter-spacing:1px;}
+.lp .plan-anchor{font-family:var(--mono);font-size:9px;letter-spacing:.5px;color:rgba(255,255,255,.4);margin-top:8px;}
+.lp .plan-anchor s{color:rgba(255,255,255,.35);}
+.lp .seat-live{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:7px 12px;border-radius:6px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#fff;
+  background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.28);}
+.lp .seat-live b{color:#4ade80;}
+.lp .seat-live .seat-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:fpPulse 2.4s ease-out infinite;}
+.lp .seat-live.full{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.6);}
+.lp .seat-live.full .seat-dot{background:rgba(255,255,255,.4);animation:none;}
+.lp .seat-live.plain{background:transparent;border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.5);}
+.lp .seat-live.plain .seat-dot{background:rgba(255,255,255,.3);animation:none;}
+.lp .plan-list{list-style:none;padding:0;margin:22px 0 26px;display:flex;flex-direction:column;gap:11px;flex:1;}
+.lp .plan-list li{position:relative;padding-left:20px;font-family:var(--sans);font-size:13px;line-height:1.55;color:rgba(255,255,255,.66);}
+.lp .plan-list li::before{content:'';position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
+.lp .plan-cta{width:100%;text-align:center;box-sizing:border-box;}
+
+/* Pricing hierarchy (Fix 4): Founders hero + subordinate $149 consequence strip */
+.lp .pr-hero{max-width:820px;margin:40px auto 0;text-align:left;background:linear-gradient(180deg,rgba(201,168,76,.11),rgba(201,168,76,.02));
+  border:1px solid rgba(201,168,76,.42);border-radius:16px;padding:22px 30px 26px;box-shadow:0 26px 70px rgba(201,168,76,.08);}
+.lp .pr-hero-row{display:flex;gap:32px;align-items:center;margin-top:14px;}
+.lp .pr-hero-main{flex:1;min-width:0;}
+.lp .pr-hero-cta{width:230px;flex-shrink:0;display:flex;flex-direction:column;align-items:stretch;gap:10px;}
+.lp .pr-hero-note{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,255,255,.4);text-align:center;}
+.lp .pr-hero .plan-anchor b{color:var(--gold);}
+.lp .pr-hero .plan-list{margin:18px 0 0;}
+.lp .pr-conseq-arrow{max-width:820px;margin:14px auto 8px;text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.4);}
+.lp .pr-consequence{max-width:820px;margin:0 auto;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:22px;
+  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 22px;}
+.lp .pr-conseq-text{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;min-width:0;}
+.lp .pr-conseq-price{font-family:var(--serif);font-size:30px;color:rgba(255,255,255,.9);font-variant-numeric:lining-nums;}
+.lp .pr-conseq-price span{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.5);margin-left:2px;}
+.lp .pr-conseq-label{font-family:var(--sans);font-size:12px;line-height:1.5;color:rgba(255,255,255,.5);}
+.lp .pr-conseq-btn{width:auto;white-space:nowrap;flex-shrink:0;padding:11px 20px;}
+
+.lp .pricing-fomo{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.4vw,22px);line-height:1.6;
+  color:rgba(255,255,255,.8);max-width:640px;margin:44px auto 0;}
 
 /* ── responsive ── */
 @media (max-width:860px){
-  .lp .cols{grid-template-columns:1fr;gap:0;}
-  .lp .col{margin-top:24px;}
-  .lp .states{grid-template-columns:1fr 1fr;gap:48px 0;}
-  .lp .state{padding:0 24px;}
-  .lp .state:nth-child(odd){padding-left:0;border-left:none;}
-  .lp .state:nth-child(2){border-left:1px solid var(--rule);}
+  .lp .how-row{grid-template-columns:1fr;gap:28px;}
+  .lp .how-row.reverse .how-visual{order:0;}
+  .lp .how-row.reverse .how-text{order:0;}
+  .lp .trial-strip{grid-template-columns:1fr;}
+  .lp .plan-grid{grid-template-columns:1fr;}
 }
 @media (max-width:680px){
-  .lp .nav{padding:16px 24px;}
+  .lp .nav{padding:14px 20px;}
   .lp .nav-links{display:none;}
-  .lp .nav-right{display:none;}
-  .lp .nav-menu-btn{display:flex;}
-  .lp .sec{padding:80px 0;}
-  .lp .close{padding:80px 0;}
-  .lp .founder{padding:64px 0;}
-  .lp .scope{grid-template-columns:1fr;}
-  .lp .faq-row{grid-template-columns:1fr;gap:12px;}
-  .lp .doc{padding:32px 24px;}
-  .lp .foot-inner{flex-direction:column;}
-  .lp .btn-gold{width:100%;justify-content:center;}
+  .lp .nav-burger{display:flex;}
+  .lp .class-grid{grid-template-columns:1fr 1fr;}
+  .lp .faq-grid{grid-template-columns:1fr;gap:32px;margin-top:44px;}
+  .lp .section{padding:80px 20px;}
+  .lp .founders-pill{gap:8px;padding:7px 12px;flex-wrap:wrap;justify-content:center;max-width:100%;}
+  .lp .fp-div{display:none;}
+  .lp .plan-card{padding:26px 22px;}
+  .lp .pr-hero-row{flex-direction:column;align-items:stretch;gap:18px;}
+  .lp .pr-hero-cta{width:100%;}
+  .lp .pr-consequence{flex-direction:column;align-items:stretch;gap:14px;}
+  .lp .pr-conseq-btn{width:100%;text-align:center;}
+  .lp .vai-card{padding:24px;}
+  .lp .hero-ctas{flex-direction:column;width:100%;}
+  .lp .hero-ctas .btn-gold,.lp .hero-ctas .btn-ghost{width:100%;}
+  .lp .s-cta .btn-gold,.lp .s-cta .btn-ghost{width:100%;}
+  .lp .footer{flex-direction:column;}
 }
-@media (max-width:420px){
-  .lp .states{grid-template-columns:1fr;gap:48px 0;}
-  .lp .state,.lp .state:nth-child(2){padding:0;border-left:none;}
+@media (max-width:380px){
+  .lp .class-grid{grid-template-columns:1fr;}
 }
 `
