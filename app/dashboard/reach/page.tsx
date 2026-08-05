@@ -25,6 +25,15 @@ type DailyRow = { day: string; sent: number }
 type AbRow = { variant: string; sends: number; bounces: number; replies: number }
 type ReplyRow = { id: string; name: string | null; company: string | null; classification: string | null; step: number | null; subject: string | null; preview: string | null; at: string }
 type Campaign = { id: string; name: string; channel: string; status: string; daily_cap: number | null; sender_identity: string | null; lemlist_campaign_id: string | null }
+type RunToday = {
+  daily_cap: number
+  followups_due: number
+  t2_due: number
+  t3_due: number
+  t4_due: number
+  t1_queued: number
+  last_reconciled: string | null
+}
 type Summary = {
   pipeline: Pipeline
   sends: Sends
@@ -33,6 +42,7 @@ type Summary = {
   ab: AbRow[]
   replies: ReplyRow[]
   campaigns: Campaign[]
+  run_today: RunToday
   generated_at: string
 }
 
@@ -70,6 +80,44 @@ function whenShort(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+// ── RUN TODAY prompt blocks — pasted into Claude Code, never sent from here ──
+// Blocks 1 and 4 are fixed; 2 and 3 interpolate live counts pulled at page load.
+const RECONCILE_PROMPT = `Morning reconcile for VV outreach — do this before sending anything.
+
+1. Reconcile sends: compare the Gmail Sent folder for pranavan@vngrdvisuals.com against outreach.messages. Flag any email in Sent that isn't logged (missing status='sent' / sent_at / provider_message_id) and any row marked sent that isn't actually in Sent. Fix drift by the message row id, never lead_id.
+2. Check replies: scan inbound threads for anything new since the last run. Classify each as a HUMAN reply or an auto-responder. Log auto-responders as an inbound row with reply_classification='out_of_office' and KEEP the lead in sequence. Log human replies with the real classification and EXIT that lead from the sequence. When unsure, treat it as auto — do not exit.
+3. Report back: sends reconciled, drift fixed, new human replies, and the updated follow-ups-due count for today.`
+
+const EOD_PROMPT = `End-of-day VV outreach report. From outreach.messages, give me:
+- emails sent today, broken down by step (T1 / T2 / T3 / T4)
+- new replies today: human vs auto-responder, with classification
+- current bounce count
+- tomorrow's follow-ups due (cadence: T1→T2→T3→T4, +3 weekdays, skip weekends), by step
+- any lead that should have exited the sequence but didn't
+One short paragraph, then the numbers.`
+
+function followupPrompt(due: number, t2: number, t3: number, t4: number, cap: number): string {
+  const overflow = Math.max(0, due - cap)
+  const capLine = overflow > 0
+    ? `Daily cap is ${cap} total — send the ${cap} most overdue today; the remaining ${overflow} roll to tomorrow.`
+    : `All ${due} fit under today's ${cap}/day cap.`
+  return `Send the ${due} follow-ups due today (T2 ${t2}, T3 ${t3}, T4 ${t4}).
+Draft each as a threaded REPLY in the lead's original thread — never a new email. Keep their original brand reference, no link. Order by most overdue first (T2 → T3 → T4). Pace 6–7 min between sends. Send via Composio GMAIL_SEND_DRAFT.
+${capLine}
+Log each send: status='sent', sent_at=now(), provider_message_id='gmail:<sent id>', matched by the message row id. After the batch, verify 0 queued left for the ones you sent.`
+}
+
+function t1Prompt(toSend: number, capRoom: number, queued: number, due: number, cap: number): string {
+  if (capRoom === 0) {
+    return `No new T1s today — the ${cap}/day cap is already filled by the ${due} follow-ups due. Clear the follow-up backlog first; stage T1s again once there's room under the cap.`
+  }
+  if (queued === 0) {
+    return `No T1 drafts are queued right now. There's room for ${capRoom} new T1s under today's ${cap}/day cap after the ${due} follow-ups. Stage ${capRoom} fresh T1 drafts (A-tier first — verified email + live ad evidence) before sending.`
+  }
+  return `Send ${toSend} queued T1 drafts, A-tier first (verified email + live ad evidence), then B-tier. Pace 6–7 min between sends. Send via Composio GMAIL_SEND_DRAFT and log each (status='sent', sent_at=now(), provider_message_id, matched by message row id).
+This fills the ${cap}/day cap after the ${due} follow-ups due (room for ${capRoom}${queued < capRoom ? `, but only ${queued} are queued` : ''}). Skip any suppressed or already-replied lead.`
 }
 
 export default function ReachPage() {
@@ -139,6 +187,15 @@ export default function ReachPage() {
   const totalQueued = steps.reduce((a, r) => a + r.queued, 0)
   const dailyMax = Math.max(1, ...daily.map(d => d.sent))
 
+  // RUN TODAY — cap-aware daily job numbers (follow-ups take priority over T1s).
+  const rt = data?.run_today
+  const cap = rt?.daily_cap ?? 50
+  const followupsDue = rt?.followups_due ?? 0
+  const t1Queued = rt?.t1_queued ?? 0
+  const t1CapRoom = Math.max(0, cap - followupsDue)
+  const t1ToSend = Math.min(t1CapRoom, t1Queued)
+  const followupOverflow = Math.max(0, followupsDue - cap)
+
   return (
     <div className="rch">
       <style>{CSS}</style>
@@ -162,6 +219,31 @@ export default function ReachPage() {
 
       {data && (
         <>
+          {/* ── RUN TODAY: the day's job as copy-paste prompt blocks ── */}
+          <Section title="Run today" note="paste each into Claude Code · read-only">
+            <div className="run-status">
+              <span className="run-stat">
+                Last reconciled · <b>{rt?.last_reconciled ? whenShort(rt.last_reconciled) : '—'}</b>
+              </span>
+              <span className="run-sep">/</span>
+              <span className="run-stat">Cap <b>{cap}</b>/day</span>
+              <span className="run-sep">/</span>
+              <span className="run-stat"><b>{num(followupsDue)}</b> follow-ups due</span>
+              <span className="run-sep">/</span>
+              <span className="run-stat"><b>{num(t1ToSend)}</b> new T1s</span>
+              {followupOverflow > 0 && (
+                <span className="run-warn">{num(followupOverflow)} over cap → roll to tomorrow</span>
+              )}
+            </div>
+
+            <RunBlock n={1} label="Morning reconcile" note="always first" prompt={RECONCILE_PROMPT} />
+            <RunBlock n={2} label="Send follow-ups due" note={`${num(followupsDue)} due · T2 ${rt?.t2_due ?? 0} · T3 ${rt?.t3_due ?? 0} · T4 ${rt?.t4_due ?? 0}`}
+              prompt={followupPrompt(followupsDue, rt?.t2_due ?? 0, rt?.t3_due ?? 0, rt?.t4_due ?? 0, cap)} />
+            <RunBlock n={3} label="Send new T1s" note={t1CapRoom === 0 ? 'cap filled by follow-ups' : t1Queued === 0 ? 'none queued' : `${num(t1ToSend)} to send`}
+              prompt={t1Prompt(t1ToSend, t1CapRoom, t1Queued, followupsDue, cap)} />
+            <RunBlock n={4} label="End-of-day report" note="always last" prompt={EOD_PROMPT} />
+          </Section>
+
           {/* ── top-line KPIs ── */}
           <div className="kpis">
             <Kpi label="Emails sent" value={num(totalSent)} note={`${num(s?.total_outbound)} outbound total`} />
@@ -320,6 +402,34 @@ export default function ReachPage() {
   )
 }
 
+// ── RUN TODAY block — a labelled prompt with a copy button ──
+function RunBlock({ n, label, note, prompt }: { n: number; label: string; note?: string; prompt: string }) {
+  return (
+    <div className="run-block">
+      <div className="run-block-head">
+        <div className="run-block-id">
+          <span className="run-n">{n}</span>
+          <span className="run-block-label">{label}</span>
+          {note && <span className="run-block-note">{note}</span>}
+        </div>
+        <CopyBtn text={prompt} />
+      </div>
+      <pre className="run-pre">{prompt}</pre>
+    </div>
+  )
+}
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      className={`run-copy${copied ? ' copied' : ''}`}
+      onClick={async () => {
+        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch (_) { /* noop */ }
+      }}
+    >{copied ? 'COPIED ✓' : 'COPY'}</button>
+  )
+}
+
 // ── small presentational pieces ──
 function Kpi({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: 'good' | 'warn' }) {
   return (
@@ -386,6 +496,22 @@ const CSS = `
 .rch .kpi-warn .kpi-val{color:var(--gold);}
 .rch .kpi-label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink2);margin-top:9px;}
 .rch .kpi-note{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--ink3);margin-top:4px;}
+
+/* RUN TODAY */
+.rch .run-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--ink3);text-transform:uppercase;}
+.rch .run-status b{color:var(--ink);font-size:10px;}
+.rch .run-sep{color:var(--ink4,rgba(245,243,239,.18));}
+.rch .run-warn{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--red);border:1px solid rgba(248,113,113,.3);border-radius:4px;padding:3px 8px;text-transform:uppercase;}
+.rch .run-block{background:var(--bg2,rgba(255,255,255,.025));border:1px solid var(--rule);border-radius:12px;padding:16px 18px;margin-bottom:12px;}
+.rch .run-block-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.rch .run-block-id{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;min-width:0;}
+.rch .run-n{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:#050509;background:var(--gold);width:20px;height:20px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;align-self:center;}
+.rch .run-block-label{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:20px;color:var(--ink);}
+.rch .run-block-note{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);}
+.rch .run-copy{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--ink2);background:transparent;border:1px solid var(--rule2,rgba(255,255,255,.14));border-radius:5px;padding:8px 14px;cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap;flex-shrink:0;}
+.rch .run-copy:hover{color:var(--gold);border-color:var(--goldborder,rgba(201,168,76,.5));}
+.rch .run-copy.copied{color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.4));}
+.rch .run-pre{font-family:'DM Mono',monospace;font-size:12px;line-height:1.65;color:var(--ink2);background:var(--bg,rgba(0,0,0,.18));border:1px solid var(--rule);border-radius:8px;padding:14px 16px;margin:0;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}
 
 /* Sections */
 .rch .sec{margin-bottom:36px;}
