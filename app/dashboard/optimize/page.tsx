@@ -327,7 +327,7 @@ export default function OptimizePage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--rule)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--rule)' }}>
         <button onClick={() => setActiveTab('generate')}
           style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '1.5px', textTransform: 'uppercase', color: activeTab === 'generate' ? 'var(--gold)' : 'var(--ink3)', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeTab === 'generate' ? 'var(--gold)' : 'transparent'}`, padding: '10px 20px', cursor: 'pointer', marginBottom: -1, transition: 'color 0.15s ease' }}>
           Generate Blueprint
@@ -341,7 +341,7 @@ export default function OptimizePage() {
 
       {/* Generate tab */}
       {activeTab === 'generate' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+        <div className="vv-split" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
 
           {/* Campaign list */}
           <div>
@@ -516,10 +516,10 @@ export default function OptimizePage() {
             return (
               <div key={bp.id} style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', marginBottom: 10 }}>
                 <div onClick={() => setSelected(isOpen ? null : (bp as any))}
-                  style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 16 }}>
-                  <div style={{ flex: 1 }}>
+                  style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: 'var(--ink)', marginBottom: 4 }}>{bp.campaign_name}</div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[bp.platform] || '#444', padding: '1px 5px', borderRadius: 2 }}>{bp.platform.toUpperCase()}</span>
                       <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)' }}>{fmt(Number(bp.spend))}</span>
                       <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color: healthColor(bp.health) }}>{Number(bp.roas).toFixed(1)}x</span>

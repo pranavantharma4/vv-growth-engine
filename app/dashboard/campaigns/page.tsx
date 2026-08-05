@@ -60,6 +60,31 @@ export default function CampaignsPage() {
         .camp-extra-cols { opacity: 1; max-width: 200px; transition: opacity 0.3s ease, max-width 0.4s ease; }
         body.minimal .camp-summary { opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.3s ease, max-height 0.4s ease; }
         .camp-summary { opacity: 1; max-height: 80px; transition: opacity 0.3s ease, max-height 0.4s ease; }
+
+        /* Mobile: the 7-column table reflows into a stacked card per row.
+           The column header row is hidden and each metric cell prints its
+           own label via ::before so the numbers stay self-explanatory. */
+        @media (max-width: 767px) {
+          .camp-head { display: none !important; }
+          .camp-row {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+            align-items: start !important;
+            padding: 15px 16px !important;
+          }
+          .camp-row > .camp-name {
+            grid-column: 1 / -1 !important;
+            white-space: normal !important;
+            font-size: 14px !important;
+          }
+          .camp-row > .camp-cell::before {
+            content: attr(data-label);
+            display: block;
+            font-family: 'DM Mono', monospace;
+            font-size: 7px; letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--ink3); margin-bottom: 4px;
+          }
+        }
       `}</style>
 
       {/* Header */}
@@ -96,7 +121,7 @@ export default function CampaignsPage() {
       {/* Table */}
       <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ background: 'var(--bg2)', padding: '11px 18px', borderBottom: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8 }}>
+        <div className="camp-head" style={{ background: 'var(--bg2)', padding: '11px 18px', borderBottom: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8 }}>
           {['Campaign', 'Platform', 'Spend', 'Revenue', 'ROAS', 'Conv.', 'Health'].map(h => (
             <div key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>{h}</div>
           ))}
@@ -112,23 +137,23 @@ export default function CampaignsPage() {
           const open = expandedId === rid
           return (
           <div key={rid}>
-          <div onClick={() => setExpandedId(open ? null : rid)} style={{ padding: '12px 18px', borderBottom: i < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8, alignItems: 'center', transition: 'background 0.1s ease', cursor: 'pointer', background: open ? 'var(--bg2)' : 'transparent' }}
+          <div className="camp-row" onClick={() => setExpandedId(open ? null : rid)} style={{ padding: '12px 18px', borderBottom: i < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'grid', gridTemplateColumns: '2.5fr 80px 90px 90px 80px 80px 80px', gap: 8, alignItems: 'center', transition: 'background 0.1s ease', cursor: 'pointer', background: open ? 'var(--bg2)' : 'transparent' }}
             onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg2)'}
             onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = open ? 'var(--bg2)' : 'transparent'}
           >
-            <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="camp-name" style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.campaign_name}
             </div>
-            <div>
+            <div className="camp-cell" data-label="Platform">
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 700, color: '#fff', background: platColor[c.platform] || '#444', padding: '2px 6px', borderRadius: 2 }}>
                 {(platLabel[c.platform] || c.platform).toUpperCase()}
               </span>
             </div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink)' }}>{fmt(Number(c.spend))}</div>
-            <div className="camp-extra-cols" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{fmt(Number(c.revenue))}</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: Number(c.roas) >= 3 ? '#4ade80' : Number(c.roas) >= 1.5 ? '#fbbf24' : '#f87171' }}>{fmtRoas(Number(c.roas))}</div>
-            <div className="camp-extra-cols" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{Number(c.conversions).toLocaleString()}</div>
-            <div>
+            <div className="camp-cell" data-label="Spend" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink)' }}>{fmt(Number(c.spend))}</div>
+            <div className="camp-extra-cols camp-cell" data-label="Revenue" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{fmt(Number(c.revenue))}</div>
+            <div className="camp-cell" data-label="ROAS" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: Number(c.roas) >= 3 ? '#4ade80' : Number(c.roas) >= 1.5 ? '#fbbf24' : '#f87171' }}>{fmtRoas(Number(c.roas))}</div>
+            <div className="camp-extra-cols camp-cell" data-label="Conv." style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: 'var(--ink2)' }}>{Number(c.conversions).toLocaleString()}</div>
+            <div className="camp-cell" data-label="Health">
               <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase', color: healthColor(c.health), background: healthBg(c.health), border: `1px solid ${healthBorder(c.health)}`, padding: '2px 6px', borderRadius: 2 }}>
                 {c.health}
               </span>

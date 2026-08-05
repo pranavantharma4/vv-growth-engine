@@ -98,7 +98,7 @@ export default function ConnectionsSection() {
     <div>
       {/* Meta */}
       <div style={{ ...card, border: `1px solid ${connection && !isExpired ? 'rgba(74,222,128,0.2)' : isExpired ? 'rgba(248,113,113,0.2)' : 'var(--rule)'}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: connection && !isExpired ? 16 : 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: connection && !isExpired ? 16 : 0, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 34, height: 34, background: '#1877f2', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ color: '#fff', fontWeight: 700, fontSize: 15, fontFamily: 'Arial' }}>f</span>
@@ -119,7 +119,7 @@ export default function ConnectionsSection() {
         </div>
 
         {connection && !isExpired && (
-          <div style={{ background: 'var(--rule)', borderRadius: 4, padding: '12px 14px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="vv-grid-2" style={{ background: 'var(--rule)', borderRadius: 4, padding: '12px 14px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>Account</div>
               <div style={{ fontFamily: SANS, fontSize: 12, color: 'var(--ink)' }}>{connection.account_name || 'Connected'}</div>

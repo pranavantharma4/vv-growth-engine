@@ -106,3 +106,39 @@ div, span, p, button, a, header, aside, nav, main, footer {
 div[style*="grid"], div[style*="flex"] {
   transition-property: background-color, color, border-color;
 }
+
+/* ─── RESPONSIVE HELPERS ──────────────────────────────────────────────
+   Applied as extra classNames alongside the existing inline grid styles.
+   Desktop layout is unchanged; these only take effect below the
+   breakpoints. `!important` is required to override React's inline
+   grid-template-columns (the inline styles carry no !important, so a
+   media-query rule with !important wins). Breakpoints: mobile <768px,
+   tablet 768–1024px, desktop >1024px. */
+
+/* Sidebar/detail split layouts (e.g. 320px 1fr) collapse below desktop */
+@media (max-width: 1024px) {
+  .vv-split { grid-template-columns: 1fr !important; }
+}
+
+/* Tablet: dense card grids drop to two columns */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .vv-grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .vv-grid-3 { grid-template-columns: 1fr 1fr !important; }
+  .vv-grid-5 { grid-template-columns: repeat(3, 1fr) !important; }
+}
+
+/* Mobile: every multi-column grid stacks to a single column */
+@media (max-width: 767px) {
+  .vv-grid-2,
+  .vv-grid-3,
+  .vv-grid-4,
+  .vv-split { grid-template-columns: 1fr !important; }
+  .vv-grid-5 { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* Data tables: horizontal scroll keeps dense numeric rows readable when a
+   stacked-card reflow isn't used. Wrap the (overflow:hidden, fixed-column)
+   table in .vv-tablewrap and give the table container an inline minWidth
+   sized to its columns — the wrapper then scrolls within its own bounds
+   instead of clipping. minWidth is inert on desktop (container is wider). */
+.vv-tablewrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }

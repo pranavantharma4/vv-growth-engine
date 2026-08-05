@@ -133,7 +133,7 @@ export default function DashboardPage() {
       )}
 
       {/* STAT CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="vv-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total Spend',  value: fmt(totalSpend),                  sub: `${platStats.length} platform${platStats.length !== 1 ? 's' : ''} active`, accent: undefined },
           { label: 'Conversions', value: totalConversions.toLocaleString(), sub: 'Last 30 days', accent: undefined },
@@ -155,7 +155,7 @@ export default function DashboardPage() {
       </div>
 
       {/* PLATFORM + CAMPAIGN HEALTH */}
-      <div className="dash-plat-health" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="dash-plat-health vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
         {/* Platform performance */}
         <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
@@ -231,7 +231,7 @@ export default function DashboardPage() {
       </div>
 
       {/* INTELLIGENCE STRIP */}
-      <div className="dash-bottom" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div className="dash-bottom vv-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
 
         {/* Health breakdown */}
         <div data-tour="states" style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '18px 20px' }}>

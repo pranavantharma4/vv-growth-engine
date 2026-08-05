@@ -155,7 +155,7 @@ export default function CalculatorPage() {
         {/* Live results */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Derived stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+          <div className="vv-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
             {stat('ROAS', `${roas.toFixed(2)}x`, roas >= breakEven ? '#4ade80' : roas >= breakEven * 0.85 ? '#fbbf24' : '#f87171')}
             {stat('CPA', conv > 0 ? `$${cpa.toFixed(2)}` : '—')}
             {stat('CTR', impr > 0 ? `${ctr.toFixed(2)}%` : '—')}
@@ -233,7 +233,7 @@ export default function CalculatorPage() {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 14 }}>What-if · Media Buyer View</div>
 
               {/* Current profit + gap to STRONG / scaling */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Net Profit / Month</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: profit >= 0 ? '#4ade80' : '#f87171', lineHeight: 1 }}>

@@ -111,7 +111,7 @@ export default function SettingsPage() {
       {/* Account */}
       <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginBottom: 16 }}>
         <Section title="Account" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Company / Brand</div>
             <div style={{ ...fi, background: 'var(--rule)', border: '1px solid var(--rule)', color: 'var(--ink3)', borderRadius: 4, padding: '10px 13px' }}>{client?.name || '—'}</div>
@@ -125,7 +125,7 @@ export default function SettingsPage() {
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Login Email</div>
           <div style={{ ...fi, background: 'var(--rule)', border: '1px solid var(--rule)', color: 'var(--ink3)', borderRadius: 4, padding: '10px 13px' }}>{authEmail || '—'}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+        <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 5 }}>Contact Name</div>
             <input style={fi} placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)} />
@@ -218,7 +218,7 @@ export default function SettingsPage() {
       {/* Platform info */}
       <div className="settings-platform" style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '24px 26px', marginTop: 16 }}>
         <Section title="Platform" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div className="vv-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           {[
             { label: 'Version', value: 'v1.1' },
             { label: 'Status', value: client?.status || 'Active' },

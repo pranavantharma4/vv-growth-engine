@@ -73,7 +73,7 @@ export default function BriefPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+      <div className="vv-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
         {[
           { label: 'Total Spend',  value: fmt(Number(brief.total_spend)),   accent: undefined },
           { label: 'Wasted Spend', value: fmt(Number(brief.total_wasted)),  accent: '#f87171' },

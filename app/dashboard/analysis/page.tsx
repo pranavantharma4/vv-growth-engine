@@ -327,7 +327,7 @@ export default function AnalysisPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+      <div className="vv-split" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
 
         {/* Campaign list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

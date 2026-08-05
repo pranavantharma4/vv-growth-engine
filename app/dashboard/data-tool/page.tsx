@@ -110,9 +110,9 @@ export default function DataToolPage() {
 
       {selectedClient && (
         <div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
             <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16 }}>{selectedClient.name} — Campaigns</div>
-            <div style={{ display:'flex', gap:8 }}>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
               <button onClick={addCampaign}
                 style={{ padding:'7px 14px', borderRadius:5, border:'1px solid var(--rule2)', background:'transparent', cursor:'pointer', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)', letterSpacing:1 }}>
                 + Add Campaign
@@ -127,7 +127,8 @@ export default function DataToolPage() {
           {loading ? (
             <div style={{ padding:20, fontFamily:"'DM Mono',monospace", fontSize:9, color:'var(--ink3)' }}>Loading campaigns...</div>
           ) : (
-            <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:8, overflow:'hidden' }}>
+            <div className="vv-tablewrap">
+            <div style={{ background:'var(--card)', border:'1px solid var(--rule2)', borderRadius:8, overflow:'hidden', minWidth:700 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1.8fr 90px 100px 80px 80px 80px 30px', background:'var(--card2)', borderBottom:'2px solid var(--rule2)' }}>
                 {['Campaign','Platform','Spend/mo','ROAS','Conversions','Health',''].map(h => (
                   <div key={h} style={{ fontFamily:"'DM Mono',monospace", fontSize:7, color:'var(--ink3)', letterSpacing:2, textTransform:'uppercase', padding:'8px 10px' }}>{h}</div>
@@ -182,10 +183,11 @@ export default function DataToolPage() {
                 </div>
               ))}
             </div>
+            </div>
           )}
 
           {campaigns.length > 0 && (
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8, padding:'10px 0', fontFamily:"'DM Mono',monospace", fontSize:8, color:'var(--ink3)' }}>
               <span>Total spend: {fmtMoney(campaigns.reduce((s,c)=>s+Number(c.spend),0))}</span>
               <span>Blended ROAS: {(campaigns.reduce((s,c)=>s+Number(c.roas)*Number(c.spend),0)/Math.max(campaigns.reduce((s,c)=>s+Number(c.spend),0),1)).toFixed(1)}x</span>
               <span>{campaigns.length} campaigns</span>

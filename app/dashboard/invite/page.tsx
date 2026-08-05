@@ -235,7 +235,7 @@ export default function InvitePage() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Admin</div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Client Pipeline</div>
@@ -269,7 +269,7 @@ export default function InvitePage() {
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div><Label text="Contact Name *" /><input style={fi} placeholder="Jane Smith" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
               <div><Label text="Email *" /><input style={fi} type="email" placeholder="jane@brand.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><Label text={form.account_type === 'agency' ? 'Agency Name' : 'Company / Brand'} /><input style={fi} placeholder={form.account_type === 'agency' ? 'Smith Media Agency' : 'Brand Co.'} value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} /></div>
@@ -302,8 +302,9 @@ export default function InvitePage() {
         </div>
       )}
 
-      {/* Pipeline table */}
-      <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+      {/* Pipeline table — horizontal scroll on small screens */}
+      <div className="vv-tablewrap">
+      <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', minWidth: 700 }}>
         <div style={{ background: 'var(--bg2)', padding: '12px 20px', borderBottom: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '2fr 70px 80px 80px 80px 90px auto', gap: 10 }}>
           {['Client', 'Type', 'Plan', 'Spend', 'Status', 'Added', 'Actions'].map(h => (
             <div key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>{h}</div>
@@ -364,6 +365,7 @@ export default function InvitePage() {
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       {/* Stats */}

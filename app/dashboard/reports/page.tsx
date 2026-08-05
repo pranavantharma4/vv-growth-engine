@@ -141,7 +141,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Summary */}
-      <div className="reports-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+      <div className="reports-summary vv-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
         {[
           { label: 'Total Briefs',      value: briefs.length.toString() },
           { label: 'Avg Wasted/Week',   value: fmt(briefs.reduce((s, b) => s + Number(b.total_wasted), 0) / briefs.length) },
@@ -164,8 +164,8 @@ export default function ReportsPage() {
           return (
             <div key={brief.id} style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
               <div onClick={() => setExpanded(isOpen ? null : brief.id)}
-                style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 16 }}>
-                <div style={{ flex: 1 }}>
+                style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
                   <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 4 }}>
                     {i === 0 ? 'Latest Brief' : `Brief ${briefs.length - i}`}
                   </div>
@@ -189,7 +189,7 @@ export default function ReportsPage() {
               </div>
               {isOpen && (
                 <div className="report-expanded" style={{ padding: '0 20px 20px', borderTop: '1px solid var(--rule)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, margin: '16px 0' }}>
+                  <div className="vv-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, margin: '16px 0' }}>
                     {[
                       { label: 'Total Spend', value: fmt(Number(brief.total_spend)), accent: undefined },
                       { label: 'Wasted', value: fmt(Number(brief.total_wasted)), accent: '#f87171' },

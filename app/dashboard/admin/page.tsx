@@ -77,7 +77,7 @@ export default function ClientHealthPage() {
       </div>
 
       {/* Summary stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="vv-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total Clients',   value: clients.length.toString(), accent: undefined },
           { label: 'Total Campaigns', value: totalCampaigns.toString(), accent: undefined },
@@ -97,8 +97,9 @@ export default function ClientHealthPage() {
           style={{ width: '100%', maxWidth: 320, padding: '9px 13px', borderRadius: 4, fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
       </div>
 
-      {/* Table */}
-      <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+      {/* Table — horizontal scroll on small screens keeps the 9 columns readable */}
+      <div className="vv-tablewrap">
+      <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', minWidth: 840 }}>
         <div style={{ background: 'var(--bg2)', padding: '11px 18px', borderBottom: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '2fr 80px 90px 90px 80px 60px 60px 70px 70px', gap: 8 }}>
           {['Client', 'Plan', 'Spend', 'Wasted', 'ROAS', '✓', '~', '⚠', '✕'].map(h => (
             <div key={h} style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>{h}</div>
@@ -149,6 +150,7 @@ export default function ClientHealthPage() {
             </div>
           )
         })}
+      </div>
       </div>
 
       {/* Alert */}

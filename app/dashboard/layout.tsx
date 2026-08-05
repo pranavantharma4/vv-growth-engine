@@ -68,6 +68,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [contentKey, setContentKey] = useState(pathname)
   const [phase, setPhase] = useState<'idle' | 'exit' | 'enter'>('idle')
   const [syncing, setSyncing] = useState(false)
+  // Mobile drawer: on <768px the sidebar becomes a slide-in overlay opened
+  // by the header hamburger. Closes on navigation and backdrop tap.
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Portal intro
   const [portalPhase, setPortalPhase] = useState(0)
@@ -155,6 +158,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   function navigate(path: string) {
+    setDrawerOpen(false)
     if (pathname === path) return
     setNavTarget(path)
     if (exitTimer.current) clearTimeout(exitTimer.current)
@@ -419,12 +423,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         .toast-wrap { will-change:transform,opacity; transition:transform 0.32s cubic-bezier(0.16,1,0.3,1),opacity 0.24s ease; }
         * { -webkit-tap-highlight-color:transparent; }
+
+        /* ─── RESPONSIVE: sidebar → drawer, header wrap, tighter padding ─── */
+        .vv-burger { display:none; }
+        .vv-backdrop { display:none; }
+        @keyframes vvFadeIn { from{opacity:0} to{opacity:1} }
+
+        @media (max-width: 767px) {
+          /* Sidebar becomes a full-height slide-in drawer; it leaves the flex
+             flow (position:fixed) so main content gets the full width. */
+          .vv-sidebar {
+            position:fixed !important; top:0; left:0; bottom:0;
+            width:264px !important; z-index:9997;
+            transform:translateX(-100%);
+            transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
+            box-shadow:6px 0 34px rgba(0,0,0,0.55);
+          }
+          .vv-sidebar.vv-open { transform:translateX(0); }
+          .vv-backdrop {
+            display:block; position:fixed; inset:0; z-index:9996;
+            background:rgba(3,2,4,0.62); animation:vvFadeIn 0.2s ease;
+          }
+          .vv-burger {
+            display:inline-flex; align-items:center; justify-content:center;
+            width:44px; height:44px; flex-shrink:0; margin-right:12px;
+            background:var(--bg2); border:1px solid var(--rule2);
+            border-radius:6px; color:var(--ink); font-size:16px; cursor:pointer;
+          }
+          /* Header stacks: [burger][title] on row 1, actions wrap to row 2. */
+          .vv-header { flex-wrap:wrap; justify-content:flex-start !important; padding:11px 16px !important; row-gap:10px; }
+          .vv-header-titles { flex:1; min-width:0; }
+          .vv-header-actions { flex:1 1 100%; justify-content:flex-start !important; }
+          /* Roomier tap targets inside the drawer nav. */
+          .vv-sidebar .nav-btn { padding:12px 12px !important; }
+          .main-scroll { padding:16px 15px !important; }
+        }
       `}</style>
 
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <div className="vv-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+
+        {/* Mobile drawer backdrop — only rendered/visible on <768px when open */}
+        {drawerOpen && <div className="vv-backdrop" onClick={() => setDrawerOpen(false)} />}
 
         {/* SIDEBAR */}
-        <aside style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)', transform: 'translateZ(0)' }}>
+        <aside className={`vv-sidebar${drawerOpen ? ' vv-open' : ''}`} style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)', transform: 'translateZ(0)' }}>
 
           {/* Logo */}
           <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--sb-rule)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -528,12 +570,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)', transition: 'background 0.35s ease' }}>
 
           {/* Header — tiered accounts get a subtle colored hairline + gradient (Fix 5) */}
-          <header style={{ padding: '13px 24px', borderTop: tierCfg ? `2px solid ${tierCfg.accent}` : 'none', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: tierCfg ? `linear-gradient(180deg, ${tierCfg.headerTint}, var(--bg) 60%)` : 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
-            <div>
+          <header className="vv-header" style={{ padding: '13px 24px', borderTop: tierCfg ? `2px solid ${tierCfg.accent}` : 'none', borderBottom: '1px solid var(--rule2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: tierCfg ? `linear-gradient(180deg, ${tierCfg.headerTint}, var(--bg) 60%)` : 'var(--bg)', flexShrink: 0, transition: 'background 0.35s ease, border-color 0.35s ease' }}>
+            <button className="vv-burger" aria-label="Open menu" onClick={() => setDrawerOpen(true)}>☰</button>
+            <div className="vv-header-titles">
               <div style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 300, letterSpacing: 0.5, color: 'var(--ink)', transition: 'color 0.35s ease' }}>{title}</div>
               <div className="header-sub" style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 2 }}>{subtitle}</div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="vv-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button
                 onClick={syncNow}
                 disabled={!client || syncing}

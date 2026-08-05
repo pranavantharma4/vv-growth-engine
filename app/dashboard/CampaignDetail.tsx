@@ -113,7 +113,7 @@ export default function CampaignDetail({ c }: { c: any }) {
   return (
     <div style={{ padding: '20px 22px', background: 'var(--bg2)', borderTop: '1px solid var(--rule)' }}>
       {/* Core stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 12 }}>
+      <div className="vv-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 12 }}>
         <Stat label="Spend" value={fmtMoney(numOr(c.spend))} />
         <Stat label="Revenue" value={fmtMoney(numOr(c.revenue))} />
         <Stat label="ROAS" value={`${numOr(c.roas).toFixed(2)}x`} accent={healthColor(c.health)} />
@@ -151,7 +151,7 @@ export default function CampaignDetail({ c }: { c: any }) {
 
       {/* Trend chart */}
       <div style={{ background: 'var(--bg2)', border: '1px solid var(--rule)', borderRadius: 6, padding: '14px 16px', marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
           <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase' }}>14-Day Trend</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {(['roas', 'cpr'] as const).map((m) => (
@@ -167,7 +167,7 @@ export default function CampaignDetail({ c }: { c: any }) {
       </div>
 
       {/* Breakdowns */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="cd-breakdowns">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="cd-breakdowns vv-grid-2">
         <Breakdown title="Demographics (age / gender · ROAS)" rows={demo} />
         <Breakdown title="Placements (platform / position · ROAS)" rows={place} />
       </div>

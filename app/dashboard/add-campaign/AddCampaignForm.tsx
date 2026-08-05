@@ -134,7 +134,7 @@ export default function AddCampaignForm({ clientId, onSuccess, onCancel, embedde
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div>
           <label style={labelStyle}>Platform</label>
           <select
@@ -162,7 +162,7 @@ export default function AddCampaignForm({ clientId, onSuccess, onCancel, embedde
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div>
           <label style={labelStyle}>Monthly Revenue ($)</label>
           <input
@@ -193,7 +193,7 @@ export default function AddCampaignForm({ clientId, onSuccess, onCancel, embedde
         <summary style={{ fontFamily: MONO, fontSize: 8, color: 'var(--ink3)', letterSpacing: '1.5px', textTransform: 'uppercase', cursor: 'pointer', padding: '4px 0' }}>
           Optional — Impressions &amp; Clicks
         </summary>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
+        <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
           <div>
             <label style={labelStyle}>Impressions</label>
             <input
@@ -221,7 +221,7 @@ export default function AddCampaignForm({ clientId, onSuccess, onCancel, embedde
         </div>
       </details>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18, padding: '12px 14px', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--rule2)', borderRadius: 4 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18, padding: '12px 14px', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--rule2)', borderRadius: 4 }}>
         <div>
           <div style={{ fontFamily: MONO, fontSize: 7, color: 'var(--ink3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>ROAS</div>
           <div style={{ fontFamily: SERIF, fontSize: 22, color: healthColor(health) }}>{roas.toFixed(2)}x</div>

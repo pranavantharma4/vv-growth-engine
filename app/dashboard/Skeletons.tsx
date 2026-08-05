@@ -32,7 +32,7 @@ export function DashboardSkeleton() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <style>{shimmerCss}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="vv-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {[0, 1, 2, 3].map(i => (
           <Card key={i}>
             <Bar w={70} h={8} style={{ marginBottom: 14 }} />
@@ -41,7 +41,7 @@ export function DashboardSkeleton() {
           </Card>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {[0, 1].map(i => (
           <Card key={i} style={{ padding: 0 }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}><Bar w={120} h={8} /></div>
@@ -54,7 +54,7 @@ export function DashboardSkeleton() {
           </Card>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div className="vv-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         {[0, 1, 2].map(i => (
           <Card key={i}>
             <Bar w={90} h={8} style={{ marginBottom: 16 }} />

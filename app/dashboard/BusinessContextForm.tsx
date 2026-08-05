@@ -112,7 +112,7 @@ export default function BusinessContextForm({ clientId, embedded, onSaved }: Pro
         <input style={fi} value={productCategory} onChange={e => setProductCategory(e.target.value)} placeholder="e.g. Premium skincare serums" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
           <div style={lbl}>Average Order Value ($)</div>
           <input style={fi} type="number" inputMode="decimal" min="0" value={aov} onChange={e => setAov(e.target.value)} placeholder="e.g. 65" />
@@ -123,7 +123,7 @@ export default function BusinessContextForm({ clientId, embedded, onSaved }: Pro
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="vv-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
           <div style={lbl}>Primary Goal</div>
           <select style={{ ...fi, cursor: 'pointer' }} value={primaryGoal} onChange={e => setPrimaryGoal(e.target.value)}>

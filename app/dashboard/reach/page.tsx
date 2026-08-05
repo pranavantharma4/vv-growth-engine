@@ -483,12 +483,14 @@ const CSS = `
 .rch .camp-active{color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.35));}
 .rch .camp-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--ink3);margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;}
 
-@media (max-width:760px){
+@media (max-width:767px){
   .rch{padding:24px 18px 60px;}
   .rch .kpis{grid-template-columns:repeat(2,1fr);}
   .rch .rch-head{flex-direction:column;}
   .rch .head-right{align-items:flex-start;}
   .rch .fn-arrow{display:none;}
-  .rch .seq-nums{gap:16px;}
+  .rch .seq-row{justify-content:flex-start;}
+  .rch .seq-nums{gap:16px;flex-wrap:wrap;}
+  .rch .rep-head{flex-wrap:wrap;}
 }
 `

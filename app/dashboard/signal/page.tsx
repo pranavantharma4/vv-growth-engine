@@ -462,10 +462,13 @@ const CSS = `
 .sig .act{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink2);background:transparent;border:1px solid var(--rule2,rgba(255,255,255,.1));border-radius:4px;padding:6px 9px;cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap;}
 .sig .act:hover{color:var(--ink);border-color:var(--goldborder,rgba(201,168,76,.4));}
 .sig .used-btn.on{color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.4));}
-@media (max-width:640px){
+@media (max-width:767px){
   .sig{padding:24px 18px 60px;}
   .sig .sig-head{flex-direction:column;}
   .sig .head-right{align-items:flex-start;}
   .sig .slides{grid-template-columns:1fr;}
+  .sig .sec-head{flex-wrap:wrap;}
+  .sig .core{flex-wrap:wrap;}
+  .sig .day-right,.sig .progress{width:100%;}
 }
 `
