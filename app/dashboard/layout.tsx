@@ -20,6 +20,7 @@ const NAV = [
   { id: 'admin',         label: 'Client Health',    icon: '▲', section: 'Admin',         admin: true  },
   { id: 'invite',        label: 'Invite Client',    icon: '+', section: null,            admin: true  },
   { id: 'data-tool',     label: 'Campaign Data',    icon: '✎', section: null,            admin: true  },
+  { id: 'reach',         label: 'VV Reach',         icon: '➤', section: null,            admin: true  },
   { id: 'signal',        label: 'VV Signal',        icon: '✶', section: null,            admin: true  },
   { id: 'settings',      label: 'Settings',         icon: '◌', section: 'Account',       admin: false },
 ]
@@ -36,6 +37,7 @@ const TITLES: Record<string, [string, string]> = {
   settings:       ['Settings',          'Account preferences and notifications'],
   invite:         ['Invite Client',     'Create and onboard a new client account'],
   'data-tool':    ['Campaign Data',     'Update client campaign metrics'],
+  reach:          ['VV Reach',          'Cold outreach engine — sends, tiers, follow-ups, replies'],
   signal:         ['VV Signal',         'Daily marketing content — generated in VV voice'],
 }
 
