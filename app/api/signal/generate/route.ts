@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireAdmin, serviceClient } from '../../../../lib/signal-admin'
 import {
-  VV_VOICE, VV_EDGE, ENGAGEMENT_GUIDE,
+  VV_VOICE, VV_EDGE,
   CAROUSEL_PILLARS, PILLAR_BRIEF, type CarouselPillar,
 } from '../../../../lib/signal-knowledge'
 
@@ -48,31 +48,18 @@ async function callClaude(system: string, user: string): Promise<{ parsed: any |
   }
 }
 
-// ── DAILY DROP: engagement angles + value carousel + single post ──────────
-type StandingEntry = { handle?: string; platform?: string; note?: string }
-
-function buildDailyPrompt(pillar: CarouselPillar, standingList: StandingEntry[]): string {
-  const listBlock = standingList.length
-    ? standingList
-        .map((e) => `- ${e.handle || '(no handle)'}${e.platform ? ` [${e.platform}]` : ''}${e.note ? ` — ${e.note}` : ''}`)
-        .join('\n')
-    : '(the standing list is empty — produce evergreen reply angles by archetype instead, e.g. "for any media buyer posting a scaling win", "for a founder complaining about rising CPMs")'
-
+// ── DAILY DROP: value carousel + single post ──────────────────────────────
+// Engagement is NOT generated. The engagement checklist is built client-side
+// from the editable standing list — you read each real post and reply yourself,
+// so there is no pre-written reply text to generate.
+function buildDailyPrompt(pillar: CarouselPillar): string {
   return `Produce today's VV Signal daily drop. Return a SINGLE JSON object — no prose, no markdown fences.
 
 Today's CAROUSEL PILLAR is "${pillar}". ${PILLAR_BRIEF[pillar]}
 
 ${VV_EDGE}
 
-── PART 1 — ENGAGEMENT REPLY ANGLES ──
-${ENGAGEMENT_GUIDE}
-
-STANDING LIST OF TARGET ACCOUNTS:
-${listBlock}
-
-Produce reply angles for the daily engagement checklist. Draw handles from the standing list; where the list runs short of a target, fill with evergreen archetype angles. Targets: up to 12 for X, up to 5 for LinkedIn, up to 3 warm DM openers.
-
-── PART 2 — VALUE CAROUSEL (the centerpiece) ──
+── PART 1 — VALUE CAROUSEL (the centerpiece) ──
 6–8 slides of INSANE, VV-only value on the "${pillar}" pillar.
 - Slide 1 is the HOOK: eye-catching and polarizing — challenge a belief media buyers hold. It earns the swipe or it failed. NEVER generic ("5 tips").
 - Every slide = one punchy idea in plain English, built on specific numbers/mechanisms from VV's edge above. Single-stat, screenshot-worthy slides are ideal.
@@ -80,7 +67,7 @@ Produce reply angles for the daily engagement checklist. Draw handles from the s
 - Last slide = a soft value-CTA, not salesy (e.g. "This is what VV reads automatically" / "Run yours — link in bio").
 - For EACH slide, write an IMAGE PROMPT for a designer: VV dark editorial aesthetic, gold accent (#c9a84c) on near-black (#050509), cinematic, one bold stat or line per frame. Specify subject, composition, mood, and any on-frame text.
 
-── PART 3 — SINGLE POST (the quick daily post) ──
+── PART 2 — SINGLE POST (the quick daily post) ──
 ONE strong standalone post. YOU pick the single format that will get the most engagement today: contrarian one-liner, a single stat + insight, a short build-in-public note, or a mini-teardown. State which format you chose.
 - X + LinkedIn are the PRIMARY platforms.
 - X: 1–2 hashtags max, and the post body must NOT contain a link — if a link belongs, put it in a separate "first_reply" field to post as the first reply.
@@ -89,11 +76,6 @@ ONE strong standalone post. YOU pick the single format that will get the most en
 
 EXACT JSON SHAPE:
 {
-  "engagement": {
-    "x": [{ "handle": "@handle or archetype", "angle": "one-line reply direction" }],
-    "linkedin": [{ "handle": "…", "angle": "…" }],
-    "dm": [{ "handle": "…", "angle": "warm DM opener direction — genuine, no pitch" }]
-  },
   "carousel": {
     "title": "working title",
     "slides": [{ "text": "exact on-slide text", "image_prompt": "designer image prompt for this slide" }],
@@ -153,7 +135,7 @@ EXACT JSON SHAPE:
 Return ONLY the JSON object.`
 }
 
-// POST /api/signal/generate  { section: 'daily' | 'episode', force?, standingList? }
+// POST /api/signal/generate  { section: 'daily' | 'episode', force? }
 export async function POST(req: Request) {
   const gate = await requireAdmin()
   if (!gate.ok) {
@@ -206,7 +188,6 @@ export async function POST(req: Request) {
   // ── daily ──
   const date = todayStrUTC()
   const pillar = CAROUSEL_PILLARS[dayOfYearUTC() % CAROUSEL_PILLARS.length]
-  const standingList: StandingEntry[] = Array.isArray(body?.standingList) ? body.standingList.slice(0, 40) : []
 
   const { data: existing } = await svc
     .from('signal_content')
@@ -217,8 +198,8 @@ export async function POST(req: Request) {
     .maybeSingle()
   if (existing && !force) return NextResponse.json({ cached: true, item: existing })
 
-  const { parsed, error } = await callClaude(VV_VOICE, buildDailyPrompt(pillar, standingList))
-  if (!parsed || (!parsed.carousel && !parsed.single_post && !parsed.engagement)) {
+  const { parsed, error } = await callClaude(VV_VOICE, buildDailyPrompt(pillar))
+  if (!parsed || (!parsed.carousel && !parsed.single_post)) {
     return NextResponse.json(
       { error: `Generation failed${error ? `: ${error}` : ''}. Check ANTHROPIC_API_KEY.` },
       { status: 502 },

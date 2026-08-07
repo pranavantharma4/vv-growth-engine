@@ -38,9 +38,6 @@ THE MECHANISMS (teach the WHY, not just the number):
 
 THE POSITIONING: VV doesn't manage ads or sell you traffic. It's a read-only intelligence layer that reads the account you already have and names the leak + the first fix. No access to spend, no lock-in.`
 
-// Compact reply-angle guidance for the engagement generator.
-export const ENGAGEMENT_GUIDE = `You are drafting REPLY ANGLES — not full replies. Each angle is a one-line direction the founder can riff on when they reply to that account's latest post: a sharp, specific, additive take that shows expertise without pitching. The goal is to be the most interesting reply in the thread so their audience clicks the profile. Never "great post!", never a link, never a pitch. Lead with a concrete idea, mechanism, or number from VV's edge when it fits.`
-
 // Rotating carousel pillars with target mix (over time): 40% teardown,
 // 25% build-in-public, 20% contrarian, 15% method. Weighted so a simple
 // index rotation lands on the right long-run distribution.

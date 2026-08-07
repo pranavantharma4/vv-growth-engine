@@ -6,11 +6,9 @@ import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 // ── payload shapes (new revamp format; legacy rows tolerated) ──
-type Angle = { handle?: string; angle?: string }
 type Slide = { text?: string; image_prompt?: string }
 type DailyPayload = {
   pillar?: string
-  engagement?: { x?: Angle[]; linkedin?: Angle[]; dm?: Angle[] }
   carousel?: { title?: string; slides?: (Slide | string)[]; cta?: string; ig_caption?: string; tiktok_caption?: string; image_prompts?: any[] }
   single_post?: { format?: string; x?: { body?: string; first_reply?: string }; linkedin?: string; image_prompt?: string }
   _posted?: Record<string, boolean>
@@ -109,7 +107,7 @@ export default function SignalPage() {
       const res = await fetch('/api/signal/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ section: 'daily', force: true, standingList: standing }),
+        body: JSON.stringify({ section: 'daily', force: true }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Generation failed'); return }
@@ -185,17 +183,17 @@ export default function SignalPage() {
 
       {error && <div className="err">{error}</div>}
 
-      {/* [1] ENGAGEMENT CHECKLIST — sticky, grows the account */}
+      {/* [1] ENGAGEMENT CHECKLIST — sticky, grows the account.
+          Pure checklist: WHO to engage (from the standing list) + checkboxes.
+          No generated reply text — you read the real post and reply yourself. */}
       <EngagementBlock
-        item={today}
         standing={standing}
         editTargets={editTargets}
         onEdit={() => setEditTargets((v) => !v)}
         onSaveStanding={saveStanding}
-        onToggle={(k) => today && togglePosted(setItems, today, k)}
       />
 
-      {!today && <p className="empty">No daily drop yet — hit <b>Generate Today</b> to create the engagement angles, carousel, and single post.</p>}
+      {!today && <p className="empty">No daily drop yet — hit <b>Generate Today</b> to create the carousel and single post. (The engagement checklist above works without generating.)</p>}
 
       {/* PRIMARY: X + LinkedIn content */}
       {today && (
@@ -219,27 +217,61 @@ export default function SignalPage() {
   )
 }
 
-/* ═══════════════ [1] ENGAGEMENT ═══════════════ */
-function EngagementBlock({ item, standing, editTargets, onEdit, onSaveStanding, onToggle }: {
-  item: Item | null
+/* ═══════════════ [1] ENGAGEMENT — pure checklist, NO generated text ═══════════════
+   The only "content" here is WHO to engage with (handles from the editable
+   standing list) plus checkboxes. You read each real post and reply yourself —
+   a reply to a post you haven't read can't be pre-written. State persists per
+   day in localStorage (single-admin internal tool). */
+function localDateStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function EngagementBlock({ standing, editTargets, onEdit, onSaveStanding }: {
   standing: StandingEntry[]
   editTargets: boolean
   onEdit: () => void
   onSaveStanding: (s: StandingEntry[]) => void
-  onToggle: (key: string) => void
 }) {
-  const p: DailyPayload = item?.payload || {}
-  const posted = p._posted || {}
-  const eng = p.engagement || {}
-  const groups: { key: 'x' | 'linkedin' | 'dm'; label: string; target: number; items: Angle[] }[] = [
-    { key: 'x', label: 'X replies', target: ENG_TARGETS.x, items: eng.x || [] },
-    { key: 'linkedin', label: 'LinkedIn comments', target: ENG_TARGETS.linkedin, items: eng.linkedin || [] },
-    { key: 'dm', label: 'Warm DMs', target: ENG_TARGETS.dm, items: eng.dm || [] },
-  ]
-  const doneOf = (g: typeof groups[number]) => g.items.filter((_, i) => posted[`eng:${g.key}:${i}`]).length
+  const storeKey = `vv_signal_eng_${localDateStr()}`
+  const [checks, setChecks] = useState<Record<string, boolean>>({})
+  const [dmNotes, setDmNotes] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storeKey)
+      const s = raw ? JSON.parse(raw) : {}
+      setChecks(s.checks || {}); setDmNotes(s.dmNotes || {})
+    } catch { setChecks({}); setDmNotes({}) }
+  }, [storeKey])
+
+  const persist = (c: Record<string, boolean>, n: Record<string, string>) => {
+    try { localStorage.setItem(storeKey, JSON.stringify({ checks: c, dmNotes: n })) } catch { /* noop */ }
+  }
+  const toggle = (key: string) => { const next = { ...checks, [key]: !checks[key] }; setChecks(next); persist(next, dmNotes) }
+  const setNote = (i: number, v: string) => { const next = { ...dmNotes, [i]: v }; setDmNotes(next); persist(checks, next) }
+
+  const xHandles = standing.filter((s) => s.platform === 'x' || s.platform === 'both').map((s) => s.handle)
+  const liHandles = standing.filter((s) => s.platform === 'linkedin' || s.platform === 'both').map((s) => s.handle)
+
+  const xDone = xHandles.filter((h) => checks[`x:${h}`]).length
+  const liDone = liHandles.filter((h) => checks[`li:${h}`]).length
+  const dmDone = [0, 1, 2].filter((i) => checks[`dm:${i}`]).length
+
   const totalTarget = ENG_TARGETS.x + ENG_TARGETS.linkedin + ENG_TARGETS.dm
-  const totalDone = groups.reduce((s, g) => s + doneOf(g), 0)
-  const pct = Math.round((totalDone / totalTarget) * 100)
+  const pct = Math.round(((xDone + liDone + dmDone) / totalTarget) * 100)
+  const counters = [
+    { label: 'X replies', done: xDone, target: ENG_TARGETS.x },
+    { label: 'LinkedIn comments', done: liDone, target: ENG_TARGETS.linkedin },
+    { label: 'Warm DMs', done: dmDone, target: ENG_TARGETS.dm },
+  ]
+
+  const Row = ({ k, label }: { k: string; label: string }) => (
+    <div className={`eng-item${checks[k] ? ' done' : ''}`}>
+      <button className={`checkbox${checks[k] ? ' on' : ''}`} onClick={() => toggle(k)} aria-label="mark done">{checks[k] ? '✓' : ''}</button>
+      <span className="eng-handle-lg">{label}</span>
+    </div>
+  )
 
   return (
     <section className="eng">
@@ -247,9 +279,9 @@ function EngagementBlock({ item, standing, editTargets, onEdit, onSaveStanding, 
         <div className="eng-bar">
           <span className="eng-tag">DAILY ENGAGEMENT · GROWS THE ACCOUNT</span>
           <div className="eng-counters">
-            {groups.map((g) => (
-              <span key={g.key} className={`eng-count${doneOf(g) >= g.target ? ' full' : ''}`}>
-                {g.label} <b>{doneOf(g)}/{g.target}</b>
+            {counters.map((c) => (
+              <span key={c.label} className={`eng-count${c.done >= c.target ? ' full' : ''}`}>
+                {c.label} <b>{c.done}/{c.target}</b>
               </span>
             ))}
           </div>
@@ -260,38 +292,49 @@ function EngagementBlock({ item, standing, editTargets, onEdit, onSaveStanding, 
         </div>
       </div>
 
+      {/* how-to reminder — shown ONCE, not per item */}
+      <div className="eng-howto">
+        <span className="eng-howto-k">HOW TO ENGAGE</span>
+        Read their actual post first. Reply in 1&ndash;2 sentences, specific to what they said, and add a real insight. No &ldquo;great post&rdquo;, no pitch.
+      </div>
+
       {editTargets && <StandingEditor standing={standing} onSave={onSaveStanding} />}
 
-      {!item ? (
-        <p className="eng-empty">Generate today&rsquo;s drop to get a reply angle for each target account.</p>
-      ) : (
-        <div className="eng-groups">
-          {groups.map((g) => (
-            <div className="eng-group" key={g.key}>
-              <div className="eng-group-head">
-                <span className="eng-group-title">{g.label}</span>
-                <span className="eng-group-meta">{doneOf(g)} of {g.target}</span>
-              </div>
-              {g.items.length === 0 && <p className="eng-none">— no angles generated —</p>}
-              {g.items.map((a, i) => {
-                const key = `eng:${g.key}:${i}`
-                return (
-                  <div className={`eng-item${posted[key] ? ' done' : ''}`} key={i}>
-                    <button className={`checkbox${posted[key] ? ' on' : ''}`} onClick={() => onToggle(key)} aria-label="mark done">
-                      {posted[key] ? '✓' : ''}
-                    </button>
-                    <div className="eng-item-body">
-                      <span className="eng-handle">{a.handle || '—'}</span>
-                      <span className="eng-angle">{a.angle}</span>
-                    </div>
-                    <Copy text={a.angle || ''} />
-                  </div>
-                )
-              })}
-            </div>
-          ))}
+      <div className="eng-groups">
+        <div className="eng-group">
+          <div className="eng-group-head">
+            <span className="eng-group-title">X &mdash; reply today</span>
+            <span className="eng-group-meta">{xDone} of {ENG_TARGETS.x}</span>
+          </div>
+          {xHandles.length === 0 && <p className="eng-none">No X targets &mdash; add some in Edit Targets.</p>}
+          {xHandles.map((h, i) => <Row key={`${h}-${i}`} k={`x:${h}`} label={h} />)}
         </div>
-      )}
+
+        <div className="eng-group">
+          <div className="eng-group-head">
+            <span className="eng-group-title">LinkedIn &mdash; comment today</span>
+            <span className="eng-group-meta">{liDone} of {ENG_TARGETS.linkedin}</span>
+          </div>
+          {liHandles.length === 0 && <p className="eng-none">No LinkedIn targets &mdash; add some in Edit Targets.</p>}
+          {liHandles.map((h, i) => <Row key={`${h}-${i}`} k={`li:${h}`} label={h} />)}
+        </div>
+
+        <div className="eng-group">
+          <div className="eng-group-head">
+            <span className="eng-group-title">Warm DMs &mdash; yesterday&rsquo;s engagers</span>
+            <span className="eng-group-meta">{dmDone} of {ENG_TARGETS.dm}</span>
+          </div>
+          {[0, 1, 2].map((i) => {
+            const k = `dm:${i}`
+            return (
+              <div className={`eng-item${checks[k] ? ' done' : ''}`} key={i}>
+                <button className={`checkbox${checks[k] ? ' on' : ''}`} onClick={() => toggle(k)} aria-label="mark done">{checks[k] ? '✓' : ''}</button>
+                <input className="in dm-in" placeholder={`who engaged yesterday? #${i + 1}`} value={dmNotes[i] || ''} onChange={(e) => setNote(i, e.target.value)} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </section>
   )
 }
@@ -635,13 +678,15 @@ const CSS = `
 .sig .eng-group-title{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);}
 .sig .eng-group-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);}
 .sig .eng-none,.sig .eng-empty{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink3);}
-.sig .eng-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--rule);}
+.sig .eng-howto{font-family:'DM Sans',sans-serif;font-size:12px;line-height:1.55;color:var(--ink2);background:var(--bg2,rgba(255,255,255,.025));border:1px solid var(--rule);border-radius:8px;padding:11px 13px;margin-bottom:16px;}
+.sig .eng-howto-k{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:1.5px;color:var(--gold);display:inline-block;margin-right:8px;}
+.sig .eng-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--rule);}
 .sig .eng-item.done{opacity:.55;}
-.sig .checkbox{flex:none;width:18px;height:18px;border:1px solid var(--rule2,rgba(255,255,255,.2));border-radius:4px;background:transparent;color:var(--green);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+.sig .checkbox{flex:none;width:18px;height:18px;border:1px solid var(--rule2,rgba(255,255,255,.2));border-radius:4px;background:transparent;color:var(--green);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .sig .checkbox.on{border-color:var(--greenborder,rgba(74,222,128,.5));}
-.sig .eng-item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
-.sig .eng-handle{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--gold);}
-.sig .eng-angle{font-family:'DM Sans',sans-serif;font-size:12.5px;line-height:1.5;color:var(--ink);}
+.sig .eng-handle-lg{font-family:'DM Sans',sans-serif;font-size:13.5px;color:var(--ink);flex:1;min-width:0;}
+.sig .eng-item.done .eng-handle-lg{text-decoration:line-through;}
+.sig .dm-in{flex:1;font-size:12px;padding:6px 9px;}
 
 /* standing editor */
 .sig .standing{border:1px solid var(--goldborder,rgba(201,168,76,.22));background:var(--goldpaper,rgba(201,168,76,.05));border-radius:10px;padding:14px;margin-bottom:16px;}
