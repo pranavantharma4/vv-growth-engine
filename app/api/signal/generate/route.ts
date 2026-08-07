@@ -55,24 +55,25 @@ async function callClaude(system: string, user: string): Promise<{ parsed: any |
 function buildDailyPrompt(pillar: CarouselPillar): string {
   return `Produce today's VV Signal daily drop. Return a SINGLE JSON object — no prose, no markdown fences.
 
-Today's CAROUSEL PILLAR is "${pillar}". ${PILLAR_BRIEF[pillar]}
+Today's PILLAR is "${pillar}". ${PILLAR_BRIEF[pillar]}
 
 ${VV_EDGE}
 
+WHO READS THIS: DTC founders who are NOT ad experts and don't want to be. Write like our best post that got 1000+ views — dead simple, punchy, emotional, relatable. Big plain words. One idea per line. NO numbers, NO metrics, NO jargon.
+
 ── PART 1 — VALUE CAROUSEL (the centerpiece) ──
-6–8 slides of INSANE, VV-only value on the "${pillar}" pillar.
-- Slide 1 is the HOOK: eye-catching and polarizing — challenge a belief media buyers hold. It earns the swipe or it failed. NEVER generic ("5 tips").
-- Every slide = one punchy idea in plain English, built on specific numbers/mechanisms from VV's edge above. Single-stat, screenshot-worthy slides are ideal.
-- The carousel builds to a payoff.
-- Last slide = a soft value-CTA, not salesy (e.g. "This is what VV reads automatically" / "Run yours — link in bio").
-- For EACH slide, write an IMAGE PROMPT for a designer: VV dark editorial aesthetic, gold accent (#c9a84c) on near-black (#050509), cinematic, one bold stat or line per frame. Specify subject, composition, mood, and any on-frame text.
+6–8 slides. Each slide = ONE simple idea in a few big, plain words. Minimal text — a stranger scrolling should read it in one glance.
+- Slide 1 is the HOOK: emotional and relatable, makes them feel SEEN — their confusion, their wasted money, their not-knowing. 6–8 words MAX. Not educational. Energy like "you're probably wasting money on ads." NEVER "5 tips" and NEVER anything technical.
+- Middle slides build the feeling and land one simple truth at a time. Keep every line short and human.
+- Last slide = a soft, friendly nudge, not salesy (e.g. "VV shows you this in 60 seconds" / "see yours — link in bio").
+- For EACH slide, write a SIMPLE image prompt for a designer: VV look = dark background, warm gold accent, clean and moody, ONE short line of text on screen. Keep the image itself simple — no charts, no numbers.
 
 ── PART 2 — SINGLE POST (the quick daily post) ──
-ONE strong standalone post. YOU pick the single format that will get the most engagement today: contrarian one-liner, a single stat + insight, a short build-in-public note, or a mini-teardown. State which format you chose.
-- X + LinkedIn are the PRIMARY platforms.
-- X: 1–2 hashtags max, and the post body must NOT contain a link — if a link belongs, put it in a separate "first_reply" field to post as the first reply.
-- LinkedIn: a strong hook as the first line, short punchy lines, 3–5 hashtags at the end.
-- Include an image_prompt only if the post genuinely needs a visual (else empty string).
+ONE strong standalone post. Pick the format that would stop a scroll: a relatable one-liner, a simple "this feeling is you" note, a short human build-in-public thought, or a tiny call-out of a common mistake. Say which format in a few words.
+- X + LinkedIn are the PRIMARY platforms. Simple, punchy, human — not clever, not technical.
+- X: 1–2 hashtags max, and the post body must NOT contain a link — if a link belongs, put it in a separate "first_reply" field.
+- LinkedIn: a relatable hook as the first line, then short easy lines, 3–5 hashtags at the end.
+- Include an image_prompt only if it genuinely needs a visual (else empty string), and keep it simple.
 
 EXACT JSON SHAPE:
 {
@@ -96,33 +97,35 @@ Return ONLY the JSON object.`
 
 // ── WEEKLY EPISODE: full script + recording notes + daily reel breakdown ──
 function buildEpisodePrompt(weekKey: string): string {
-  return `Produce this week's VV "Read Your Account" episode (${weekKey}) — a filmable short-doc episode plus the reels cut from it. Return a SINGLE JSON object, no prose, no fences.
+  return `Produce this week's VV "Read Your Account" episode (${weekKey}) — a simple, filmable short video plus the reels cut from it. Return a SINGLE JSON object, no prose, no fences.
 
 ${VV_EDGE}
 
+WHO WATCHES: DTC founders who run ads but are NOT ad experts. Talk like a real person — simple, warm, relatable. NO numbers, NO metrics, NO jargon. Just plain English and real feelings. Match our best post that got 1000+ views: dead simple and human.
+
 THE EPISODE:
-- COLD OPEN: a polarizing hook for the first 10 seconds that stops the scroll — challenge a media-buyer belief, tied to a real leak.
-- 3 SEGMENTS, ~45 seconds each. Each segment teaches ONE Meta-ads leak/insight from VV's edge above (e.g. the WEAK trap, frequency fatigue, the overlap tax, dead placements, the CPA ceiling). Write the FULL spoken script for each — VV voice, plain English, concrete numbers.
-- BRIDGES: one line to transition into each segment.
-- CLOSE: land the throughline + a soft value line (not salesy).
+- COLD OPEN: a relatable, scroll-stopping hook for the first 10 seconds — say the thing founders quietly feel about their ads. Short and human, not educational.
+- 3 SEGMENTS, ~45 seconds each. Each one makes ONE simple point in plain words — a common way money quietly leaks, the feeling of not knowing what's working, a simple thing nobody ever told them. Write the FULL spoken script for each, conversational and easy, like talking to a friend.
+- BRIDGES: one casual line to move into each segment.
+- CLOSE: land the simple message + a warm, soft nudge (not salesy).
 - NEXT-EP TEASE: one line teasing next week.
 
 RECORDING NOTES:
 - SETUP: white wall, horizontal 4K, mic, moody exposure, plain dark top. State it concisely.
-- PER SEGMENT: how to deliver it and what to emphasize.
+- PER SEGMENT: how to deliver it and what to emphasize — keep it natural and calm.
 
 ANIMATION / VISUAL CUES:
-- Inside each segment's script, mark exactly where a UI walkthrough or animated stat belongs using bracket tags like "[UI: Placements breakdown — dead placement in red]" or "[STAT: frequency 3.8x rising]". Put the segment's cue list in its "ui_cues" array too, so the editor knows what to build after filming.
+- Inside each segment's script, mark where a simple on-screen visual or app walkthrough belongs using bracket tags like "[UI: the app showing which ads make money vs waste it]" or "[TEXT: 'you're paying to reach people who'll never buy']". Put each segment's cue list in its "ui_cues" array too. Keep cues simple — no charts, no numbers on screen.
 
 DAILY REEL BREAKDOWN:
-- Split the episode into 3–5 short reels (one per day). For each reel: the HOOK line (first 3 seconds), WHICH segment/clip it pulls from, the ON-SCREEN CAPTION text, and a 1-line POST CAPTION. Each reel must stand alone.
+- Split the episode into 3–5 short reels (one per day). For each reel: the HOOK line (first 3 seconds — simple and relatable), WHICH segment it pulls from, the ON-SCREEN CAPTION text (short, plain), and a 1-line POST CAPTION. Each reel must stand alone.
 
 EXACT JSON SHAPE:
 {
   "title": "episode title",
   "cold_open": "the full cold-open script (first ~10s)",
   "segments": [
-    { "title": "segment title", "script": "full spoken script with inline [UI:…]/[STAT:…] cues", "bridge": "one-line bridge into this segment", "ui_cues": ["cue 1", "cue 2"] }
+    { "title": "segment title", "script": "full spoken script with inline [UI:…]/[TEXT:…] cues", "bridge": "one-line bridge into this segment", "ui_cues": ["cue 1", "cue 2"] }
   ],
   "close": "the closing script",
   "next_tease": "one-line tease for next week",
