@@ -1,46 +1,54 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-type TikTokPost = { caption?: string; on_screen_text?: string }
-type ImagePrompt = { slide?: number; prompt?: string }
+// ── payload shapes (new revamp format; legacy rows tolerated) ──
+type Angle = { handle?: string; angle?: string }
+type Slide = { text?: string; image_prompt?: string }
 type DailyPayload = {
+  pillar?: string
+  engagement?: { x?: Angle[]; linkedin?: Angle[]; dm?: Angle[] }
+  carousel?: { title?: string; slides?: (Slide | string)[]; cta?: string; ig_caption?: string; tiktok_caption?: string; image_prompts?: any[] }
+  single_post?: { format?: string; x?: { body?: string; first_reply?: string }; linkedin?: string; image_prompt?: string }
+  _posted?: Record<string, boolean>
+  // legacy fields tolerated but no longer rendered as primary:
   core_idea?: string
-  post?: { x?: string; linkedin?: string; instagram?: string; tiktok?: TikTokPost }
-  carousel?: { title?: string; slides?: string[]; instagram_caption?: string; tiktok_caption?: string; image_prompts?: ImagePrompt[] }
-  reel?: { concept?: string; hook?: string; shots?: string[]; on_screen_captions?: string[]; instagram_caption?: string; tiktok_caption?: string }
+}
+type EpisodeSegment = { title?: string; script?: string; bridge?: string; ui_cues?: string[] }
+type EpisodeReel = { hook?: string; source?: string; on_screen_caption?: string; post_caption?: string }
+type EpisodePayload = {
+  title?: string
+  cold_open?: string
+  segments?: EpisodeSegment[]
+  close?: string
+  next_tease?: string
+  recording_notes?: { setup?: string; per_segment?: string[] }
+  reels?: EpisodeReel[]
   _posted?: Record<string, boolean>
 }
-type Item = {
-  id: string
-  content_date: string
-  angle: string | null
-  payload: DailyPayload
-  posted: boolean
-  created_at: string
-}
+type Item = { id: string; content_date: string; angle: string | null; payload: any; posted: boolean; created_at: string }
 
-// All posting tasks that make up "X of Y posted" for a given day.
-const POST_KEYS = [
-  'post:x', 'post:linkedin', 'post:instagram', 'post:tiktok',
-  'carousel:ig', 'carousel:tiktok',
-  'reel:ig', 'reel:tiktok',
-] as const
+// Engagement targets that define "the day's growth work".
+const ENG_TARGETS = { x: 12, linkedin: 5, dm: 3 } as const
 
-const ANGLES = ['proof', 'education', 'contrarian', 'behind-the-scenes', 'build-in-public']
-function todaysAngle(): string {
-  const start = Date.UTC(new Date().getUTCFullYear(), 0, 0)
-  const doy = Math.floor((Date.now() - start) / 86_400_000)
-  return ANGLES[doy % ANGLES.length]
-}
+const STANDING_KEY = 'vv_signal_standing_list'
+type StandingEntry = { handle: string; platform: 'x' | 'linkedin' | 'both'; note: string }
+const DEFAULT_STANDING: StandingEntry[] = [
+  { handle: '@example_mediabuyer', platform: 'x', note: 'posts scaling wins / CPM gripes — replace me' },
+  { handle: '@example_dtc_founder', platform: 'both', note: 'DTC founder running paid — replace me' },
+  { handle: '@example_growth_voice', platform: 'linkedin', note: 'growth commentary — replace me' },
+]
 
 function dayLabel(iso: string): string {
   const d = new Date((iso || '').slice(0, 10) + 'T00:00:00')
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+function normSlides(slides?: (Slide | string)[]): Slide[] {
+  return (slides || []).map((s) => (typeof s === 'string' ? { text: s, image_prompt: '' } : s))
 }
 
 export default function SignalPage() {
@@ -49,9 +57,12 @@ export default function SignalPage() {
 
   const [authState, setAuthState] = useState<'checking' | 'denied' | 'ok'>('checking')
   const [items, setItems] = useState<Item[]>([])
-  const [loading, setLoading] = useState(false)
+  const [episodes, setEpisodes] = useState<Item[]>([])
+  const [loadingDaily, setLoadingDaily] = useState(false)
+  const [loadingEp, setLoadingEp] = useState(false)
   const [error, setError] = useState('')
-  const angle = todaysAngle()
+  const [standing, setStanding] = useState<StandingEntry[]>([])
+  const [editTargets, setEditTargets] = useState(false)
 
   // ── admin gate (API routes also enforce it server-side) ──
   useEffect(() => {
@@ -71,55 +82,80 @@ export default function SignalPage() {
     return () => { cancelled = true }
   }, [supabase, router])
 
-  // Load cached docs. Never auto-generates — re-opening the page costs no API call.
+  // Load standing list from localStorage.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STANDING_KEY)
+      setStanding(raw ? JSON.parse(raw) : DEFAULT_STANDING)
+    } catch { setStanding(DEFAULT_STANDING) }
+  }, [])
+  const saveStanding = useCallback((next: StandingEntry[]) => {
+    setStanding(next)
+    try { localStorage.setItem(STANDING_KEY, JSON.stringify(next)) } catch { /* noop */ }
+  }, [])
+
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/signal/list', { cache: 'no-store' })
       const data = await res.json()
-      if (res.ok) setItems(data.items || [])
-    } catch (_) { /* noop */ }
+      if (res.ok) { setItems(data.items || []); setEpisodes(data.episodes || []) }
+    } catch { /* noop */ }
   }, [])
-
   useEffect(() => { if (authState === 'ok') load() }, [authState, load])
 
-  // Explicit "Generate Today" — the only thing that burns a Claude call.
-  const generate = async () => {
-    setLoading(true); setError('')
+  const generateDaily = async () => {
+    setLoadingDaily(true); setError('')
     try {
       const res = await fetch('/api/signal/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: true }),
+        body: JSON.stringify({ section: 'daily', force: true, standingList: standing }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Generation failed'); return }
       await load()
-    } catch (e: any) {
-      setError(e?.message || 'Generation failed')
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { setError(e?.message || 'Generation failed') }
+    finally { setLoadingDaily(false) }
+  }
+  const generateEpisode = async () => {
+    setLoadingEp(true); setError('')
+    try {
+      const res = await fetch('/api/signal/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section: 'episode', force: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Episode generation failed'); return }
+      await load()
+    } catch (e: any) { setError(e?.message || 'Episode generation failed') }
+    finally { setLoadingEp(false) }
   }
 
   // Optimistic per-item posted toggle → persists into payload._posted.
-  const togglePosted = async (item: Item, key: string) => {
+  const togglePosted = useCallback(async (setter: React.Dispatch<React.SetStateAction<Item[]>>, item: Item, key: string) => {
     const cur = !!item.payload?._posted?.[key]
     const next = !cur
-    setItems((arr) => arr.map((x) => x.id === item.id
+    setter((arr) => arr.map((x) => x.id === item.id
       ? { ...x, payload: { ...x.payload, _posted: { ...(x.payload._posted || {}), [key]: next } } }
       : x))
     try {
       await fetch('/api/signal/mark-used', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id, key, posted: next }),
       })
-    } catch (_) {
-      setItems((arr) => arr.map((x) => x.id === item.id
+    } catch {
+      setter((arr) => arr.map((x) => x.id === item.id
         ? { ...x, payload: { ...x.payload, _posted: { ...(x.payload._posted || {}), [key]: cur } } }
         : x))
     }
-  }
+  }, [])
+
+  const days = useMemo(() => [...items].sort((a, b) => (a.content_date < b.content_date ? 1 : -1)), [items])
+  const today = days[0] || null
+  const archive = days.slice(1)
+  const episode = episodes[0] || null
+  const epArchive = episodes.slice(1)
 
   if (authState !== 'ok') {
     return (
@@ -129,234 +165,423 @@ export default function SignalPage() {
     )
   }
 
-  const days = [...items].sort((a, b) => (a.content_date < b.content_date ? 1 : -1))
-
   return (
     <div className="sig">
       <style>{CSS}</style>
 
       <header className="sig-head">
         <div>
-          <p className="eyebrow">VV SIGNAL · INTERNAL</p>
-          <h1 className="title">Today&rsquo;s drop.</h1>
-          <p className="sub">One core idea, posted everywhere — the multi-platform post, the carousel, and the reel for the day.</p>
+          <p className="eyebrow">VV SIGNAL · INTERNAL · ARCHITECT</p>
+          <h1 className="title">Content command center.</h1>
+          <p className="sub">Hit generate, work the checklist, copy the day&rsquo;s content out. X and LinkedIn lead; IG and TikTok are fed by the week&rsquo;s reels.</p>
         </div>
         <div className="head-right">
-          <div className="angle-chip">ANGLE OF THE DAY · <span>{angle}</span></div>
-          <button className="gen-btn" onClick={generate} disabled={loading}>
-            {loading ? 'GENERATING…' : 'GENERATE TODAY →'}
+          {today?.payload?.pillar && <div className="angle-chip">TODAY&rsquo;S PILLAR · <span>{today.payload.pillar}</span></div>}
+          <button className="gen-btn" onClick={generateDaily} disabled={loadingDaily}>
+            {loadingDaily ? 'GENERATING…' : 'GENERATE TODAY →'}
           </button>
         </div>
       </header>
 
       {error && <div className="err">{error}</div>}
 
-      {days.length === 0 && <p className="empty">Nothing generated yet — hit Generate Today to create the day&rsquo;s drop.</p>}
+      {/* [1] ENGAGEMENT CHECKLIST — sticky, grows the account */}
+      <EngagementBlock
+        item={today}
+        standing={standing}
+        editTargets={editTargets}
+        onEdit={() => setEditTargets((v) => !v)}
+        onSaveStanding={saveStanding}
+        onToggle={(k) => today && togglePosted(setItems, today, k)}
+      />
 
-      {days.map((item) => <DayView key={item.id} item={item} onToggle={(k) => togglePosted(item, k)} />)}
+      {!today && <p className="empty">No daily drop yet — hit <b>Generate Today</b> to create the engagement angles, carousel, and single post.</p>}
+
+      {/* PRIMARY: X + LinkedIn content */}
+      {today && (
+        <>
+          <CarouselBlock item={today} onToggle={(k) => togglePosted(setItems, today, k)} />
+          <SinglePostBlock item={today} onToggle={(k) => togglePosted(setItems, today, k)} />
+        </>
+      )}
+
+      {/* [3] READ YOUR ACCOUNT — weekly episode + reels (feeds IG/TikTok) */}
+      <EpisodeBlock
+        item={episode}
+        loading={loadingEp}
+        onGenerate={generateEpisode}
+        onToggle={(k) => episode && togglePosted(setEpisodes, episode, k)}
+      />
+
+      {/* ARCHIVE */}
+      <ArchiveBlock daily={archive} episodes={epArchive} />
     </div>
   )
 }
 
-function DayView({ item, onToggle }: { item: Item; onToggle: (key: string) => void }) {
-  const p = item.payload || {}
-  const postedMap = p._posted || {}
-  const postedCount = POST_KEYS.filter((k) => postedMap[k]).length
-  const total = POST_KEYS.length
-  const pct = Math.round((postedCount / total) * 100)
+/* ═══════════════ [1] ENGAGEMENT ═══════════════ */
+function EngagementBlock({ item, standing, editTargets, onEdit, onSaveStanding, onToggle }: {
+  item: Item | null
+  standing: StandingEntry[]
+  editTargets: boolean
+  onEdit: () => void
+  onSaveStanding: (s: StandingEntry[]) => void
+  onToggle: (key: string) => void
+}) {
+  const p: DailyPayload = item?.payload || {}
+  const posted = p._posted || {}
+  const eng = p.engagement || {}
+  const groups: { key: 'x' | 'linkedin' | 'dm'; label: string; target: number; items: Angle[] }[] = [
+    { key: 'x', label: 'X replies', target: ENG_TARGETS.x, items: eng.x || [] },
+    { key: 'linkedin', label: 'LinkedIn comments', target: ENG_TARGETS.linkedin, items: eng.linkedin || [] },
+    { key: 'dm', label: 'Warm DMs', target: ENG_TARGETS.dm, items: eng.dm || [] },
+  ]
+  const doneOf = (g: typeof groups[number]) => g.items.filter((_, i) => posted[`eng:${g.key}:${i}`]).length
+  const totalTarget = ENG_TARGETS.x + ENG_TARGETS.linkedin + ENG_TARGETS.dm
+  const totalDone = groups.reduce((s, g) => s + doneOf(g), 0)
+  const pct = Math.round((totalDone / totalTarget) * 100)
 
   return (
-    <section className="day">
-      <div className="day-head">
-        <div className="day-left">
-          <h2 className="day-title">{dayLabel(item.content_date)}</h2>
-          <span className="day-count">{postedCount} of {total} posted</span>
-          {item.angle && <span className="day-angle">{item.angle}</span>}
-        </div>
-        <div className="day-right">
-          <div className="progress"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+    <section className="eng">
+      <div className="eng-sticky">
+        <div className="eng-bar">
+          <span className="eng-tag">DAILY ENGAGEMENT · GROWS THE ACCOUNT</span>
+          <div className="eng-counters">
+            {groups.map((g) => (
+              <span key={g.key} className={`eng-count${doneOf(g) >= g.target ? ' full' : ''}`}>
+                {g.label} <b>{doneOf(g)}/{g.target}</b>
+              </span>
+            ))}
+          </div>
+          <div className="eng-progress-wrap">
+            <div className="progress"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+            <button className="act" onClick={onEdit}>{editTargets ? 'DONE' : 'EDIT TARGETS'}</button>
+          </div>
         </div>
       </div>
 
-      {p.core_idea && (
-        <div className="core">
-          <span className="core-tag">CORE IDEA</span>
-          <p className="core-text">{p.core_idea}</p>
+      {editTargets && <StandingEditor standing={standing} onSave={onSaveStanding} />}
+
+      {!item ? (
+        <p className="eng-empty">Generate today&rsquo;s drop to get a reply angle for each target account.</p>
+      ) : (
+        <div className="eng-groups">
+          {groups.map((g) => (
+            <div className="eng-group" key={g.key}>
+              <div className="eng-group-head">
+                <span className="eng-group-title">{g.label}</span>
+                <span className="eng-group-meta">{doneOf(g)} of {g.target}</span>
+              </div>
+              {g.items.length === 0 && <p className="eng-none">— no angles generated —</p>}
+              {g.items.map((a, i) => {
+                const key = `eng:${g.key}:${i}`
+                return (
+                  <div className={`eng-item${posted[key] ? ' done' : ''}`} key={i}>
+                    <button className={`checkbox${posted[key] ? ' on' : ''}`} onClick={() => onToggle(key)} aria-label="mark done">
+                      {posted[key] ? '✓' : ''}
+                    </button>
+                    <div className="eng-item-body">
+                      <span className="eng-handle">{a.handle || '—'}</span>
+                      <span className="eng-angle">{a.angle}</span>
+                    </div>
+                    <Copy text={a.angle || ''} />
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
-
-      <PostSection post={p.post} posted={postedMap} onToggle={onToggle} />
-      <CarouselSection carousel={p.carousel} posted={postedMap} onToggle={onToggle} />
-      <ReelSection reel={p.reel} posted={postedMap} onToggle={onToggle} />
     </section>
   )
 }
 
-// ── Today's Post: one idea, four platform variants ──
-const POST_TABS: { key: string; label: string; pkey: string }[] = [
-  { key: 'x', label: 'X', pkey: 'post:x' },
-  { key: 'linkedin', label: 'LinkedIn', pkey: 'post:linkedin' },
-  { key: 'instagram', label: 'Instagram', pkey: 'post:instagram' },
-  { key: 'tiktok', label: 'TikTok', pkey: 'post:tiktok' },
-]
-
-function PostSection({ post, posted, onToggle }: { post?: Item['payload']['post']; posted: Record<string, boolean>; onToggle: (k: string) => void }) {
-  const [tab, setTab] = useState('x')
-  if (!post) return null
-
-  const tiktok = post.tiktok
-  const text =
-    tab === 'x' ? (post.x || '') :
-    tab === 'linkedin' ? (post.linkedin || '') :
-    tab === 'instagram' ? (post.instagram || '') :
-    (tiktok?.caption || '')
-
-  const activeTab = POST_TABS.find((t) => t.key === tab)!
+function StandingEditor({ standing, onSave }: { standing: StandingEntry[]; onSave: (s: StandingEntry[]) => void }) {
+  const [rows, setRows] = useState<StandingEntry[]>(standing)
+  useEffect(() => { setRows(standing) }, [standing])
+  const set = (i: number, patch: Partial<StandingEntry>) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  const add = () => setRows((r) => [...r, { handle: '', platform: 'x', note: '' }])
+  const del = (i: number) => setRows((r) => r.filter((_, j) => j !== i))
 
   return (
-    <div className="sec">
-      <div className="sec-head">
-        <h3 className="sec-title">Today&rsquo;s Post</h3>
-        <span className="sec-note">one idea · four platforms</span>
+    <div className="standing">
+      <div className="standing-head">
+        <span>STANDING TARGET LIST — accounts to reply to / warm up. Passed to the generator to write per-account angles.</span>
       </div>
-      <div className="tabs">
-        {POST_TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`tab${tab === t.key ? ' on' : ''}${posted[t.pkey] ? ' done' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}{posted[t.pkey] ? ' ✓' : ''}
-          </button>
-        ))}
-      </div>
-
-      <div className="panel">
-        <div className="panel-body">{text}</div>
-        {tab === 'tiktok' && tiktok?.on_screen_text && (
-          <div className="aside">
-            <div className="aside-head">
-              <span>ON-SCREEN TEXT</span>
-              <Copy text={tiktok.on_screen_text} />
-            </div>
-            <div className="aside-body">{tiktok.on_screen_text}</div>
-          </div>
-        )}
-        <div className="panel-foot">
-          <span className="meta">{text.length} ch{tab === 'x' ? ' / 280' : ''}</span>
-          <div className="actions">
-            <Copy text={text} label="COPY POST" />
-            <PostedBtn on={!!posted[activeTab.pkey]} onClick={() => onToggle(activeTab.pkey)} />
-          </div>
+      {rows.map((r, i) => (
+        <div className="standing-row" key={i}>
+          <input className="in" placeholder="@handle" value={r.handle} onChange={(e) => set(i, { handle: e.target.value })} />
+          <select className="in sel" value={r.platform} onChange={(e) => set(i, { platform: e.target.value as StandingEntry['platform'] })}>
+            <option value="x">X</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="both">Both</option>
+          </select>
+          <input className="in note" placeholder="what they post about" value={r.note} onChange={(e) => set(i, { note: e.target.value })} />
+          <button className="act" onClick={() => del(i)}>✕</button>
         </div>
+      ))}
+      <div className="standing-foot">
+        <button className="act" onClick={add}>+ ADD TARGET</button>
+        <button className="act save" onClick={() => onSave(rows.filter((r) => r.handle.trim()))}>SAVE LIST</button>
       </div>
     </div>
   )
 }
 
-// ── Today's Carousel: IG + TikTok, slides written out, image prompts ──
-function CarouselSection({ carousel, posted, onToggle }: { carousel?: Item['payload']['carousel']; posted: Record<string, boolean>; onToggle: (k: string) => void }) {
-  if (!carousel) return null
-  const slides = carousel.slides || []
-  const prompts = carousel.image_prompts || []
-  const allSlides = slides.map((s, i) => `Slide ${i + 1}: ${s}`).join('\n\n')
+/* ═══════════════ [2] VALUE CAROUSEL ═══════════════ */
+function CarouselBlock({ item, onToggle }: { item: Item; onToggle: (k: string) => void }) {
+  const p: DailyPayload = item.payload || {}
+  const c = p.carousel
+  const posted = p._posted || {}
+  if (!c) return null
+  const slides = normSlides(c.slides)
+  const allText = slides.map((s, i) => `Slide ${i + 1}: ${s.text || ''}`).join('\n\n')
 
   return (
-    <div className="sec">
+    <section className="sec">
       <div className="sec-head">
-        <h3 className="sec-title">Today&rsquo;s Carousel</h3>
-        <span className="sec-note">{carousel.title || 'Instagram + TikTok'}</span>
+        <h3 className="sec-title">Value Carousel</h3>
+        <span className="sec-note">{p.pillar || 'centerpiece'} · {c.title || 'the day’s big value'}</span>
+        <div className="sec-actions"><Copy text={allText} label="COPY ALL SLIDES" /></div>
       </div>
 
       <div className="panel">
-        <div className="slides">
+        <div className="cslides">
           {slides.map((s, i) => (
-            <div className="slide" key={i}>
-              <div className="slide-head">
-                <span className="slide-n">SLIDE {i + 1}</span>
-                <Copy text={s} />
+            <div className={`cslide${i === 0 ? ' hook' : ''}${i === slides.length - 1 ? ' cta' : ''}`} key={i}>
+              <div className="cslide-head">
+                <span className="cslide-n">{i === 0 ? 'HOOK · SLIDE 1' : i === slides.length - 1 ? `CTA · SLIDE ${i + 1}` : `SLIDE ${i + 1}`}</span>
+                <Copy text={s.text || ''} />
               </div>
-              <div className="slide-body">{s}</div>
+              <div className="cslide-body">{s.text}</div>
+              {s.image_prompt ? (
+                <div className="aside">
+                  <div className="aside-head"><span>IMAGE PROMPT → Claude Design</span><Copy text={s.image_prompt} /></div>
+                  <div className="aside-body">{s.image_prompt}</div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
-        {slides.length > 0 && (
-          <div className="row-actions"><Copy text={allSlides} label="COPY ALL SLIDES" /></div>
-        )}
 
-        {prompts.length > 0 && (
-          <div className="prompts">
-            {prompts.map((ip, i) => (
-              <div className="aside" key={i}>
-                <div className="aside-head">
-                  <span>IMAGE PROMPT{ip.slide ? ` · SLIDE ${ip.slide}` : ''} — paste into an image tool</span>
-                  <Copy text={ip.prompt || ''} />
-                </div>
-                <div className="aside-body">{ip.prompt}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <CaptionRow label="Instagram caption" text={carousel.instagram_caption} pkey="carousel:ig" posted={posted} onToggle={onToggle} />
-        <CaptionRow label="TikTok caption" text={carousel.tiktok_caption} pkey="carousel:tiktok" posted={posted} onToggle={onToggle} />
+        <div className="secondary">
+          <span className="secondary-tag">IG + TIKTOK (below X/LinkedIn priority)</span>
+          <CaptionRow label="Instagram caption" text={c.ig_caption} pkey="carousel:ig" posted={posted} onToggle={onToggle} />
+          <CaptionRow label="TikTok caption" text={c.tiktok_caption} pkey="carousel:tiktok" posted={posted} onToggle={onToggle} />
+        </div>
       </div>
-    </div>
+    </section>
   )
 }
 
-// ── Today's Reel: hook, shot list, on-screen captions, IG + TikTok captions ──
-function ReelSection({ reel, posted, onToggle }: { reel?: Item['payload']['reel']; posted: Record<string, boolean>; onToggle: (k: string) => void }) {
-  if (!reel) return null
-  const shots = reel.shots || []
-  const oscaps = reel.on_screen_captions || []
+/* ═══════════════ [4] SINGLE POST ═══════════════ */
+function SinglePostBlock({ item, onToggle }: { item: Item; onToggle: (k: string) => void }) {
+  const p: DailyPayload = item.payload || {}
+  const sp = p.single_post
+  const posted = p._posted || {}
+  if (!sp) return null
+  const xBody = sp.x?.body || ''
+  const xReply = sp.x?.first_reply || ''
 
   return (
-    <div className="sec">
+    <section className="sec">
       <div className="sec-head">
-        <h3 className="sec-title">Today&rsquo;s Reel</h3>
-        <span className="sec-note">{reel.concept || 'shootable in under 20 min'}</span>
+        <h3 className="sec-title">Single Post</h3>
+        <span className="sec-note">quick daily · {sp.format || 'best format for today'}</span>
       </div>
 
       <div className="panel">
-        {reel.hook && (
-          <div className="hook">
-            <div className="hook-head"><span>HOOK · FIRST 3 SECONDS</span><Copy text={reel.hook} /></div>
-            <div className="hook-body">{reel.hook}</div>
+        <div className="platform-grid">
+          {/* X — primary */}
+          <div className="pcol">
+            <div className="pcol-head"><span className="pcol-label">X</span><span className="pcol-pri">PRIMARY</span></div>
+            <div className="pcol-body">{xBody}</div>
+            <div className="pcol-foot">
+              <span className="meta">{xBody.length} ch / 280</span>
+              <div className="actions">
+                <Copy text={xBody} label="COPY POST" />
+                <PostedBtn on={!!posted['single:x']} onClick={() => onToggle('single:x')} />
+              </div>
+            </div>
+            {xReply && (
+              <div className="aside">
+                <div className="aside-head"><span>FIRST REPLY · link out of body</span><Copy text={xReply} /></div>
+                <div className="aside-body">{xReply}</div>
+              </div>
+            )}
           </div>
-        )}
 
-        {shots.length > 0 && (
-          <div className="list">
-            <div className="list-head"><span className="list-title">SHOT LIST</span><Copy text={shots.map((s, i) => `${i + 1}. ${s}`).join('\n')} label="COPY SHOTS" /></div>
-            <ol className="ol">{shots.map((s, i) => <li key={i}>{s}</li>)}</ol>
+          {/* LinkedIn — primary */}
+          <div className="pcol">
+            <div className="pcol-head"><span className="pcol-label">LinkedIn</span><span className="pcol-pri">PRIMARY</span></div>
+            <div className="pcol-body">{sp.linkedin}</div>
+            <div className="pcol-foot">
+              <span className="meta">hook first line</span>
+              <div className="actions">
+                <Copy text={sp.linkedin || ''} label="COPY POST" />
+                <PostedBtn on={!!posted['single:li']} onClick={() => onToggle('single:li')} />
+              </div>
+            </div>
           </div>
-        )}
+        </div>
 
-        {oscaps.length > 0 && (
-          <div className="list">
-            <div className="list-head"><span className="list-title">ON-SCREEN CAPTIONS</span><Copy text={oscaps.join('\n')} label="COPY CAPTIONS" /></div>
-            <ul className="ul">{oscaps.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        {sp.image_prompt ? (
+          <div className="aside">
+            <div className="aside-head"><span>IMAGE PROMPT → Claude Design</span><Copy text={sp.image_prompt} /></div>
+            <div className="aside-body">{sp.image_prompt}</div>
           </div>
-        )}
-
-        <CaptionRow label="Instagram caption" text={reel.instagram_caption} pkey="reel:ig" posted={posted} onToggle={onToggle} />
-        <CaptionRow label="TikTok caption" text={reel.tiktok_caption} pkey="reel:tiktok" posted={posted} onToggle={onToggle} />
+        ) : null}
       </div>
-    </div>
+    </section>
   )
 }
 
+/* ═══════════════ [3] EPISODE ═══════════════ */
+function EpisodeBlock({ item, loading, onGenerate, onToggle }: {
+  item: Item | null; loading: boolean; onGenerate: () => void; onToggle: (k: string) => void
+}) {
+  const p: EpisodePayload = item?.payload || {}
+  const posted = p._posted || {}
+  const segs = p.segments || []
+  const reels = p.reels || []
+
+  const fullScript = [
+    p.cold_open ? `COLD OPEN\n${p.cold_open}` : '',
+    ...segs.map((s, i) => `SEGMENT ${i + 1} — ${s.title || ''}\n${s.bridge ? `[bridge] ${s.bridge}\n` : ''}${s.script || ''}`),
+    p.close ? `CLOSE\n${p.close}` : '',
+    p.next_tease ? `NEXT EP\n${p.next_tease}` : '',
+  ].filter(Boolean).join('\n\n')
+
+  const notes = p.recording_notes
+  const notesText = notes ? [notes.setup ? `SETUP: ${notes.setup}` : '', ...(notes.per_segment || []).map((n, i) => `SEGMENT ${i + 1}: ${n}`)].filter(Boolean).join('\n') : ''
+
+  return (
+    <section className="sec ep">
+      <div className="sec-head">
+        <h3 className="sec-title">Read Your Account — this week&rsquo;s episode</h3>
+        <span className="sec-note">{item ? (item.angle || '') : 'not generated'} {p.title ? `· ${p.title}` : ''}</span>
+        <div className="sec-actions">
+          <button className="gen-btn sm" onClick={onGenerate} disabled={loading}>
+            {loading ? 'GENERATING…' : item ? 'REGENERATE EPISODE' : 'GENERATE EPISODE →'}
+          </button>
+        </div>
+      </div>
+
+      {!item ? (
+        <p className="empty">No episode this week yet — generate the full script, recording notes, and the daily reel breakdown.</p>
+      ) : (
+        <div className="panel">
+          {/* FULL SCRIPT */}
+          <div className="ep-sub">
+            <div className="ep-sub-head"><span className="ep-sub-title">FULL SCRIPT</span><Copy text={fullScript} label="COPY SCRIPT" /></div>
+            {p.cold_open && <div className="ep-block"><span className="ep-k">COLD OPEN · first 10s</span><p>{p.cold_open}</p></div>}
+            {segs.map((s, i) => (
+              <div className="ep-block" key={i}>
+                <span className="ep-k">SEGMENT {i + 1} — {s.title} <em>· ~45s</em></span>
+                {s.bridge && <p className="ep-bridge">↳ bridge: {s.bridge}</p>}
+                <p className="ep-script">{s.script}</p>
+                {(s.ui_cues || []).length > 0 && (
+                  <div className="cues">
+                    {(s.ui_cues || []).map((c, j) => <span className="cue" key={j}>{c}</span>)}
+                  </div>
+                )}
+              </div>
+            ))}
+            {p.close && <div className="ep-block"><span className="ep-k">CLOSE</span><p>{p.close}</p></div>}
+            {p.next_tease && <div className="ep-block"><span className="ep-k">NEXT EP TEASE</span><p>{p.next_tease}</p></div>}
+          </div>
+
+          {/* RECORDING NOTES */}
+          {notesText && (
+            <div className="ep-sub">
+              <div className="ep-sub-head"><span className="ep-sub-title">RECORDING NOTES</span><Copy text={notesText} label="COPY NOTES" /></div>
+              {notes?.setup && <p className="ep-note"><b>Setup.</b> {notes.setup}</p>}
+              {(notes?.per_segment || []).map((n, i) => <p className="ep-note" key={i}><b>Segment {i + 1}.</b> {n}</p>)}
+            </div>
+          )}
+
+          {/* DAILY REEL BREAKDOWN — feeds IG/TikTok */}
+          <div className="ep-sub">
+            <div className="ep-sub-head"><span className="ep-sub-title">DAILY REEL BREAKDOWN · one per day → IG + TikTok</span></div>
+            <div className="reels">
+              {reels.map((r, i) => {
+                const key = `reel:${i}`
+                const copyText = [
+                  `HOOK: ${r.hook || ''}`, `FROM: ${r.source || ''}`,
+                  `ON-SCREEN: ${r.on_screen_caption || ''}`, `CAPTION: ${r.post_caption || ''}`,
+                ].join('\n')
+                return (
+                  <div className={`reel${posted[key] ? ' done' : ''}`} key={i}>
+                    <div className="reel-head">
+                      <span className="reel-n">REEL {i + 1}</span>
+                      <div className="actions">
+                        <Copy text={copyText} label="COPY REEL" />
+                        <PostedBtn on={!!posted[key]} onClick={() => onToggle(key)} />
+                      </div>
+                    </div>
+                    <p className="reel-hook">{r.hook}</p>
+                    {r.source && <p className="reel-meta">from: {r.source}</p>}
+                    {r.on_screen_caption && <p className="reel-os"><span>ON-SCREEN</span> {r.on_screen_caption}</p>}
+                    {r.post_caption && <p className="reel-cap"><span>CAPTION</span> {r.post_caption}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* ═══════════════ ARCHIVE ═══════════════ */
+function ArchiveBlock({ daily, episodes }: { daily: Item[]; episodes: Item[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  if (daily.length === 0 && episodes.length === 0) return null
+
+  const postedCount = (it: Item) => Object.values(it.payload?._posted || {}).filter(Boolean).length
+
+  const Row = ({ it, kind }: { it: Item; kind: 'daily' | 'episode' }) => {
+    const id = `${kind}:${it.id}`
+    const isOpen = open === id
+    return (
+      <div className="arc-item">
+        <button className="arc-row" onClick={() => setOpen(isOpen ? null : id)}>
+          <span className="arc-date">{kind === 'episode' ? (it.angle || dayLabel(it.content_date)) : dayLabel(it.content_date)}</span>
+          <span className="arc-pillar">{kind === 'episode' ? 'episode' : (it.payload?.pillar || it.angle || '')}</span>
+          <span className="arc-posted">{postedCount(it)} posted</span>
+          <span className="arc-caret">{isOpen ? '▲' : '▼'}</span>
+        </button>
+        {isOpen && (
+          <div className="arc-open">
+            {kind === 'daily'
+              ? <><CarouselBlock item={it} onToggle={() => {}} /><SinglePostBlock item={it} onToggle={() => {}} /></>
+              : <EpisodeBlock item={it} loading={false} onGenerate={() => {}} onToggle={() => {}} />}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <section className="arc">
+      <div className="sec-head"><h3 className="sec-title">Archive</h3><span className="sec-note">past drops &amp; episodes — re-openable</span></div>
+      <div className="arc-list">
+        {daily.map((it) => <Row key={it.id} it={it} kind="daily" />)}
+        {episodes.map((it) => <Row key={it.id} it={it} kind="episode" />)}
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════ shared bits ═══════════════ */
 function CaptionRow({ label, text, pkey, posted, onToggle }: { label: string; text?: string; pkey: string; posted: Record<string, boolean>; onToggle: (k: string) => void }) {
   if (!text) return null
   return (
     <div className="caption">
       <div className="caption-head">
         <span className="caption-label">{label}</span>
-        <div className="actions">
-          <Copy text={text} />
-          <PostedBtn on={!!posted[pkey]} onClick={() => onToggle(pkey)} />
-        </div>
+        <div className="actions"><Copy text={text} /><PostedBtn on={!!posted[pkey]} onClick={() => onToggle(pkey)} /></div>
       </div>
       <div className="caption-body">{text}</div>
     </div>
@@ -366,109 +591,163 @@ function CaptionRow({ label, text, pkey, posted, onToggle }: { label: string; te
 function Copy({ text, label = 'COPY' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <button
-      className="act"
-      onClick={async () => {
-        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch (_) { /* noop */ }
-      }}
-    >{copied ? 'COPIED ✓' : label}</button>
+    <button className="act" onClick={async () => {
+      try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch { /* noop */ }
+    }}>{copied ? 'COPIED ✓' : label}</button>
   )
 }
-
 function PostedBtn({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <button className={`act used-btn${on ? ' on' : ''}`} onClick={onClick}>
-      {on ? 'POSTED ✓' : 'MARK POSTED'}
-    </button>
-  )
+  return <button className={`act used-btn${on ? ' on' : ''}`} onClick={onClick}>{on ? 'POSTED ✓' : 'MARK POSTED'}</button>
 }
 
 const CSS = `
-.sig{padding:36px 40px 80px;max-width:980px;}
+.sig{padding:36px 40px 100px;max-width:1000px;}
 .sig *{box-sizing:border-box;}
 .sig .eyebrow{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--gold);margin:0 0 10px;}
 .sig .title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:40px;color:var(--ink);margin:0 0 8px;line-height:1;}
-.sig .sub{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink2);margin:0;max-width:520px;line-height:1.6;}
-.sig .sig-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:32px;}
+.sig .sub{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink2);margin:0;max-width:560px;line-height:1.6;}
+.sig .sig-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:26px;}
 .sig .head-right{display:flex;flex-direction:column;align-items:flex-end;gap:12px;}
 .sig .angle-chip{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--ink3);text-transform:uppercase;}
 .sig .angle-chip span{color:var(--gold);}
 .sig .gen-btn{font-family:'DM Mono',monospace;font-size:10px;font-weight:500;letter-spacing:1.5px;color:#050509;background:var(--gold);border:none;padding:13px 22px;border-radius:5px;cursor:pointer;transition:transform .15s,opacity .15s;white-space:nowrap;}
+.sig .gen-btn.sm{padding:9px 16px;font-size:9px;}
 .sig .gen-btn:hover{transform:translateY(-1px);}
 .sig .gen-btn:disabled{opacity:.5;cursor:default;transform:none;}
-.sig .err{font-family:'DM Mono',monospace;font-size:11px;color:var(--red);background:var(--redpaper,rgba(248,113,113,.08));border:1px solid var(--redborder,rgba(248,113,113,.25));border-radius:6px;padding:12px 14px;margin-bottom:24px;}
-.sig .empty{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink3);}
+.sig .err{font-family:'DM Mono',monospace;font-size:11px;color:var(--red);background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:6px;padding:12px 14px;margin-bottom:24px;}
+.sig .empty{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink3);margin:14px 0 30px;}
 
-.sig .day{margin-bottom:52px;}
-.sig .day-head{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--rule2,rgba(255,255,255,.1));padding-bottom:12px;margin-bottom:20px;position:sticky;top:0;background:var(--bg);z-index:2;}
-.sig .day-left{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
-.sig .day-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:26px;color:var(--ink);margin:0;}
-.sig .day-count{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--gold);}
-.sig .day-angle{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;border:1px solid var(--rule2,rgba(255,255,255,.12));border-radius:4px;padding:3px 7px;}
-.sig .day-right{display:flex;align-items:center;gap:12px;}
-.sig .progress{width:120px;height:3px;background:var(--rule);border-radius:2px;overflow:hidden;}
+/* ── engagement ── */
+.sig .eng{margin-bottom:40px;}
+.sig .eng-sticky{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0 12px;border-bottom:1px solid var(--goldborder,rgba(201,168,76,.22));margin-bottom:16px;}
+.sig .eng-bar{display:flex;flex-direction:column;gap:10px;}
+.sig .eng-tag{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--gold);}
+.sig .eng-counters{display:flex;gap:18px;flex-wrap:wrap;}
+.sig .eng-count{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.5px;color:var(--ink2);}
+.sig .eng-count b{color:var(--ink);}
+.sig .eng-count.full b{color:var(--green);}
+.sig .eng-progress-wrap{display:flex;align-items:center;gap:12px;}
+.sig .progress{width:160px;height:3px;background:var(--rule);border-radius:2px;overflow:hidden;}
 .sig .progress-fill{height:100%;background:var(--gold);border-radius:2px;transition:width .3s ease;}
+.sig .eng-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+.sig .eng-group{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--bg2,rgba(255,255,255,.025));}
+.sig .eng-group-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+.sig .eng-group-title{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);}
+.sig .eng-group-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);}
+.sig .eng-none,.sig .eng-empty{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink3);}
+.sig .eng-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--rule);}
+.sig .eng-item.done{opacity:.55;}
+.sig .checkbox{flex:none;width:18px;height:18px;border:1px solid var(--rule2,rgba(255,255,255,.2));border-radius:4px;background:transparent;color:var(--green);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+.sig .checkbox.on{border-color:var(--greenborder,rgba(74,222,128,.5));}
+.sig .eng-item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.sig .eng-handle{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--gold);}
+.sig .eng-angle{font-family:'DM Sans',sans-serif;font-size:12.5px;line-height:1.5;color:var(--ink);}
 
-.sig .core{display:flex;align-items:baseline;gap:12px;background:var(--goldpaper,rgba(201,168,76,.06));border:1px solid var(--goldborder,rgba(201,168,76,.22));border-radius:8px;padding:14px 16px;margin-bottom:26px;}
-.sig .core-tag{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--gold);white-space:nowrap;padding-top:2px;}
-.sig .core-text{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:18px;color:var(--ink);margin:0;line-height:1.4;}
+/* standing editor */
+.sig .standing{border:1px solid var(--goldborder,rgba(201,168,76,.22));background:var(--goldpaper,rgba(201,168,76,.05));border-radius:10px;padding:14px;margin-bottom:16px;}
+.sig .standing-head span{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink2);line-height:1.5;display:block;margin-bottom:10px;}
+.sig .standing-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+.sig .in{font-family:'DM Sans',sans-serif;font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--rule2,rgba(255,255,255,.14));border-radius:5px;padding:8px 10px;}
+.sig .in.note{flex:1;}
+.sig .in:first-child{width:150px;}
+.sig .in.sel{width:100px;}
+.sig .standing-foot{display:flex;gap:8px;margin-top:4px;}
+.sig .act.save{color:var(--gold);border-color:var(--goldborder,rgba(201,168,76,.4));}
 
-.sig .sec{margin-bottom:30px;}
-.sig .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;}
-.sig .sec-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:22px;color:var(--ink);margin:0;}
+/* ── sections ── */
+.sig .sec{margin-bottom:34px;}
+.sig .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.sig .sec-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:24px;color:var(--ink);margin:0;}
 .sig .sec-note{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;}
-
-.sig .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
-.sig .tab{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--ink2);background:transparent;border:1px solid var(--rule2,rgba(255,255,255,.12));border-radius:5px;padding:8px 14px;cursor:pointer;transition:all .15s;text-transform:uppercase;}
-.sig .tab:hover{color:var(--ink);}
-.sig .tab.on{color:#050509;background:var(--gold);border-color:var(--gold);}
-.sig .tab.done:not(.on){color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.4));}
-
+.sig .sec-actions{margin-left:auto;display:flex;gap:6px;}
 .sig .panel{background:var(--bg2,rgba(255,255,255,.025));border:1px solid var(--rule);border-radius:12px;padding:20px;}
-.sig .panel-body{font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.7;color:var(--ink);white-space:pre-wrap;}
-.sig .panel-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);}
 .sig .meta{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--ink3);text-transform:uppercase;}
 .sig .actions{display:flex;gap:6px;}
-.sig .row-actions{display:flex;justify-content:flex-end;margin-top:10px;}
 
-.sig .slides{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
-.sig .slide{border:1px solid var(--rule);border-radius:8px;padding:12px;background:var(--bg,rgba(0,0,0,.15));}
-.sig .slide-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
-.sig .slide-n{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--gold);}
-.sig .slide-body{font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap;}
+/* carousel */
+.sig .cslides{display:flex;flex-direction:column;gap:12px;}
+.sig .cslide{border:1px solid var(--rule);border-radius:9px;padding:14px;background:rgba(0,0,0,.15);}
+.sig .cslide.hook{border-color:var(--goldborder,rgba(201,168,76,.4));background:var(--goldpaper,rgba(201,168,76,.06));}
+.sig .cslide.cta{border-style:dashed;}
+.sig .cslide-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+.sig .cslide-n{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--gold);}
+.sig .cslide-body{font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;color:var(--ink);white-space:pre-wrap;}
+.sig .cslide.hook .cslide-body{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:20px;line-height:1.35;}
 
-.sig .prompts{margin-top:14px;display:flex;flex-direction:column;gap:10px;}
-.sig .aside{border:1px solid var(--goldborder,rgba(201,168,76,.22));background:var(--goldpaper,rgba(201,168,76,.06));border-radius:7px;padding:11px 12px;margin-top:12px;}
-.sig .aside-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;}
+.sig .aside{border:1px solid var(--goldborder,rgba(201,168,76,.22));background:var(--goldpaper,rgba(201,168,76,.06));border-radius:7px;padding:10px 12px;margin-top:10px;}
+.sig .aside-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;}
 .sig .aside-head span{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase;}
 .sig .aside-body{font-family:'DM Mono',monospace;font-size:11px;line-height:1.6;color:var(--ink2);white-space:pre-wrap;}
 
-.sig .hook{border:1px solid var(--goldborder,rgba(201,168,76,.3));border-radius:8px;padding:13px 14px;margin-bottom:16px;background:var(--goldpaper,rgba(201,168,76,.05));}
-.sig .hook-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;}
-.sig .hook-head span{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--gold);}
-.sig .hook-body{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:18px;color:var(--ink);line-height:1.4;}
+.sig .secondary{margin-top:18px;padding-top:14px;border-top:1px dashed var(--rule2,rgba(255,255,255,.1));}
+.sig .secondary-tag{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;}
 
-.sig .list{margin-bottom:16px;}
-.sig .list-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
-.sig .list-title{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;}
-.sig .ol,.sig .ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px;}
-.sig .ol li,.sig .ul li{font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;color:var(--ink2);}
+/* single post */
+.sig .platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.sig .pcol{border:1px solid var(--rule);border-radius:9px;padding:14px;background:rgba(0,0,0,.15);display:flex;flex-direction:column;}
+.sig .pcol-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.sig .pcol-label{font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);}
+.sig .pcol-pri{font-family:'DM Mono',monospace;font-size:6.5px;letter-spacing:1.5px;color:#050509;background:var(--gold);padding:2px 5px;border-radius:3px;}
+.sig .pcol-body{font-family:'DM Sans',sans-serif;font-size:13.5px;line-height:1.6;color:var(--ink);white-space:pre-wrap;flex:1;}
+.sig .pcol-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--rule);}
 
-.sig .caption{border-top:1px solid var(--rule);margin-top:14px;padding-top:14px;}
-.sig .caption-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+/* episode */
+.sig .ep-sub{margin-bottom:22px;padding-bottom:20px;border-bottom:1px solid var(--rule);}
+.sig .ep-sub:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+.sig .ep-sub-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;}
+.sig .ep-sub-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--gold);}
+.sig .ep-block{margin-bottom:14px;}
+.sig .ep-k{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;display:block;margin-bottom:5px;}
+.sig .ep-k em{color:var(--gold);font-style:normal;}
+.sig .ep-block p{font-family:'DM Sans',sans-serif;font-size:13.5px;line-height:1.7;color:var(--ink);margin:0;white-space:pre-wrap;}
+.sig .ep-bridge{color:var(--ink3)!important;font-size:12px!important;font-style:italic;margin-bottom:6px!important;}
+.sig .cues{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.sig .cue{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);border:1px solid var(--goldborder,rgba(201,168,76,.3));background:var(--goldpaper,rgba(201,168,76,.06));border-radius:4px;padding:4px 7px;}
+.sig .ep-note{font-family:'DM Sans',sans-serif;font-size:12.5px;line-height:1.6;color:var(--ink2);margin:0 0 6px;}
+.sig .ep-note b{color:var(--gold);font-weight:500;}
+.sig .reels{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;}
+.sig .reel{border:1px solid var(--rule);border-radius:9px;padding:13px;background:rgba(0,0,0,.15);}
+.sig .reel.done{opacity:.6;}
+.sig .reel-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px;}
+.sig .reel-n{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:1.5px;color:var(--gold);}
+.sig .reel-hook{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:17px;line-height:1.35;color:var(--ink);margin:0 0 8px;}
+.sig .reel-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--ink3);margin:0 0 8px;}
+.sig .reel-os,.sig .reel-cap{font-family:'DM Sans',sans-serif;font-size:12px;line-height:1.5;color:var(--ink2);margin:0 0 6px;}
+.sig .reel-os span,.sig .reel-cap span{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1px;color:var(--gold);display:inline-block;margin-right:6px;}
+
+/* caption rows */
+.sig .caption{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule);}
+.sig .caption-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;}
 .sig .caption-label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--ink3);text-transform:uppercase;}
-.sig .caption-body{font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.65;color:var(--ink);white-space:pre-wrap;}
+.sig .caption-body{font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.6;color:var(--ink);white-space:pre-wrap;}
 
+/* archive */
+.sig .arc{margin-top:20px;border-top:1px solid var(--rule2,rgba(255,255,255,.1));padding-top:24px;}
+.sig .arc-list{display:flex;flex-direction:column;gap:6px;}
+.sig .arc-item{border:1px solid var(--rule);border-radius:8px;overflow:hidden;}
+.sig .arc-row{width:100%;display:flex;align-items:center;gap:14px;padding:11px 14px;background:transparent;border:none;cursor:pointer;text-align:left;}
+.sig .arc-row:hover{background:var(--bg2,rgba(255,255,255,.025));}
+.sig .arc-date{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);min-width:150px;}
+.sig .arc-pillar{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--gold);text-transform:uppercase;flex:1;}
+.sig .arc-posted{font-family:'DM Mono',monospace;font-size:9px;color:var(--ink3);}
+.sig .arc-caret{font-size:8px;color:var(--ink3);}
+.sig .arc-open{padding:6px 14px 16px;border-top:1px solid var(--rule);}
+.sig .arc-open .sec{margin-bottom:16px;}
+
+/* actions */
 .sig .act{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink2);background:transparent;border:1px solid var(--rule2,rgba(255,255,255,.1));border-radius:4px;padding:6px 9px;cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap;}
 .sig .act:hover{color:var(--ink);border-color:var(--goldborder,rgba(201,168,76,.4));}
 .sig .used-btn.on{color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.4));}
+
 @media (max-width:767px){
-  .sig{padding:24px 18px 60px;}
+  .sig{padding:24px 16px 70px;}
   .sig .sig-head{flex-direction:column;}
   .sig .head-right{align-items:flex-start;}
-  .sig .slides{grid-template-columns:1fr;}
-  .sig .sec-head{flex-wrap:wrap;}
-  .sig .core{flex-wrap:wrap;}
-  .sig .day-right,.sig .progress{width:100%;}
+  .sig .platform-grid{grid-template-columns:1fr;}
+  .sig .eng-groups{grid-template-columns:1fr;}
+  .sig .reels{grid-template-columns:1fr;}
+  .sig .standing-row{flex-wrap:wrap;}
+  .sig .in:first-child{width:100%;}
+  .sig .arc-date{min-width:0;}
 }
 `
