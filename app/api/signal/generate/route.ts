@@ -62,9 +62,9 @@ ${VV_EDGE}
 WHO READS THIS: DTC founders who are NOT ad experts and don't want to be. Write like our best post that got 1000+ views — dead simple, punchy, emotional, relatable. Big plain words. One idea per line. NO numbers, NO metrics, NO jargon.
 
 ── PART 1 — VALUE CAROUSEL (the centerpiece) ──
-6–8 slides. Each slide = ONE simple idea in a few big, plain words. Minimal text — a stranger scrolling should read it in one glance.
+6–8 slides. Each slide = ONE simple idea in a few big, plain words. Minimal text — a stranger scrolling should read it in one glance (aim for under ~8 words per slide; never a paragraph).
 - Slide 1 is the HOOK: emotional and relatable, makes them feel SEEN — their confusion, their wasted money, their not-knowing. 6–8 words MAX. Not educational. Energy like "you're probably wasting money on ads." NEVER "5 tips" and NEVER anything technical.
-- Middle slides build the feeling and land one simple truth at a time. Keep every line short and human.
+- Middle slides build the feeling and land one simple truth at a time. Each is a short, human line someone would actually say — never a lesson, never a stat. If a slide sounds clever or expert, rewrite it plainer.
 - Last slide = a soft, friendly nudge, not salesy (e.g. "VV shows you this in 60 seconds" / "see yours — link in bio").
 - For EACH slide, write a SIMPLE image prompt for a designer: VV look = dark background, warm gold accent, clean and moody, ONE short line of text on screen. Keep the image itself simple — no charts, no numbers.
 
@@ -101,7 +101,7 @@ function buildEpisodePrompt(weekKey: string): string {
 
 ${VV_EDGE}
 
-WHO WATCHES: DTC founders who run ads but are NOT ad experts. Talk like a real person — simple, warm, relatable. NO numbers, NO metrics, NO jargon. Just plain English and real feelings. Match our best post that got 1000+ views: dead simple and human.
+WHO WATCHES: DTC founders who run ads but are NOT ad experts. Talk like a real person — simple, warm, relatable. NO numbers, NO metrics, NO jargon, NO teaching. Just plain English and real feelings, like venting to a friend over coffee. If a line sounds like a marketing lesson, cut it and say the feeling instead. Match our best post that got 1000+ views: dead simple and human.
 
 THE EPISODE:
 - COLD OPEN: a relatable, scroll-stopping hook for the first 10 seconds — say the thing founders quietly feel about their ads. Short and human, not educational.
