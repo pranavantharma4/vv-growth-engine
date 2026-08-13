@@ -61,10 +61,16 @@ export default function VisionDropLanding() {
         .blur-mask { filter: blur(7px); user-select: none; pointer-events: none; }
         .scanline { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(201,168,76,0.45), transparent); animation: scan 4.2s ease-in-out infinite; }
         @keyframes scan { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(380px); opacity: 0; } }
+        @media (max-width: 560px) {
+          .vd-header { padding: 16px 18px !important; flex-wrap: wrap; gap: 12px; }
+          .vd-hero { padding: 56px 20px 44px !important; }
+          .vd-sample-sec { padding: 16px 20px 72px !important; }
+          .vd-sample-card { padding: 26px 20px !important; }
+        }
       `}</style>
 
       {/* Top bar */}
-      <header style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${RULE}` }}>
+      <header className="vd-header" style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${RULE}` }}>
         <a href="https://www.vngrdvisuals.com" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
           <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: INK, letterSpacing: 2 }}>VV</span>
           <span style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Vanguard Visuals</span>
@@ -77,7 +83,7 @@ export default function VisionDropLanding() {
       </header>
 
       {/* HERO */}
-      <section style={{ maxWidth: 880, margin: '0 auto', padding: '88px 32px 64px', textAlign: 'center' }}>
+      <section className="vd-hero" style={{ maxWidth: 880, margin: '0 auto', padding: '88px 32px 64px', textAlign: 'center' }}>
         <div className="fu fu-1" style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: 28 }}>
           ◎ Free · No credit card · Read-only access
         </div>
@@ -135,7 +141,7 @@ export default function VisionDropLanding() {
       </section>
 
       {/* SAMPLE OUTPUT */}
-      <section style={{ maxWidth: 900, margin: '0 auto', padding: '24px 32px 100px' }}>
+      <section className="vd-sample-sec" style={{ maxWidth: 900, margin: '0 auto', padding: '24px 32px 100px' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 12 }}>
             ▼ This is what you'll get in 60 seconds
@@ -145,10 +151,10 @@ export default function VisionDropLanding() {
           </div>
         </div>
 
-        <div style={{ position: 'relative', background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '36px 32px', overflow: 'hidden' }}>
+        <div className="vd-sample-card" style={{ position: 'relative', background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '36px 32px', overflow: 'hidden' }}>
           <div className="scanline" />
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 26, paddingBottom: 18, borderBottom: `1px solid ${RULE}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 26, paddingBottom: 18, borderBottom: `1px solid ${RULE}` }}>
             <div>
               <div style={{ fontFamily: MONO, fontSize: 8, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 5 }}>VAI · Ad Vision Drop</div>
               <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 300, fontStyle: 'italic', color: INK }}>Your Account Snapshot</div>

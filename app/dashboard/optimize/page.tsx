@@ -272,17 +272,17 @@ export default function OptimizePage() {
       if (line.match(/^\d+\./)) return (
         <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--gold)', flexShrink: 0, marginTop: 4, minWidth: 16 }}>{line.match(/^\d+/)?.[0]}.</span>
-          <span style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82 }}>{line.replace(/^\d+\./, '').trim()}</span>
+          <span className="vai-body-txt" style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82 }}>{line.replace(/^\d+\./, '').trim()}</span>
         </div>
       )
       if (line.startsWith('- ') || line.startsWith('• ')) return (
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
           <span style={{ color: 'var(--ink3)', flexShrink: 0, marginTop: 5, fontSize: 8 }}>—</span>
-          <span style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82 }}>{line.replace(/^[-•]\s/, '')}</span>
+          <span className="vai-body-txt" style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82 }}>{line.replace(/^[-•]\s/, '')}</span>
         </div>
       )
       if (line.trim() === '') return <div key={i} style={{ height: 8 }} />
-      return <p key={i} style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82, marginBottom: 6 }}>{line}</p>
+      return <p key={i} className="vai-body-txt" style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.82, marginBottom: 6 }}>{line}</p>
     })
   }
 
@@ -293,8 +293,11 @@ export default function OptimizePage() {
   )
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div className="vai-optimize" style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px' }}>
       <style>{`
+        @media (max-width: 767px) {
+          .vai-optimize .vai-body-txt { font-size: 14px !important; }
+        }
         @keyframes vaiPulse { 0%,100%{opacity:0.3;transform:scale(0.92)} 50%{opacity:1;transform:scale(1)} }
         @keyframes vaiScan  { 0%{transform:translateX(-100%)} 100%{transform:translateX(500%)} }
         .vai-dot { animation: vaiPulse 1.4s ease infinite; }
@@ -318,7 +321,7 @@ export default function OptimizePage() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Intelligence</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(22px, 6vw, 28px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>
           Ads Optimization <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: 'var(--gold)', letterSpacing: '2px', verticalAlign: 'middle' }}>VAI</span>
         </div>
         <div className="opt-desc" style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>

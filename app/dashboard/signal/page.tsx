@@ -378,7 +378,11 @@ function CarouselBlock({ item, onToggle }: { item: Item; onToggle: (k: string) =
   const posted = p._posted || {}
   if (!c) return null
   const slides = normSlides(c.slides)
-  const allText = slides.map((s, i) => `Slide ${i + 1}: ${s.text || ''}`).join('\n\n')
+  // COPY ALL = full carousel: every slide's TEXT + its DESCRIPTION (image prompt),
+  // so one copy gives the words AND the visual direction, formatted per slide.
+  const allText = slides
+    .map((s, i) => `SLIDE ${i + 1}\nText: ${s.text || ''}\nDescription: ${s.image_prompt || ''}`)
+    .join('\n\n')
 
   return (
     <section className="sec">
@@ -647,7 +651,7 @@ const CSS = `
 .sig{padding:36px 40px 100px;max-width:1000px;}
 .sig *{box-sizing:border-box;}
 .sig .eyebrow{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--gold);margin:0 0 10px;}
-.sig .title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:40px;color:var(--ink);margin:0 0 8px;line-height:1;}
+.sig .title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:clamp(28px,8vw,40px);color:var(--ink);margin:0 0 8px;line-height:1;}
 .sig .sub{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink2);margin:0;max-width:560px;line-height:1.6;}
 .sig .sig-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:26px;}
 .sig .head-right{display:flex;flex-direction:column;align-items:flex-end;gap:12px;}
@@ -784,15 +788,50 @@ const CSS = `
 .sig .act:hover{color:var(--ink);border-color:var(--goldborder,rgba(201,168,76,.4));}
 .sig .used-btn.on{color:var(--green);border-color:var(--greenborder,rgba(74,222,128,.4));}
 
+/* long generated copy must never push the layout wider than the viewport */
+.sig .cslide-body,.sig .pcol-body,.sig .caption-body,.sig .aside-body,
+.sig .ep-block p,.sig .ep-note,.sig .reel-hook,.sig .reel-os,.sig .reel-cap,
+.sig .eng-handle-lg,.sig .sec-note,.sig .arc-pillar{overflow-wrap:break-word;word-break:break-word;}
+
+/* tablet: single-post columns get tight at 2-up between 768–900px */
+@media (min-width:768px) and (max-width:900px){
+  .sig .platform-grid{grid-template-columns:1fr;}
+}
+
 @media (max-width:767px){
   .sig{padding:24px 16px 70px;}
   .sig .sig-head{flex-direction:column;}
-  .sig .head-right{align-items:flex-start;}
+  .sig .head-right{align-items:flex-start;width:100%;}
+  .sig .gen-btn{width:100%;text-align:center;min-height:44px;}
   .sig .platform-grid{grid-template-columns:1fr;}
   .sig .eng-groups{grid-template-columns:1fr;}
   .sig .reels{grid-template-columns:1fr;}
   .sig .standing-row{flex-wrap:wrap;}
-  .sig .in:first-child{width:100%;}
+  .sig .standing-row .in:first-child{width:100%;}
+  .sig .in.sel{width:auto;flex:1;}
+  .sig .in.note{width:100%;flex:1 1 100%;}
   .sig .arc-date{min-width:0;}
+
+  /* copy-blocks: full width, ≥14px reading text */
+  .sig .cslide-body{font-size:15px;}
+  .sig .cslide.hook .cslide-body{font-size:19px;}
+  .sig .pcol-body{font-size:15px;}
+  .sig .caption-body,.sig .ep-block p,.sig .aside-body{font-size:14px;}
+  .sig .eng-handle-lg{font-size:15px;}
+  .sig .eng-howto{font-size:14px;}
+
+  /* tap targets ≥44px: copy / posted / edit buttons + checkboxes */
+  .sig .act{min-height:44px;padding:11px 14px;font-size:9px;display:inline-flex;align-items:center;}
+  .sig .checkbox{width:44px;height:44px;font-size:16px;}
+  .sig .eng-item{gap:12px;padding:6px 0;}
+  .sig .dm-in{min-height:44px;font-size:14px;}
+  .sig .in{font-size:14px;min-height:44px;}
+
+  /* section-head actions wrap under the title instead of overflowing */
+  .sig .sec-actions{margin-left:0;flex-wrap:wrap;width:100%;}
+  .sig .cslide-head,.sig .aside-head,.sig .ep-sub-head,.sig .caption-head,
+  .sig .reel-head,.sig .pcol-foot{flex-wrap:wrap;}
+  .sig .actions{flex-wrap:wrap;}
+  .sig .arc-row{flex-wrap:wrap;gap:8px 14px;}
 }
 `

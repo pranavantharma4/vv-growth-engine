@@ -121,6 +121,11 @@ export default function SecurityClient() {
           .sec-pad { padding-top: 72px; padding-bottom: 72px; }
           .sec-scope-grid { grid-template-columns: 1fr; }
           .sec-principles-grid { grid-template-columns: 1fr; }
+          .sec-infra-row { gap: 28px; }
+        }
+        @media (max-width: 560px) {
+          .sec-card-pad { padding: 24px 20px !important; }
+          .sec-infra-item { min-width: 0 !important; flex: 1 1 45% !important; }
         }
       `}</style>
 
@@ -202,6 +207,7 @@ export default function SecurityClient() {
             <div className="sec-scope-grid">
               {/* LEFT — REQUESTED */}
               <div
+                className="sec-card-pad"
                 style={{
                   border: '1px solid var(--goldborder)',
                   background: 'var(--goldpaper)',
@@ -237,6 +243,7 @@ export default function SecurityClient() {
 
               {/* RIGHT — NEVER REQUESTED */}
               <div
+                className="sec-card-pad"
                 style={{
                   border: '1px solid var(--rule)',
                   background: 'transparent',
@@ -338,6 +345,7 @@ export default function SecurityClient() {
             ].map((card, i) => (
               <Reveal key={card.n} delay={i * 80}>
                 <div
+                  className="sec-card-pad"
                   style={{
                     background: 'var(--bg2)',
                     border: '1px solid var(--rule)',
@@ -400,7 +408,7 @@ export default function SecurityClient() {
                 },
                 { name: 'Meta Graph API', detail: 'Official OAuth. Read-only scope.' },
               ].map((item) => (
-                <div key={item.name} style={{ minWidth: 180 }}>
+                <div key={item.name} className="sec-infra-item" style={{ minWidth: 180 }}>
                   <p
                     style={{
                       fontFamily: "'DM Sans', sans-serif",

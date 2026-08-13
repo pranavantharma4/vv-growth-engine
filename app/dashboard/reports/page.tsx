@@ -119,14 +119,14 @@ export default function ReportsPage() {
   if (isPending) return <TableSkeleton rows={5} maxWidth={900} />
 
   if (briefs.length === 0) return (
-    <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: 'var(--ink)', marginBottom: 12 }}>No reports yet</div>
+    <div style={{ maxWidth: 560, margin: '48px auto', padding: '0 16px', textAlign: 'center' }}>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(24px, 7vw, 32px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 12 }}>No reports yet</div>
       <div style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.85 }}>Reports appear here after each Monday morning brief is generated.</div>
     </div>
   )
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 16px' }}>
       <style>{`
         body.minimal .reports-summary { opacity: 0; max-height: 0; overflow: hidden; margin-bottom: 0 !important; transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
         .reports-summary { opacity: 1; max-height: 120px; margin-bottom: 20px; transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
@@ -136,7 +136,7 @@ export default function ReportsPage() {
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Intelligence</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Reports</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(22px, 6vw, 28px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Reports</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>All weekly intelligence briefs · PDF export available</div>
       </div>
 

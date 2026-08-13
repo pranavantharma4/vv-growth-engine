@@ -557,7 +557,7 @@ const CSS = `
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px;
   opacity:0;pointer-events:none;transition:opacity .3s ease;}
 .lp .menu.open{opacity:1;pointer-events:auto;}
-.lp .menu a{font-family:var(--mono);font-size:14px;letter-spacing:2px;color:rgba(255,255,255,.85);padding:6px 12px;}
+.lp .menu a{font-family:var(--mono);font-size:14px;letter-spacing:2px;color:rgba(255,255,255,.85);padding:12px;min-height:44px;display:flex;align-items:center;}
 .lp .menu a:last-of-type{color:var(--gold);}
 .lp .menu-close{position:absolute;top:20px;right:28px;background:none;border:none;color:rgba(255,255,255,.6);font-size:34px;line-height:1;cursor:pointer;}
 
@@ -635,7 +635,7 @@ const CSS = `
 .lp .how-visual{display:flex;justify-content:center;}
 .lp .how-text{display:flex;flex-direction:column;}
 .lp .how-num{font-family:var(--serif);font-size:56px;letter-spacing:-.02em;color:var(--gold);line-height:1.05;margin-bottom:8px;font-variant-numeric:lining-nums;}
-.lp .how-h{font-family:var(--serif);font-style:italic;font-weight:300;font-size:28px;color:#fff;margin:0 0 14px;}
+.lp .how-h{font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(22px,5vw,28px);color:#fff;margin:0 0 14px;}
 .lp .how-p{font-family:var(--sans);font-size:14px;line-height:1.75;color:rgba(255,255,255,.55);margin:0;}
 .lp .mini-card{width:100%;max-width:380px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:28px;}
 .lp .connect-card{display:flex;flex-direction:column;align-items:center;gap:14px;}
@@ -759,6 +759,10 @@ const CSS = `
   .lp .trial-strip{grid-template-columns:1fr;}
   .lp .plan-grid{grid-template-columns:1fr;}
 }
+/* tablet — 4-col card grid drops to 2-col so cards aren't cramped */
+@media (max-width:768px){
+  .lp .class-grid{grid-template-columns:1fr 1fr;}
+}
 @media (max-width:680px){
   .lp .nav{padding:14px 20px;}
   .lp .nav-links{display:none;}
@@ -778,6 +782,8 @@ const CSS = `
   .lp .hero-ctas .btn-gold,.lp .hero-ctas .btn-ghost{width:100%;}
   .lp .s-cta .btn-gold,.lp .s-cta .btn-ghost{width:100%;}
   .lp .footer{flex-direction:column;}
+  /* body/reading text ≥14px on mobile */
+  .lp .class-desc,.lp .faq-a,.lp .plan-list li,.lp .pr-conseq-label{font-size:14px;}
 }
 @media (max-width:380px){
   .lp .class-grid{grid-template-columns:1fr;}

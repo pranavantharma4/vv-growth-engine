@@ -117,9 +117,16 @@ export default function ResultsPage() {
         .cta:hover { transform: translateY(-1px); box-shadow: 0 8px 28px -6px rgba(201,168,76,0.5); }
         .cta-secondary { transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
         .cta-secondary:hover { background: rgba(201,168,76,0.06); border-color: rgba(201,168,76,0.4); color: ${GOLD}; }
+        .vd-cta-btn { max-width: 100%; }
+        @media (max-width: 560px) {
+          .vd-cta-btn { min-width: 0 !important; width: 100%; }
+          .vd-r-header { padding: 16px 18px !important; }
+          .vd-r-sec { padding-left: 20px !important; padding-right: 20px !important; }
+          .vd-r-card { padding: 20px 20px !important; }
+        }
       `}</style>
 
-      <header style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${RULE}` }}>
+      <header className="vd-r-header" style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderBottom: `1px solid ${RULE}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 600, fontStyle: 'italic', color: INK, letterSpacing: 2 }}>VV</span>
           <span style={{ fontFamily: MONO, fontSize: 8, color: INK3, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Vision Drop</span>
@@ -129,7 +136,7 @@ export default function ResultsPage() {
         </div>
       </header>
 
-      <section style={{ maxWidth: 880, margin: '0 auto', padding: '56px 32px 24px' }}>
+      <section className="vd-r-sec" style={{ maxWidth: 880, margin: '0 auto', padding: '56px 32px 24px' }}>
         <div className="fu fu-1" style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '3.5px', textTransform: 'uppercase', marginBottom: 18, textAlign: 'center' }}>
           ◧ Your Ad Vision Drop
         </div>
@@ -193,8 +200,8 @@ export default function ResultsPage() {
 
       {/* FULL ANALYSIS — the complete report, shown immediately. No gate. */}
       {report.full_analysis && (
-        <section style={{ maxWidth: 880, margin: '0 auto', padding: '24px 32px 16px' }}>
-          <div style={{ background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '28px 30px' }}>
+        <section className="vd-r-sec" style={{ maxWidth: 880, margin: '0 auto', padding: '24px 32px 16px' }}>
+          <div className="vd-r-card" style={{ background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '28px 30px' }}>
             <div style={{ marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${RULE}` }}>
               <div style={{ fontFamily: MONO, fontSize: 8, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 4 }}>◧ Full VAI Analysis</div>
               <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, fontWeight: 300, fontStyle: 'italic' }}>
@@ -216,7 +223,7 @@ export default function ResultsPage() {
       )}
 
       {/* CTAs — the report above is complete. The call is the next step, not a gate. */}
-      <section style={{ maxWidth: 880, margin: '0 auto', padding: '32px 32px 60px' }}>
+      <section className="vd-r-sec" style={{ maxWidth: 880, margin: '0 auto', padding: '32px 32px 60px' }}>
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontFamily: SERIF, fontSize: 24, color: INK, fontWeight: 300, fontStyle: 'italic', marginBottom: 8 }}>
             Want a hand fixing it?
@@ -228,7 +235,7 @@ export default function ResultsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
           <button
             onClick={handleBook}
-            className="cta"
+            className="cta vd-cta-btn"
             style={{
               fontFamily: MONO,
               fontSize: 12,
@@ -251,7 +258,7 @@ export default function ResultsPage() {
           <button
             onClick={handleEmailReport}
             disabled={emailSending || emailSent}
-            className="cta-secondary"
+            className="cta-secondary vd-cta-btn"
             style={{
               fontFamily: MONO,
               fontSize: 10,
@@ -261,7 +268,7 @@ export default function ResultsPage() {
               color: emailSent ? '#4ade80' : INK2,
               background: 'transparent',
               border: `1px solid ${emailSent ? 'rgba(74,222,128,0.35)' : RULE}`,
-              padding: '12px 24px',
+              padding: '14px 24px',
               borderRadius: 4,
               cursor: emailSending || emailSent ? 'default' : 'pointer',
               minWidth: 360,

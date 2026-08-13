@@ -51,7 +51,7 @@ export default function CampaignsPage() {
   if (isPending) return <TableSkeleton rows={6} maxWidth={1100} />
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 4px' }}>
       <style>{`
         /* Minimal mode for campaigns page */
         body.minimal .camp-filters { opacity: 0; max-height: 0; overflow: hidden; margin-bottom: 0 !important; transition: opacity 0.4s ease, max-height 0.5s cubic-bezier(0.4,0,0.2,1), margin 0.4s ease; }
@@ -70,7 +70,8 @@ export default function CampaignsPage() {
             grid-template-columns: 1fr 1fr !important;
             gap: 12px !important;
             align-items: start !important;
-            padding: 15px 16px !important;
+            padding: 16px !important;
+            min-height: 44px;
           }
           .camp-row > .camp-name {
             grid-column: 1 / -1 !important;
@@ -84,13 +85,19 @@ export default function CampaignsPage() {
             font-size: 7px; letter-spacing: 1.5px; text-transform: uppercase;
             color: var(--ink3); margin-bottom: 4px;
           }
+          /* filter chips: bigger tap targets, keep them on one scroll-free row set */
+          .camp-filters button {
+            min-height: 44px !important;
+            padding: 8px 14px !important;
+            font-size: 8px !important;
+          }
         }
       `}</style>
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Overview</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Campaigns</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(22px, 6vw, 28px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Campaigns</div>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>All active campaigns · click any row for full Meta-level detail + VAI</div>
       </div>
 

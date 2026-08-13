@@ -142,7 +142,11 @@ export default function MethodologyPage() {
         <div style={section}>
           <Link
             href="/"
+            className="vvm-back"
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: 44,
               fontFamily: "'DM Mono', monospace",
               fontSize: 11,
               letterSpacing: 1.2,

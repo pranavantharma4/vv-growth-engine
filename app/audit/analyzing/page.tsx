@@ -89,6 +89,9 @@ export default function AnalyzingPage() {
         .scan-v { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(201,168,76,0.5), transparent); animation: scanV 3.6s ease-in-out infinite; }
         @keyframes phraseFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .phrase { animation: phraseFade 0.42s cubic-bezier(0.16,1,0.3,1) both; }
+        @media (max-width: 560px) {
+          .vd-a-card { padding: 48px 22px !important; }
+        }
       `}</style>
 
       <header style={{ padding: '22px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${RULE}` }}>
@@ -100,7 +103,7 @@ export default function AnalyzingPage() {
       </header>
 
       <section style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 32px' }}>
-        <div style={{ width: '100%', maxWidth: 560, position: 'relative', background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '64px 40px', overflow: 'hidden', textAlign: 'center' }}>
+        <div className="vd-a-card" style={{ width: '100%', maxWidth: 560, position: 'relative', background: '#0c0b0f', border: `1px solid ${RULE}`, borderRadius: 8, padding: '64px 40px', overflow: 'hidden', textAlign: 'center' }}>
           <div className="scan-v" />
 
           <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '3.5px', textTransform: 'uppercase', marginBottom: 32 }}>
@@ -113,7 +116,7 @@ export default function AnalyzingPage() {
             <span className="dot" />
           </div>
 
-          <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 300, color: INK, fontStyle: 'italic', marginBottom: 18, letterSpacing: '-0.3px' }}>
+          <div style={{ fontFamily: SERIF, fontSize: 'clamp(24px, 6vw, 28px)', fontWeight: 300, color: INK, fontStyle: 'italic', marginBottom: 18, letterSpacing: '-0.3px' }}>
             VAI is reading your account…
           </div>
 

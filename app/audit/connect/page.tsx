@@ -124,7 +124,7 @@ export default function VisionDropConnect() {
             <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>
               ◎ Free · No credit card
             </div>
-            <h1 style={{ fontFamily: SERIF, fontSize: 42, fontWeight: 300, lineHeight: 1.1, color: INK, margin: '0 0 18px', letterSpacing: '-0.5px' }}>
+            <h1 style={{ fontFamily: SERIF, fontSize: 'clamp(32px, 8vw, 42px)', fontWeight: 300, lineHeight: 1.1, color: INK, margin: '0 0 18px', letterSpacing: '-0.5px' }}>
               Where should we send your <span style={{ fontStyle: 'italic', color: GOLD }}>Vision Drop?</span>
             </h1>
             <p style={{ fontSize: 14, color: INK2, lineHeight: 1.75, marginBottom: 36 }}>
@@ -167,7 +167,7 @@ export default function VisionDropConnect() {
             <div style={{ fontFamily: MONO, fontSize: 9, color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 18 }}>
               ◉ Final step
             </div>
-            <h1 style={{ fontFamily: SERIF, fontSize: 42, fontWeight: 300, lineHeight: 1.1, color: INK, margin: '0 0 18px', letterSpacing: '-0.5px' }}>
+            <h1 style={{ fontFamily: SERIF, fontSize: 'clamp(32px, 8vw, 42px)', fontWeight: 300, lineHeight: 1.1, color: INK, margin: '0 0 18px', letterSpacing: '-0.5px' }}>
               Connect your <span style={{ fontStyle: 'italic', color: GOLD }}>Meta Ads</span> account.
             </h1>
             <p style={{ fontSize: 14, color: INK2, lineHeight: 1.75, marginBottom: 32 }}>
@@ -176,8 +176,8 @@ export default function VisionDropConnect() {
 
             {/* Connect card */}
             <div style={{ border: `1px solid ${connected ? 'rgba(74,222,128,0.3)' : RULE}`, background: connected ? 'rgba(74,222,128,0.04)' : 'rgba(255,255,255,0.025)', borderRadius: 6, padding: '22px 24px', marginBottom: 22 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
                   <div style={{ width: 42, height: 42, borderRadius: 8, background: '#1877f2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700 }}>f</div>
                   <div>
                     <div style={{ fontFamily: SANS, fontSize: 14, color: INK, fontWeight: 500 }}>Meta Ads — read-only OAuth</div>

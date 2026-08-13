@@ -477,7 +477,7 @@ const CSS = `
 .rch{padding:36px 40px 80px;max-width:1040px;}
 .rch *{box-sizing:border-box;}
 .rch .eyebrow{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--gold);margin:0 0 10px;}
-.rch .title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:40px;color:var(--ink);margin:0 0 8px;line-height:1;}
+.rch .title{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;font-size:clamp(28px,8vw,40px);color:var(--ink);margin:0 0 8px;line-height:1;}
 .rch .sub{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink2);margin:0;max-width:560px;line-height:1.6;}
 .rch .rch-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:30px;}
 .rch .head-right{display:flex;flex-direction:column;align-items:flex-end;gap:12px;}
@@ -613,10 +613,24 @@ const CSS = `
   .rch{padding:24px 18px 60px;}
   .rch .kpis{grid-template-columns:repeat(2,1fr);}
   .rch .rch-head{flex-direction:column;}
-  .rch .head-right{align-items:flex-start;}
+  .rch .head-right{align-items:flex-start;width:100%;}
   .rch .fn-arrow{display:none;}
+  /* funnel cards stack full-width so nothing pushes past the viewport */
+  .rch .funnel{flex-direction:column;}
+  .rch .fn{min-width:0;width:100%;}
   .rch .seq-row{justify-content:flex-start;}
   .rch .seq-nums{gap:16px;flex-wrap:wrap;}
   .rch .rep-head{flex-wrap:wrap;}
+  /* tap targets ≥44px + copy button full-width so it doesn't cramp the label */
+  .rch .refresh-btn{min-height:44px;}
+  .rch .run-copy{min-height:44px;}
+  .rch .run-block-head{align-items:stretch;}
+  /* readable body text on the reply/campaign meta lines */
+  .rch .fn-sub,.rch .rep-preview,.rch .rep-subj{font-size:12px;}
+  /* the KPI/funnel/sequence card values stay on-brand large; only guard overflow */
+  .rch .seq-nums{justify-content:flex-start;}
+}
+@media (max-width:400px){
+  .rch .kpis{grid-template-columns:1fr;}
 }
 `

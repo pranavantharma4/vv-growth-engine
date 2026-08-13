@@ -32,8 +32,8 @@ export default function BriefPage() {
   if (isPending) return <PanelSkeleton />
 
   if (!brief) return (
-    <div style={{ maxWidth: 560, margin: '48px auto', textAlign: 'center' }}>
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: 'var(--ink)', marginBottom: 12 }}>No brief yet</div>
+    <div style={{ maxWidth: 560, margin: '48px auto', padding: '0 16px', textAlign: 'center' }}>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(24px, 7vw, 32px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 12 }}>No brief yet</div>
       <div style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.85 }}>
         Your first Monday morning brief will be delivered automatically. We'll surface your biggest budget leak and tell you exactly what to do.
       </div>
@@ -45,7 +45,7 @@ export default function BriefPage() {
     : new Date(brief.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
   return (
-    <div style={{ maxWidth: 780, margin: '0 auto' }}>
+    <div style={{ maxWidth: 780, margin: '0 auto', padding: '0 16px' }}>
       <style>{`
         body.minimal .brief-meta { opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1); }
         .brief-meta { opacity: 1; max-height: 120px; transition: opacity 0.35s ease, max-height 0.45s cubic-bezier(0.4,0,0.2,1); }
@@ -58,15 +58,15 @@ export default function BriefPage() {
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: 'var(--ink3)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 6 }}>Intelligence</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Weekly Brief</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(22px, 6vw, 28px)', fontWeight: 300, color: 'var(--ink)', marginBottom: 4 }}>Weekly Brief</div>
         <div className="brief-meta" style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: 'var(--ink3)', letterSpacing: '1px' }}>Week of {date}</div>
       </div>
 
       {/* Biggest leak — always visible, most important */}
       <div style={{ border: '1px solid rgba(251,146,60,0.22)', borderLeft: '3px solid rgba(251,146,60,0.6)', borderRadius: '0 6px 6px 0', background: 'rgba(251,146,60,0.04)', padding: '20px 22px', marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: 'rgba(251,146,60,0.7)', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 8 }}>⚠ Biggest Leak This Week</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: 'var(--ink)', marginBottom: 6 }}>{brief.biggest_leak_campaign}</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 36, fontWeight: 300, color: '#f87171', marginBottom: 4 }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: 'var(--ink)', marginBottom: 6, overflowWrap: 'break-word' }}>{brief.biggest_leak_campaign}</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(28px, 8vw, 36px)', fontWeight: 300, color: '#f87171', marginBottom: 4 }}>
           {fmt(Number(brief.biggest_leak_amount))}
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--ink3)', marginLeft: 8 }}>wasted this month</span>
         </div>
