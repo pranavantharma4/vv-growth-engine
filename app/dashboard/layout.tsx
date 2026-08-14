@@ -152,6 +152,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }
 
+  // Lock background scroll while the mobile drawer is open (body class toggled
+  // so the CSS rule is the single source of truth; cleaned up on close/unmount).
+  useEffect(() => {
+    document.body.classList.toggle('vv-drawer-locked', drawerOpen)
+    return () => document.body.classList.remove('vv-drawer-locked')
+  }, [drawerOpen])
+
   function toast(title: string, body: string) {
     setToastData({ show: true, title, body })
     setTimeout(() => setToastData(t => ({ ...t, show: false })), 3500)
@@ -427,37 +434,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         /* ─── RESPONSIVE: sidebar → drawer, header wrap, tighter padding ─── */
         .vv-burger { display:none; }
         .vv-backdrop { display:none; }
+        .vv-drawer-close { display:none; }
         @keyframes vvFadeIn { from{opacity:0} to{opacity:1} }
 
         @media (max-width: 767px) {
-          /* Sidebar becomes a full-height slide-in drawer; it leaves the flex
-             flow (position:fixed) so main content gets the full width. */
+          /* Sidebar becomes an 82%-width slide-in drawer (capped so a backdrop
+             strip always shows on the right). It leaves the flex flow so main
+             content gets full width. Off-screen by default; .vv-open slides it
+             in. !important is required to beat the aside's inline transform. */
           .vv-sidebar {
             position:fixed !important; top:0; left:0; bottom:0;
-            width:264px !important; z-index:9997;
-            transform:translateX(-100%);
-            transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
-            box-shadow:6px 0 34px rgba(0,0,0,0.55);
+            width:82% !important; max-width:330px; z-index:9997;
+            transform:translateX(-102%) !important;
+            transition:transform 0.24s cubic-bezier(0.22,0.61,0.36,1) !important;
+            box-shadow:8px 0 40px rgba(0,0,0,0.6);
           }
-          .vv-sidebar.vv-open { transform:translateX(0); }
+          .vv-sidebar.vv-open { transform:translateX(0) !important; }
           .vv-backdrop {
             display:block; position:fixed; inset:0; z-index:9996;
-            background:rgba(3,2,4,0.62); animation:vvFadeIn 0.2s ease;
+            background:rgba(3,2,4,0.66); animation:vvFadeIn 0.2s ease;
           }
           .vv-burger {
             display:inline-flex; align-items:center; justify-content:center;
-            width:44px; height:44px; flex-shrink:0; margin-right:12px;
+            width:44px; height:44px; flex-shrink:0; margin-right:10px;
             background:var(--bg2); border:1px solid var(--rule2);
-            border-radius:6px; color:var(--ink); font-size:16px; cursor:pointer;
+            border-radius:8px; color:var(--ink); font-size:17px; cursor:pointer;
+          }
+          /* ✕ close, top-right inside the drawer (tap target 40px). */
+          .vv-drawer-close {
+            display:inline-flex; align-items:center; justify-content:center;
+            position:absolute; top:9px; right:9px; width:40px; height:40px;
+            z-index:3; background:transparent; border:none; cursor:pointer;
+            color:var(--sb-muted); font-size:19px; line-height:1;
           }
           /* Header stacks: [burger][title] on row 1, actions wrap to row 2. */
           .vv-header { flex-wrap:wrap; justify-content:flex-start !important; padding:11px 16px !important; row-gap:10px; }
           .vv-header-titles { flex:1; min-width:0; }
           .vv-header-actions { flex:1 1 100%; justify-content:flex-start !important; }
-          /* Roomier tap targets inside the drawer nav. */
-          .vv-sidebar .nav-btn { padding:12px 12px !important; }
+          /* Roomier tap targets in the drawer nav; footer stays pinned (never
+             scrolls over nav items) while the nav list scrolls internally. */
+          .vv-sidebar .nav-btn { padding:13px 12px !important; }
+          .vv-sidebar-nav { -webkit-overflow-scrolling:touch; }
+          .vv-sidebar-footer { flex-shrink:0 !important; }
           .main-scroll { padding:16px 15px !important; }
         }
+        /* Lock the background from scrolling while the drawer is open. */
+        body.vv-drawer-locked { overflow:hidden; }
       `}</style>
 
       <div className="vv-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -466,7 +488,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {drawerOpen && <div className="vv-backdrop" onClick={() => setDrawerOpen(false)} />}
 
         {/* SIDEBAR */}
-        <aside className={`vv-sidebar${drawerOpen ? ' vv-open' : ''}`} style={{ width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)', transform: 'translateZ(0)' }}>
+        <aside className={`vv-sidebar${drawerOpen ? ' vv-open' : ''}`} style={{ position: 'relative', width: 214, background: 'var(--sb)', display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--sb-rule)' }}>
+
+          {/* Drawer close — mobile only (hidden on desktop via CSS) */}
+          <button className="vv-drawer-close" aria-label="Close menu" onClick={() => setDrawerOpen(false)}>✕</button>
 
           {/* Logo */}
           <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--sb-rule)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -522,7 +547,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* Nav */}
-          <nav style={{ flex: 1, padding: '4px 8px', overflowY: 'auto' }}>
+          <nav className="vv-sidebar-nav" style={{ flex: 1, padding: '4px 8px', overflowY: 'auto' }}>
             {NAV.filter(n => !n.admin || isAdmin).map(item => {
               const active = isActive(item.id)
               const target = '/dashboard' + (item.id === 'dashboard' ? '' : '/' + item.id)
@@ -546,7 +571,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
 
           {/* Footer */}
-          <div style={{ padding: '10px 14px', borderTop: '1px solid var(--sb-rule)' }}>
+          <div className="vv-sidebar-footer" style={{ padding: '10px 14px', borderTop: '1px solid var(--sb-rule)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', animation: 'pulse 2.5s ease infinite' }} />

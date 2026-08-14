@@ -107,6 +107,16 @@ export default function DashboardPage() {
         .stat-sub { opacity:1;max-height:30px;transition:opacity 0.3s ease,max-height 0.4s ease; }
         body.minimal .stat-val { font-size:28px!important;transition:font-size 0.35s ease!important; }
         .stat-val { transition:font-size 0.35s ease; }
+
+        /* ── Mobile: stat cards as a tidy 2×2 (not four tall full-width blocks),
+           roomier CTA tap targets, comfortable card padding. ── */
+        @media (max-width: 767px) {
+          .dash-stats.vv-grid-4 { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+          .dash-stats > div { padding: 15px 15px !important; }
+          .dash-stats .stat-val { font-size: 29px !important; }
+          .dash-leak-cta { min-height: 44px; padding: 11px 18px !important; font-size: 9px !important; width: 100%; }
+          .dash-leak-banner { padding: 16px 18px !important; }
+        }
       `}</style>
 
       {/* BIGGEST LEAK BANNER */}
@@ -125,6 +135,7 @@ export default function DashboardPage() {
           </div>
           <button
             onClick={() => router.push('/dashboard/analysis')}
+            className="dash-leak-cta"
             style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, fontWeight: 600, letterSpacing: '1px', color: '#050509', background: 'rgba(251,146,60,0.85)', border: 'none', padding: '8px 16px', borderRadius: 3, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             Get AI Diagnosis →
@@ -133,7 +144,7 @@ export default function DashboardPage() {
       )}
 
       {/* STAT CARDS */}
-      <div className="vv-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="vv-grid-4 dash-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total Spend',  value: fmt(totalSpend),                  sub: `${platStats.length} platform${platStats.length !== 1 ? 's' : ''} active`, accent: undefined },
           { label: 'Conversions', value: totalConversions.toLocaleString(), sub: 'Last 30 days', accent: undefined },
